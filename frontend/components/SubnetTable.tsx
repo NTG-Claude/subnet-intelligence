@@ -43,8 +43,8 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
         va = a.rank ?? 9999
         vb = b.rank ?? 9999
       } else {
-        va = (a as Record<string, unknown>)[sortKey] as number
-        vb = (b as Record<string, unknown>)[sortKey] as number
+        va = (a as unknown as Record<string, unknown>)[sortKey] as number
+        vb = (b as unknown as Record<string, unknown>)[sortKey] as number
       }
       if (va < vb) return sortAsc ? -1 : 1
       if (va > vb) return sortAsc ? 1 : -1
