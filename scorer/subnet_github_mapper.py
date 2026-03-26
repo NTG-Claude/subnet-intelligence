@@ -1,0 +1,127 @@
+"""
+Subnet → GitHub Repo Mapper
+
+Resolves netuid → (owner, repo) by:
+1. Checking manual overrides in data/github_map_overrides.json
+2. Fetching github_url from TaostatsClient.get_subnet_identity(netuid)
+3. Caching results in data/github_map.json
+"""
+
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Optional
+
+from scorer.github_client import RepoCoords, get_repo_from_url
+from scorer.taostats_client import TaostatsClient
+
+logger = logging.getLogger(__name__)
+
+_DATA_DIR = Path(__file__).parent.parent / "data"
+_MAP_PATH = _DATA_DIR / "github_map.json"
+_OVERRIDES_PATH = _DATA_DIR / "github_map_overrides.json"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _load_json(path: Path) -> dict:
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not read %s: %s", path, exc)
+    return {}
+
+
+def _save_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _coords_from_dict(d: dict) -> Optional[RepoCoords]:
+    owner = d.get("owner")
+    repo = d.get("repo")
+    if owner and repo:
+        return RepoCoords(owner=owner, repo=repo)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+async def get_github_coords(netuid: int) -> Optional[RepoCoords]:
+    """
+    Resolve netuid → (owner, repo).
+
+    Resolution order:
+    1. Manual override in data/github_map_overrides.json
+    2. In-memory / on-disk cache in data/github_map.json
+    3. Live fetch from Taostats identity endpoint + URL parsing
+    """
+    key = str(netuid)
+
+    # 1. Manual overrides (highest priority, never cached-over)
+    overrides = _load_json(_OVERRIDES_PATH)
+    if key in overrides:
+        coords = _coords_from_dict(overrides[key])
+        if coords:
+            logger.debug("netuid %s → override %s/%s", netuid, coords.owner, coords.repo)
+            return coords
+
+    # 2. Disk cache
+    cache = _load_json(_MAP_PATH)
+    if key in cache:
+        coords = _coords_from_dict(cache[key])
+        if coords:
+            logger.debug("netuid %s → cache %s/%s", netuid, coords.owner, coords.repo)
+            return coords
+
+    # 3. Live fetch
+    coords = await _fetch_and_cache(netuid, cache)
+    return coords
+
+
+async def _fetch_and_cache(netuid: int, cache: dict) -> Optional[RepoCoords]:
+    key = str(netuid)
+    async with TaostatsClient() as client:
+        identity = await client.get_subnet_identity(netuid)
+
+    if identity is None:
+        logger.info("No identity found for netuid %s", netuid)
+        return None
+
+    github_url = identity.github_url
+    if not github_url:
+        logger.info("No GitHub URL in identity for netuid %s", netuid)
+        cache[key] = {"owner": None, "repo": None}
+        _save_json(_MAP_PATH, cache)
+        return None
+
+    coords = get_repo_from_url(github_url)
+    if coords is None:
+        logger.warning("Could not parse GitHub URL for netuid %s: %s", netuid, github_url)
+        cache[key] = {"owner": None, "repo": None, "raw_url": github_url}
+        _save_json(_MAP_PATH, cache)
+        return None
+
+    logger.info("netuid %s → %s/%s (from identity)", netuid, coords.owner, coords.repo)
+    cache[key] = {"owner": coords.owner, "repo": coords.repo}
+    _save_json(_MAP_PATH, cache)
+    return coords
+
+
+async def refresh_all_mappings(netuids: list[int]) -> dict[int, Optional[RepoCoords]]:
+    """
+    Re-fetch GitHub mappings for all given netuids (skips overrides).
+    Updates the cache file. Returns a dict of netuid → RepoCoords.
+    """
+    cache = _load_json(_MAP_PATH)
+    results: dict[int, Optional[RepoCoords]] = {}
+    for netuid in netuids:
+        coords = await _fetch_and_cache(netuid, cache)
+        results[netuid] = coords
+    return results
