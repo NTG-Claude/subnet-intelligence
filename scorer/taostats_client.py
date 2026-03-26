@@ -147,7 +147,7 @@ async def _get(
         if cached is not None:
             return cached
 
-    headers = {"Authorization": f"Bearer {_API_KEY}"}
+    headers = {"authorization": _API_KEY}
     url = f"{BASE_URL}{path}"
 
     for attempt in range(3):
