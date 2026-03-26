@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 
 interface Props {
-  params: { netuid: string }
+  params: Promise<{ netuid: string }>
 }
 
 function formatDate(iso: string | null): string {
@@ -23,7 +23,8 @@ function countSignals(breakdown: Record<string, number>): number {
 }
 
 export default async function SubnetPage({ params }: Props) {
-  const netuid = parseInt(params.netuid, 10)
+  const { netuid: netuidStr } = await params
+  const netuid = parseInt(netuidStr, 10)
   if (isNaN(netuid)) notFound()
 
   let subnet
