@@ -355,10 +355,10 @@ async def score_distribution(
     tags=["System"],
 )
 async def health() -> HealthResponse:
-    rows = get_latest_scores()
-    last_ts = max((r["computed_at"] for r in rows if r.get("computed_at")), default=None)
-    return HealthResponse(
-        status="ok",
-        last_score_run=last_ts,
-        subnet_count=len(rows),
-    )
+    try:
+        rows = get_latest_scores()
+        last_ts = max((r["computed_at"] for r in rows if r.get("computed_at")), default=None)
+        return HealthResponse(status="ok", last_score_run=last_ts, subnet_count=len(rows))
+    except Exception as exc:
+        logger.warning("DB unavailable during health check: %s", exc)
+        return HealthResponse(status="degraded", last_score_run=None, subnet_count=0)
