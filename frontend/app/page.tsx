@@ -3,6 +3,8 @@ import SubnetTable from '@/components/SubnetTable'
 import ScoreGauge from '@/components/ScoreGauge'
 import DistributionChart from '@/components/DistributionChart'
 
+export const dynamic = 'force-dynamic'
+
 function formatDate(iso: string | null): string {
   if (!iso) return 'Never'
   return new Date(iso).toLocaleString('en-US', {
@@ -13,9 +15,9 @@ function formatDate(iso: string | null): string {
 
 export default async function HomePage() {
   const [leaderboard, dist, latest] = await Promise.all([
-    fetchLeaderboard(),
-    fetchDistribution(),
-    fetchLatestRun(),
+    fetchLeaderboard().catch(() => ({ top: [], bottom: [] })),
+    fetchDistribution().catch(() => ({ buckets: [], total_subnets: 0 })),
+    fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
   ])
 
   const { top, bottom } = leaderboard

@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation'
 import { fetchSubnet } from '@/lib/api'
+
+export const dynamic = 'force-dynamic'
 import ScoreGauge from '@/components/ScoreGauge'
 import SignalBreakdown from '@/components/SignalBreakdown'
 import HistoryChart from '@/components/HistoryChart'
