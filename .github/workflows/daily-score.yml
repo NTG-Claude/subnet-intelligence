@@ -33,7 +33,7 @@ jobs:
           python -m scorer.run --all-subnets --verbose 2>&1 | tee logs/score-run.log
         env:
           TAOSTATS_API_KEY: ${{ secrets.TAOSTATS_API_KEY }}
-          GITHUB_TOKEN:     ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN:     ${{ secrets.GH_TOKEN }}
           DATABASE_URL:     ${{ secrets.DATABASE_URL }}
 
       - name: Upload score artifacts
