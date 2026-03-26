@@ -7,8 +7,6 @@ numpy>=1.26
 python-dotenv>=1.0
 schedule>=1.2
 pydantic>=2.7
-fastapi-cache2>=0.2
-slowapi>=0.1.9
 psycopg2-binary>=2.9
 alembic>=1.13
 

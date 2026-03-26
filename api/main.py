@@ -7,18 +7,15 @@ Run with:
 """
 
 import logging
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
-from typing import Optional
+from functools import wraps
+from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
-from fastapi_cache.decorator import cache
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from api.models import (
     DistributionBucket,
@@ -47,10 +44,43 @@ from scorer.database import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Rate limiter
+# Simple in-memory cache (TTL-based)
 # ---------------------------------------------------------------------------
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+_cache: dict[str, tuple[Any, float]] = {}
+_CACHE_TTL = 3600  # 1 hour
+
+
+def _cache_get(key: str) -> Any:
+    entry = _cache.get(key)
+    if entry and time.time() < entry[1]:
+        return entry[0]
+    return None
+
+
+def _cache_set(key: str, value: Any) -> None:
+    _cache[key] = (value, time.time() + _CACHE_TTL)
+
+
+# ---------------------------------------------------------------------------
+# Simple rate limiter (sliding window, per IP)
+# ---------------------------------------------------------------------------
+
+_rate_counts: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT = 100  # requests
+_RATE_WINDOW = 60  # seconds
+
+
+async def _check_rate_limit(request: Request) -> None:
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    window_start = now - _RATE_WINDOW
+    hits = _rate_counts[ip]
+    # prune old entries
+    _rate_counts[ip] = [t for t in hits if t > window_start]
+    if len(_rate_counts[ip]) >= _RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded: 100 req/min")
+    _rate_counts[ip].append(now)
 
 
 # ---------------------------------------------------------------------------
@@ -59,8 +89,9 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    FastAPICache.init(InMemoryBackend(), prefix="subnet-intelligence")
+    logger.info("Subnet Intelligence API starting up")
     yield
+    logger.info("Subnet Intelligence API shutting down")
 
 
 app = FastAPI(
@@ -71,9 +102,6 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
-
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -133,27 +161,30 @@ def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
     summary="List all subnets with current scores",
     tags=["Subnets"],
 )
-@cache(expire=3600)
-@limiter.limit("100/minute")
 async def list_subnets(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     min_score: float = Query(0.0, ge=0, le=100),
     max_score: float = Query(100.0, ge=0, le=100),
+    _: None = Depends(_check_rate_limit),
 ) -> SubnetListResponse:
+    cache_key = f"list:{limit}:{offset}:{min_score}:{max_score}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     all_rows = get_latest_scores()
-    filtered = [
-        r for r in all_rows
-        if min_score <= r["score"] <= max_score
-    ]
+    filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     total = len(filtered)
     page = filtered[offset: offset + limit]
 
-    return SubnetListResponse(
+    result = SubnetListResponse(
         total=total,
         subnets=[_row_to_summary(r, total) for r in page],
     )
+    _cache_set(cache_key, result)
+    return result
 
 
 @app.get(
@@ -163,9 +194,16 @@ async def list_subnets(
     tags=["Subnets"],
     responses={404: {"model": ErrorResponse}},
 )
-@cache(expire=3600)
-@limiter.limit("100/minute")
-async def get_subnet(request: Request, netuid: int) -> SubnetDetailResponse:
+async def get_subnet(
+    request: Request,
+    netuid: int,
+    _: None = Depends(_check_rate_limit),
+) -> SubnetDetailResponse:
+    cache_key = f"subnet:{netuid}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     all_rows = get_latest_scores()
     total = len(all_rows)
 
@@ -185,7 +223,7 @@ async def get_subnet(request: Request, netuid: int) -> SubnetDetailResponse:
 
     meta = _get_metadata(netuid)
 
-    return SubnetDetailResponse(
+    result = SubnetDetailResponse(
         netuid=netuid,
         name=meta.name if meta else None,
         score=row["score"],
@@ -203,6 +241,8 @@ async def get_subnet(request: Request, netuid: int) -> SubnetDetailResponse:
         computed_at=row.get("computed_at"),
         score_version=row.get("score_version", "v1"),
     )
+    _cache_set(cache_key, result)
+    return result
 
 
 @app.get(
@@ -212,17 +252,22 @@ async def get_subnet(request: Request, netuid: int) -> SubnetDetailResponse:
     tags=["Subnets"],
     responses={404: {"model": ErrorResponse}},
 )
-@cache(expire=3600)
-@limiter.limit("100/minute")
 async def get_subnet_history(
     request: Request,
     netuid: int,
     days: int = Query(30, ge=1, le=365),
+    _: None = Depends(_check_rate_limit),
 ) -> list[ScoreHistoryPoint]:
+    cache_key = f"history:{netuid}:{days}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     history_raw = get_score_history(netuid, days=days)
     if not history_raw:
         raise HTTPException(status_code=404, detail=f"No history for subnet {netuid}")
-    return [
+
+    result = [
         ScoreHistoryPoint(
             computed_at=h["computed_at"],
             score=h["score"],
@@ -230,6 +275,8 @@ async def get_subnet_history(
         )
         for h in history_raw
     ]
+    _cache_set(cache_key, result)
+    return result
 
 
 @app.get(
@@ -238,12 +285,19 @@ async def get_subnet_history(
     summary="Timestamp and count of the most recent score run",
     tags=["Scores"],
 )
-@cache(expire=3600)
-@limiter.limit("100/minute")
-async def latest_run(request: Request) -> LatestRunResponse:
+async def latest_run(
+    request: Request,
+    _: None = Depends(_check_rate_limit),
+) -> LatestRunResponse:
+    cached = _cache_get("latest_run")
+    if cached is not None:
+        return cached
+
     rows = get_latest_scores()
     last_ts = max((r["computed_at"] for r in rows if r.get("computed_at")), default=None)
-    return LatestRunResponse(last_score_run=last_ts, subnet_count=len(rows))
+    result = LatestRunResponse(last_score_run=last_ts, subnet_count=len(rows))
+    _cache_set("latest_run", result)
+    return result
 
 
 @app.get(
@@ -252,14 +306,21 @@ async def latest_run(request: Request) -> LatestRunResponse:
     summary="Top 20 and bottom 5 subnets",
     tags=["Scores"],
 )
-@cache(expire=3600)
-@limiter.limit("100/minute")
-async def leaderboard(request: Request) -> LeaderboardResponse:
+async def leaderboard(
+    request: Request,
+    _: None = Depends(_check_rate_limit),
+) -> LeaderboardResponse:
+    cached = _cache_get("leaderboard")
+    if cached is not None:
+        return cached
+
     all_rows = get_latest_scores()
     total = len(all_rows)
     top = [_row_to_summary(r, total) for r in all_rows[:20]]
     bottom = [_row_to_summary(r, total) for r in all_rows[-5:]]
-    return LeaderboardResponse(top=top, bottom=bottom)
+    result = LeaderboardResponse(top=top, bottom=bottom)
+    _cache_set("leaderboard", result)
+    return result
 
 
 @app.get(
@@ -268,17 +329,23 @@ async def leaderboard(request: Request) -> LeaderboardResponse:
     summary="Score distribution histogram",
     tags=["Scores"],
 )
-@cache(expire=3600)
-@limiter.limit("100/minute")
 async def score_distribution(
     request: Request,
     buckets: int = Query(10, ge=2, le=20),
+    _: None = Depends(_check_rate_limit),
 ) -> DistributionResponse:
+    cache_key = f"distribution:{buckets}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     dist = get_score_distribution(buckets=buckets)
-    return DistributionResponse(
+    result = DistributionResponse(
         buckets=[DistributionBucket(**b) for b in dist],
         total_subnets=_total_subnet_count(),
     )
+    _cache_set(cache_key, result)
+    return result
 
 
 @app.get(
@@ -287,7 +354,7 @@ async def score_distribution(
     summary="Health check",
     tags=["System"],
 )
-async def health(request: Request) -> HealthResponse:
+async def health() -> HealthResponse:
     rows = get_latest_scores()
     last_ts = max((r["computed_at"] for r in rows if r.get("computed_at")), default=None)
     return HealthResponse(
