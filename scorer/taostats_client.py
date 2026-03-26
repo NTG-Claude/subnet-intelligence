@@ -204,7 +204,7 @@ class TaostatsClient:
 
     # 1. All subnets
     async def get_all_subnets(self) -> Optional[list[SubnetInfo]]:
-        data = await _get(self._c, "/subnet/v1/", cache_key="all_subnets")
+        data = await _get(self._c, "/subnet/latest/v1", cache_key="all_subnets")
         if data is None:
             return None
         records = data if isinstance(data, list) else data.get("data", data.get("results", []))
@@ -222,7 +222,7 @@ class TaostatsClient:
     ) -> Optional[list[SubnetHistoryPoint]]:
         data = await _get(
             self._c,
-            "/subnet/history/v1/",
+            "/subnet/history/v1",
             params={"netuid": netuid, "days": days},
             cache_key=f"subnet_history_{netuid}_{days}",
         )
@@ -241,7 +241,7 @@ class TaostatsClient:
     async def get_metagraph(self, netuid: int) -> Optional[list[NeuronInfo]]:
         data = await _get(
             self._c,
-            "/metagraph/v1/",
+            "/metagraph/latest/v1",
             params={"netuid": netuid},
             cache_key=f"metagraph_{netuid}",
         )
@@ -262,7 +262,7 @@ class TaostatsClient:
     ) -> Optional[list[NeuronRegistration]]:
         data = await _get(
             self._c,
-            "/neuron/registration/v1/",
+            "/subnet/neuron/registration/v1",
             params={"netuid": netuid, "days": days},
             cache_key=f"registrations_{netuid}_{days}",
         )
@@ -281,7 +281,7 @@ class TaostatsClient:
     async def get_coldkey_distribution(self, netuid: int) -> Optional[ColdkeyDistribution]:
         data = await _get(
             self._c,
-            "/subnet/coldkey-distribution/v1/",
+            "/subnet/distribution/coldkey/v1",
             params={"netuid": netuid},
             cache_key=f"coldkey_{netuid}",
         )
@@ -300,7 +300,7 @@ class TaostatsClient:
     async def get_subnet_pools(self, netuid: int) -> Optional[SubnetPool]:
         data = await _get(
             self._c,
-            "/subnet/pool/v1/",
+            "/dtao/pool/latest/v1",
             params={"netuid": netuid},
             cache_key=f"pool_{netuid}",
         )
@@ -319,7 +319,7 @@ class TaostatsClient:
     async def get_subnet_identity(self, netuid: int) -> Optional[SubnetIdentity]:
         data = await _get(
             self._c,
-            "/subnet/identity/v1/",
+            "/subnet/identity/v1",
             params={"netuid": netuid},
             cache_key=f"identity_{netuid}",
         )
@@ -338,7 +338,7 @@ class TaostatsClient:
     async def get_validator_weights(self, netuid: int) -> Optional[list[ValidatorWeight]]:
         data = await _get(
             self._c,
-            "/validator/weights/v2/",
+            "/validator/weights/latest/v2",
             params={"netuid": netuid},
             cache_key=f"weights_{netuid}",
         )
