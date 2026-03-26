@@ -1,9 +1,7 @@
 import { fetchLeaderboard, fetchDistribution, fetchLatestRun } from '@/lib/api'
 import SubnetTable from '@/components/SubnetTable'
 import ScoreGauge from '@/components/ScoreGauge'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-} from 'recharts'
+import DistributionChart from '@/components/DistributionChart'
 
 function formatDate(iso: string | null): string {
   if (!iso) return 'Never'
@@ -11,10 +9,6 @@ function formatDate(iso: string | null): string {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     timeZone: 'UTC', timeZoneName: 'short',
   })
-}
-
-function bucketLabel(start: number): string {
-  return `${Math.round(start)}–${Math.round(start + 10)}`
 }
 
 export default async function HomePage() {
@@ -72,31 +66,7 @@ export default async function HomePage() {
             Score Distribution
           </h2>
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={dist.buckets} margin={{ top: 4, right: 8, bottom: 4, left: -20 }}>
-                <XAxis
-                  dataKey="range_start"
-                  tickFormatter={bucketLabel}
-                  tick={{ fontSize: 11, fill: '#64748b' }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8 }}
-                  labelFormatter={(v) => `Score ${bucketLabel(Number(v))}`}
-                  formatter={(v: number) => [`${v} subnets`, '']}
-                />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {dist.buckets.map((b, i) => (
-                    <Cell
-                      key={i}
-                      fill={b.range_start >= 70 ? '#4ade80' : b.range_start >= 40 ? '#facc15' : '#f87171'}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <DistributionChart buckets={dist.buckets} />
           </div>
         </section>
       )}
