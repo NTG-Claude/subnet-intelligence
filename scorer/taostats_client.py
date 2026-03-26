@@ -111,21 +111,22 @@ def _cache_set(key: str, value: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Rate limiter: max 10 requests / second
+# Rate limiter: max 4 requests / minute (stay under 5/min Taostats limit)
 # ---------------------------------------------------------------------------
 
-_rate_semaphore = asyncio.Semaphore(10)
+_rate_semaphore = asyncio.Semaphore(1)
 _last_request_times: list[float] = []
-_RATE_WINDOW = 1.0  # seconds
+_RATE_WINDOW = 60.0  # seconds
+_MAX_REQUESTS_PER_WINDOW = 4
 
 
 async def _rate_limit() -> None:
     async with _rate_semaphore:
         now = time.monotonic()
-        # Remove timestamps older than 1 second
+        # Remove timestamps older than 60 seconds
         while _last_request_times and now - _last_request_times[0] > _RATE_WINDOW:
             _last_request_times.pop(0)
-        if len(_last_request_times) >= 10:
+        if len(_last_request_times) >= _MAX_REQUESTS_PER_WINDOW:
             sleep_for = _RATE_WINDOW - (now - _last_request_times[0])
             if sleep_for > 0:
                 await asyncio.sleep(sleep_for)
@@ -155,7 +156,12 @@ async def _get(
             await _rate_limit()
             resp = await client.get(url, params=params, headers=headers, timeout=15.0)
 
-            if resp.status_code in (429, 500, 502, 503):
+            if resp.status_code == 429:
+                wait = 30 * (attempt + 1)  # 30s, 60s, 90s for rate limit
+                logger.warning("HTTP 429 on %s, retrying in %ss", path, wait)
+                await asyncio.sleep(wait)
+                continue
+            if resp.status_code in (500, 502, 503):
                 wait = 2 ** attempt
                 logger.warning("HTTP %s on %s, retrying in %ss", resp.status_code, path, wait)
                 await asyncio.sleep(wait)
