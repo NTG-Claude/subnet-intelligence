@@ -52,14 +52,18 @@ def _coords_from_dict(d: dict) -> Optional[RepoCoords]:
 # Public API
 # ---------------------------------------------------------------------------
 
-async def get_github_coords(netuid: int) -> Optional[RepoCoords]:
+async def get_github_coords(netuid: int, live_fetch: bool = False) -> Optional[RepoCoords]:
     """
     Resolve netuid → (owner, repo).
 
     Resolution order:
     1. Manual override in data/github_map_overrides.json
     2. In-memory / on-disk cache in data/github_map.json
-    3. Live fetch from on-chain SubnetIdentity + URL parsing
+    3. Live fetch from on-chain SubnetIdentity (only if live_fetch=True)
+
+    live_fetch is disabled by default during scoring runs to avoid
+    doubling chain calls. The identity fetch in run.py populates the
+    cache after each run so subsequent runs are fully cached.
     """
     key = str(netuid)
 
@@ -79,7 +83,10 @@ async def get_github_coords(netuid: int) -> Optional[RepoCoords]:
             logger.debug("netuid %s → cache %s/%s", netuid, coords.owner, coords.repo)
             return coords
 
-    # 3. Live fetch from on-chain identity
+    # 3. Live fetch (disabled during scoring to avoid double chain calls)
+    if not live_fetch:
+        return None
+
     coords = await _fetch_and_cache(netuid, cache)
     return coords
 

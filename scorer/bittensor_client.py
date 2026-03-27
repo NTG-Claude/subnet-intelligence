@@ -35,6 +35,10 @@ def _get_sem() -> asyncio.Semaphore:
 # Per-thread Subtensor instance (WebSocket stays open between calls)
 _local = threading.local()
 
+# In-process identity cache — avoids re-fetching identity for the same
+# netuid within a single scoring run (e.g. from mapper + run.py)
+_identity_cache: dict[int, "SubnetIdentity"] = {}
+
 
 def _subtensor():
     if not hasattr(_local, "st"):
@@ -231,5 +235,12 @@ async def get_subnet_metrics(netuid: int, current_block: int) -> SubnetMetrics:
 
 
 async def get_subnet_identity(netuid: int) -> SubnetIdentity:
+    if netuid in _identity_cache:
+        return _identity_cache[netuid]
     async with _get_sem():
-        return await asyncio.to_thread(_fetch_identity, netuid)
+        # Double-check after acquiring semaphore
+        if netuid in _identity_cache:
+            return _identity_cache[netuid]
+        result = await asyncio.to_thread(_fetch_identity, netuid)
+        _identity_cache[netuid] = result
+        return result
