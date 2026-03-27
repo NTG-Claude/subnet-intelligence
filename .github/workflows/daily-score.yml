@@ -29,8 +29,10 @@ jobs:
 
       - name: Compute subnet scores
         run: |
+          set -o pipefail
           mkdir -p logs
-          python -m scorer.run --all-subnets --verbose 2>&1 | tee logs/score-run.log
+          # Suppress websockets/asyncio DEBUG noise, keep scorer INFO
+          python -m scorer.run --all-subnets 2>&1 | tee logs/score-run.log
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
