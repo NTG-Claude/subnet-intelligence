@@ -16,36 +16,26 @@ from scorer.normalizer import percentile_rank
 # ---------------------------------------------------------------------------
 
 def capital_conviction_score(
-    net_flow_30d: Optional[float],
-    market_cap_usd: Optional[float],
-    unique_stakers: Optional[int],
-    liquidity_usd: Optional[float],
+    stake_usd: Optional[float],
+    unique_coldkeys: Optional[int],
     # Cross-subnet lists for percentile normalisation
-    all_flow_ratios: list[Optional[float]],
-    all_unique_stakers: list[Optional[int]],
-    all_liquidity: list[Optional[float]],
+    all_stakes_usd: list[Optional[float]],
+    all_unique_coldkeys: list[Optional[int]],
 ) -> float:
     """
-    Measures whether capital is actively moving INTO the subnet.
+    Measures staked capital conviction for the subnet (on-chain, v2).
 
-    flow_pct  = percentile_rank(net_flow_30d / market_cap)
-    staker_pct = percentile_rank(unique_stakers)
-    pool_pct   = percentile_rank(liquidity_usd)
-    → 0.5 * flow_pct + 0.3 * staker_pct + 0.2 * pool_pct
+    stake_pct    = percentile_rank(total_stake * tao_price)
+    coldkey_pct  = percentile_rank(unique_coldkeys)
+    → 0.6 * stake_pct + 0.4 * coldkey_pct
     """
-    if market_cap_usd and market_cap_usd > 0 and net_flow_30d is not None:
-        flow_ratio: Optional[float] = net_flow_30d / market_cap_usd
-    else:
-        flow_ratio = None
-
-    flow_pct = percentile_rank(flow_ratio, all_flow_ratios)
-    staker_pct = percentile_rank(
-        float(unique_stakers) if unique_stakers is not None else None,
-        [float(x) if x is not None else None for x in all_unique_stakers],
+    stake_pct = percentile_rank(stake_usd, all_stakes_usd)
+    coldkey_pct = percentile_rank(
+        float(unique_coldkeys) if unique_coldkeys is not None else None,
+        [float(x) if x is not None else None for x in all_unique_coldkeys],
     )
-    pool_pct = percentile_rank(liquidity_usd, all_liquidity)
 
-    return 0.5 * flow_pct + 0.3 * staker_pct + 0.2 * pool_pct
+    return 0.6 * stake_pct + 0.4 * coldkey_pct
 
 
 # ---------------------------------------------------------------------------
@@ -53,44 +43,27 @@ def capital_conviction_score(
 # ---------------------------------------------------------------------------
 
 def network_activity_score(
-    miner_count_now: Optional[int],
-    miner_count_30d_ago: Optional[int],
-    new_registrations_7d: Optional[int],
-    weight_commits_per_epoch: Optional[int],
+    active_ratio: Optional[float],
+    n_validators: Optional[int],
     # Cross-subnet lists
-    all_miner_growths: list[Optional[float]],
-    all_registrations: list[Optional[int]],
-    all_weight_commits: list[Optional[int]],
+    all_active_ratios: list[Optional[float]],
+    all_n_validators: list[Optional[int]],
 ) -> float:
     """
-    Measures how actively miners and validators are participating.
+    Measures on-chain participation activity (v2).
 
-    miner_growth = (now - 30d_ago) / 30d_ago
-    growth_pct   = percentile_rank(miner_growth)
-    reg_pct      = percentile_rank(new_registrations_7d)
-    weights_pct  = percentile_rank(weight_commits_per_epoch)
-    → 0.4 * growth_pct + 0.4 * reg_pct + 0.2 * weights_pct
+    active_ratio = n_active_7d / n_total  (neurons that set weights in last 7 days)
+    active_pct   = percentile_rank(active_ratio)
+    val_pct      = percentile_rank(n_validators)
+    → 0.6 * active_pct + 0.4 * val_pct
     """
-    if (
-        miner_count_now is not None
-        and miner_count_30d_ago is not None
-        and miner_count_30d_ago > 0
-    ):
-        miner_growth: Optional[float] = (miner_count_now - miner_count_30d_ago) / miner_count_30d_ago
-    else:
-        miner_growth = None
-
-    growth_pct = percentile_rank(miner_growth, all_miner_growths)
-    reg_pct = percentile_rank(
-        float(new_registrations_7d) if new_registrations_7d is not None else None,
-        [float(x) if x is not None else None for x in all_registrations],
-    )
-    weights_pct = percentile_rank(
-        float(weight_commits_per_epoch) if weight_commits_per_epoch is not None else None,
-        [float(x) if x is not None else None for x in all_weight_commits],
+    active_pct = percentile_rank(active_ratio, all_active_ratios)
+    val_pct = percentile_rank(
+        float(n_validators) if n_validators is not None else None,
+        [float(x) if x is not None else None for x in all_n_validators],
     )
 
-    return 0.4 * growth_pct + 0.4 * reg_pct + 0.2 * weights_pct
+    return 0.6 * active_pct + 0.4 * val_pct
 
 
 # ---------------------------------------------------------------------------
@@ -98,26 +71,17 @@ def network_activity_score(
 # ---------------------------------------------------------------------------
 
 def emission_efficiency_score(
-    emission_percent: Optional[float],
-    market_cap_percent: Optional[float],
-    all_ratios: list[Optional[float]],
+    stake_per_emission: Optional[float],
+    all_stake_per_emission: list[Optional[float]],
 ) -> float:
     """
-    Measures how much market value the subnet generates per unit of emission.
+    Measures how much stake the subnet attracted per unit of daily emission (v2).
 
-    ratio = market_cap_percent / emission_percent  (>1.0 = efficient)
-    → percentile_rank(ratio)
+    stake_per_emission = total_stake_tao / emission_per_block_tao
+    Higher → subnet captures more stake per unit of inflation = more efficient.
+    → percentile_rank(stake_per_emission)
     """
-    if (
-        emission_percent is not None
-        and emission_percent > 0
-        and market_cap_percent is not None
-    ):
-        ratio: Optional[float] = market_cap_percent / emission_percent
-    else:
-        ratio = None
-
-    return percentile_rank(ratio, all_ratios)
+    return percentile_rank(stake_per_emission, all_stake_per_emission)
 
 
 # ---------------------------------------------------------------------------

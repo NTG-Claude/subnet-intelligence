@@ -21,10 +21,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from scorer.bittensor_client import get_subnet_identity
 from scorer.composite import compute_all_subnets
 from scorer.database import create_tables, save_scores, upsert_metadata
-from scorer.taostats_client import TaostatsClient
-import scorer.taostats_client as _tc
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -63,24 +62,10 @@ async def run(
     Returns:
         list of SubnetScore
     """
-    if force_refresh:
-        _tc._cache.clear()
-        logger.info("Cache cleared (--force-refresh)")
-
     start = time.monotonic()
     logger.info("=== Score run started at %s ===", datetime.now(timezone.utc).isoformat())
 
-    # 1. Fetch subnet universe for metadata
-    async with TaostatsClient() as client:
-        all_subnets_info = await client.get_all_subnets()
-
-    if not all_subnets_info:
-        logger.error("Could not fetch subnet list — aborting")
-        return []
-
-    logger.info("Subnet universe: %d subnets", len(all_subnets_info))
-
-    # 2. Compute scores
+    # 1. Compute scores (fetches subnet universe internally)
     scores = await compute_all_subnets(netuids=netuids)
 
     if not scores:
@@ -103,18 +88,15 @@ async def run(
         save_scores(scores)
         logger.info("Scores saved to database")
 
-        # 5. Update metadata
-        info_by_netuid = {s.netuid: s for s in all_subnets_info}
-        async with TaostatsClient() as client:
-            for score in scores:
-                info = info_by_netuid.get(score.netuid)
-                identity = await client.get_subnet_identity(score.netuid)
-                upsert_metadata(
-                    netuid=score.netuid,
-                    name=info.name if info else None,
-                    github_url=identity.github_url if identity else None,
-                    website=identity.website if identity else None,
-                )
+        # 5. Update metadata from on-chain identity
+        for score in scores:
+            identity = await get_subnet_identity(score.netuid)
+            upsert_metadata(
+                netuid=score.netuid,
+                name=identity.name,
+                github_url=identity.github_url,
+                website=identity.website,
+            )
 
         logger.info("Metadata updated for %d subnets", len(scores))
 

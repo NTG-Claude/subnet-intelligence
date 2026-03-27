@@ -7,18 +7,23 @@ Scores basieren ausschliesslich auf frei verfügbaren, automatisierbaren Daten.
 ## Architektur
 ```
 scorer/             Python-Package für Signal-Berechnung und Orchestrierung
-  taostats_client.py  Async API-Client (8 Endpoints, Rate-Limit, Cache, Retry)
-  github_client.py    GitHub API (Commits, Contributors, Repo-Stats)
+  bittensor_client.py  On-chain Daten via bittensor SDK (Finney mainnet, kein API-Key)
+                       - SubnetMetrics: n_total, n_active_7d, total_stake_tao, unique_coldkeys,
+                         top3_stake_fraction, emission_per_block_tao, incentive_scores, n_validators
+                       - SubnetIdentity: name, github_url, website
+                       - threading.local() für Subtensor-Reuse, asyncio.Semaphore(6) für Concurrency
+  coingecko_client.py  TAO/USD Preis (CoinGecko Free API, 1h Cache, kein API-Key)
+  github_client.py     GitHub API (Commits, Contributors, Repo-Stats)
   subnet_github_mapper.py  netuid → (owner, repo) mit Override-Support
-  signals.py          5 reine Signalfunktionen (0.0–1.0 je)
-  normalizer.py       percentile_rank() — min→0, max→1, ties→average
-  composite.py        compute_all_subnets() — orchestriert alles parallel
-  database.py         SQLAlchemy ORM + 6 Query-Funktionen
-  run.py              CLI Entry-Point (argparse)
-  scheduler.py        Tagesplaner via schedule-library + Webhook-Alerts
+  signals.py           5 reine Signalfunktionen (0.0–1.0 je), Score v2 Signaturen
+  normalizer.py        percentile_rank() — min→0, max→1, ties→average
+  composite.py         compute_all_subnets() — orchestriert alles parallel, SCORE_VERSION="v2"
+  database.py          SQLAlchemy ORM + 6 Query-Funktionen
+  run.py               CLI Entry-Point (argparse)
+  scheduler.py         Tagesplaner via schedule-library + Webhook-Alerts
 
 api/                FastAPI REST-Endpunkte
-  main.py             7 Endpoints, CORS, slowapi Rate-Limit, fastapi-cache2
+  main.py             7 Endpoints, CORS, In-Memory Rate-Limit
   models.py           Pydantic Response-Modelle
   dependencies.py     DB-Session Injection
 
@@ -39,24 +44,30 @@ data/
   github_map_overrides.json Manuelle Overrides (SN3, SN4, SN64 bekannt)
 ```
 
-## Score-Formel v1
+## Score-Formel v2
 ```
 score = capital(25) + activity(25) + efficiency(20) + health(15) + dev(15)
+
+capital    = 0.6 * percentile(total_stake_usd) + 0.4 * percentile(unique_coldkeys)
+activity   = 0.6 * percentile(n_active_7d / n_total) + 0.4 * percentile(n_validators)
+efficiency = percentile(total_stake_tao / emission_per_block_tao)
+health     = 0.5 * (1 - gini(incentives)) + 0.5 * (1 - top3_stake_fraction)
+dev        = 0.6 * percentile(commits_30d) + 0.4 * percentile(unique_contributors_30d)
 ```
 Jede Dimension ist percentile-ranked über alle aktiven Subnets (0.0–1.0 → gewichtet).
 
 ## Deployment
 | Dienst    | Plattform | URL                              |
 |-----------|-----------|----------------------------------|
-| Datenbank | Supabase  | (DATABASE_URL in GitHub Secrets) |
+| Datenbank | Supabase  | Transaction Pooler, Port 6543, postgres.PROJECT_REF als User |
 | API       | Railway   | uvicorn api.main:app --port $PORT |
 | Frontend  | Vercel    | NEXT_PUBLIC_API_URL → Railway URL |
 
 ## API Keys (in .env, niemals committen)
-- `TAOSTATS_API_KEY`  — dash.taostats.io
 - `GITHUB_TOKEN`      — github.com/settings/tokens (read:repo)
-- `DATABASE_URL`      — PostgreSQL Connection String (Supabase/Railway)
+- `DATABASE_URL`      — PostgreSQL Connection String (Supabase Transaction Pooler)
 - `ALERT_WEBHOOK_URL` — Optional, Slack/Discord Webhook für Fehlerbenachrichtigungen
+- ~~TAOSTATS_API_KEY~~ — entfernt, kein API-Key mehr nötig (bittensor SDK + CoinGecko)
 
 ## Befehle
 ```bash
@@ -73,33 +84,35 @@ make scheduler       # täglichen Scheduler starten
 
 ## Wichtige Prinzipien
 1. Alle Scores deterministisch und reproduzierbar
-2. Jedes Signal hat eine klare Datenquelle (Taostats oder GitHub API)
+2. Jedes Signal hat eine klare Datenquelle (Bittensor on-chain oder GitHub API)
 3. Kein manueller Input — alles automatisiert
 4. Score-Methodik ist öffentlich dokumentiert (kein Black Box)
 5. Backward-compatible: neue Signale dürfen alte Scores nicht brechen
 6. Fehler werden geloggt, stoppen nicht den Gesamt-Run (`None` statt Exception)
 
 ## Bekannte Eigenheiten & Fallstricke
-- **fastapi vs bittensor**: `bittensor 8.0.0` erwartet `fastapi~=0.110.1`, wir nutzen 0.135+.
-  Falls bittensor im selben venv → `fastapi~=0.110.1` in requirements.txt pinnen.
-- **Taostats Response-Format**: Endpunkte geben teils `[...]` teils `{"data": [...]}` zurück.
-  `taostats_client.py` normalisiert beide Formate.
+- **fastapi vs bittensor**: `bittensor 8.x` erwartet `fastapi~=0.110.1`.
+  requirements.txt ist auf `fastapi>=0.110.1,<1.0.0` gepinnt.
+- **bittensor SDK Semaphore**: `asyncio.Semaphore` in bittensor_client.py wird lazy initialisiert
+  (innerhalb des laufenden Event Loops), da module-level Semaphore in Python <3.10 Probleme macht.
+- **emission_value in rao**: `SubnetInfo.emission_value` ist in rao (1 TAO = 1e9 rao).
+  Konvertierung: `emission_per_block_tao = emission_value / 1e9`.
 - **GitHub Repos in Identity**: Viele Subnets hinterlegen kein GitHub-URL in ihrer On-Chain Identity.
   Manuelle Overrides in `data/github_map_overrides.json`.
 - **percentile_rank Formel**: `(2*below + equal - 1) / (2*(n-1))` — garantiert min→0, max→1.
   Nicht `below/n` (gibt max nie 1.0).
-- **fastapi-cache2 + slowapi Reihenfolge**: `@cache` muss VOR `@limiter.limit` stehen.
+- **Supabase Transaction Pooler**: DATABASE_URL muss Port 6543 + `postgres.PROJECT_REF` als Username nutzen.
+  Session Pooler Port 5432 oder direct connection führen zu IPv4-Problemen auf GitHub Actions.
 - **pytest asyncio**: `asyncio_mode = strict` in pyproject.toml → alle async Tests brauchen `@pytest.mark.asyncio`.
 
 ## Bekannte Limitierungen
 - Externer Revenue nicht messbar (strukturell off-chain)
 - GitHub-Repos nicht immer in Subnet-Identity hinterlegt
 - Staking-Manipulation durch koordinierte Wallets nicht erkennbar
-- composite.py nutzt `miner_count` aus HistoryPoint — Taostats gibt dieses Feld ggf. anders.
-  Bei Live-Daten Feldnamen in `get_subnet_history()` Response prüfen.
+- bittensor metagraph: n_active_7d basiert auf `last_update` Block — misst Gewichtssets, nicht Miner-Aktivität
 
 ## Nächste geplante Verbesserungen
-# v1.1 — Token Velocity (volume_24h / market_cap, 10 Punkte)
-# v1.2 — Subnet Maturity Score (Alter vs. Score-Trend)
-# v1.3 — Cross-Subnet Validator Overlap
-# v2.0 — PostgreSQL für Produktion, Redis-Cache für API
+# v2.1 — Token Price aus dTAO Pool direkt on-chain (statt CoinGecko)
+# v2.2 — Subnet Maturity Score (Alter vs. Score-Trend)
+# v2.3 — Cross-Subnet Validator Overlap
+# v3.0 — Redis-Cache für API, WebSocket Live-Updates

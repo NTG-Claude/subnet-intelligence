@@ -3,18 +3,17 @@ Subnet → GitHub Repo Mapper
 
 Resolves netuid → (owner, repo) by:
 1. Checking manual overrides in data/github_map_overrides.json
-2. Fetching github_url from TaostatsClient.get_subnet_identity(netuid)
+2. Fetching github_url from on-chain SubnetIdentity via bittensor_client
 3. Caching results in data/github_map.json
 """
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
+from scorer.bittensor_client import get_subnet_identity
 from scorer.github_client import RepoCoords, get_repo_from_url
-from scorer.taostats_client import TaostatsClient
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ async def get_github_coords(netuid: int) -> Optional[RepoCoords]:
     Resolution order:
     1. Manual override in data/github_map_overrides.json
     2. In-memory / on-disk cache in data/github_map.json
-    3. Live fetch from Taostats identity endpoint + URL parsing
+    3. Live fetch from on-chain SubnetIdentity + URL parsing
     """
     key = str(netuid)
 
@@ -80,15 +79,14 @@ async def get_github_coords(netuid: int) -> Optional[RepoCoords]:
             logger.debug("netuid %s → cache %s/%s", netuid, coords.owner, coords.repo)
             return coords
 
-    # 3. Live fetch
+    # 3. Live fetch from on-chain identity
     coords = await _fetch_and_cache(netuid, cache)
     return coords
 
 
 async def _fetch_and_cache(netuid: int, cache: dict) -> Optional[RepoCoords]:
     key = str(netuid)
-    async with TaostatsClient() as client:
-        identity = await client.get_subnet_identity(netuid)
+    identity = await get_subnet_identity(netuid)
 
     if identity is None:
         logger.info("No identity found for netuid %s", netuid)
