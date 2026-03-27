@@ -31,9 +31,9 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p logs
-          # Suppress websockets/asyncio DEBUG noise, keep scorer INFO
           python -m scorer.run --all-subnets 2>&1 | tee logs/score-run.log
         env:
+          PYTHONUNBUFFERED: "1"
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 

@@ -28,14 +28,18 @@ from scorer.database import create_tables, save_scores, upsert_metadata
 
 def _setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    # bittensor overrides logging handlers on import — clear and re-add ours
+    root = logging.getLogger()
+    root.handlers.clear()
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%SZ",
-        stream=sys.stdout,
-    )
+    ))
+    root.setLevel(level)
+    root.addHandler(handler)
     # Quieten noisy third-party loggers
-    for noisy in ("httpx", "httpcore", "sqlalchemy.engine"):
+    for noisy in ("httpx", "httpcore", "sqlalchemy.engine", "bittensor", "websockets", "asyncio"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
@@ -153,13 +157,18 @@ def main() -> None:
 
     netuids = None if args.all_subnets else [args.netuid]
 
-    scores = asyncio.run(
-        run(
-            netuids=netuids,
-            dry_run=args.dry_run,
-            force_refresh=args.force_refresh,
+    try:
+        scores = asyncio.run(
+            run(
+                netuids=netuids,
+                dry_run=args.dry_run,
+                force_refresh=args.force_refresh,
+            )
         )
-    )
+    except Exception:
+        import traceback
+        traceback.print_exc(file=sys.stdout)
+        sys.exit(1)
 
     if not scores:
         sys.exit(1)

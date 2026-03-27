@@ -12,6 +12,10 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Eager import so bittensor's logging setup happens before _setup_logging() runs.
+# This ensures our handlers (set in run.py) are applied AFTER bittensor's and win.
+import bittensor as bt  # noqa: E402
+
 NETWORK = "finney"
 BLOCKS_PER_DAY = 7200  # ~12 s per block
 _MAX_CONCURRENT = 6
@@ -33,7 +37,6 @@ _local = threading.local()
 
 def _subtensor():
     if not hasattr(_local, "st"):
-        import bittensor as bt
         _local.st = bt.Subtensor(network=NETWORK)
     return _local.st
 
