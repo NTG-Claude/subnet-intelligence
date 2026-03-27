@@ -1,6 +1,6 @@
 """
 Unit-Tests für signals.py und normalizer.py
-Fixtures: 10 realistische Dummy-Subnets
+Fixtures: 10 realistische Dummy-Subnets (v2 on-chain signals)
 """
 
 import pytest
@@ -15,30 +15,25 @@ from scorer.signals import (
 )
 
 # ---------------------------------------------------------------------------
-# 10-subnet dummy fixture
+# 10-subnet dummy fixture (v2 on-chain fields)
 # ---------------------------------------------------------------------------
 
-N = 10  # number of subnets
+N = 10
 
 
 @pytest.fixture
 def subnets():
-    """10 synthetic subnets with realistic variation."""
+    """10 synthetic subnets with realistic on-chain variation."""
     return [
         {
             "netuid": i,
-            "market_cap_usd": (i + 1) * 500_000,
-            "flow_30d": (i - 4) * 20_000,          # negative for low-index subnets
-            "unique_stakers": 50 + i * 30,
-            "liquidity_usd": (i + 1) * 80_000,
-            "emission_percent": max(0.5, 3.0 - i * 0.2),
-            "market_cap_percent": (i + 1) / 55,     # proportional, sums ~1
-            "miner_count_now": 100 + i * 10,
-            "miner_count_30d_ago": 90 + i * 8,
-            "registrations_7d": i * 3,
-            "weight_commits": 5 + i * 2,
+            "stake_usd": (i + 1) * 200_000.0,
+            "unique_coldkeys": 50 + i * 30,
+            "active_ratio": 0.3 + i * 0.06,
+            "n_validators": 5 + i * 2,
+            "stake_per_emission": (i + 1) * 500.0,
             "incentive_scores": [0.1 * j / (i + 1) for j in range(1, 20)],
-            "top3_stake_percent": max(0.05, 0.5 - i * 0.04),
+            "top3_stake_fraction": max(0.05, 0.5 - i * 0.04),
             "commits_30d": i * 15,
             "contributors_30d": max(1, i * 2),
         }
@@ -73,7 +68,6 @@ class TestPercentileRank:
         assert percentile_rank(1.0, [None, None]) == 0.0
 
     def test_ties_average_method(self):
-        # [1, 2, 2, 3]: value=2 → rank should be 0.5
         result = percentile_rank(2.0, [1.0, 2.0, 2.0, 3.0])
         assert result == pytest.approx(0.5, abs=0.01)
 
@@ -92,43 +86,28 @@ class TestPercentileRank:
 # ---------------------------------------------------------------------------
 
 class TestCapitalConvictionScore:
-    def _cross(self, subnets):
-        all_flow_ratios = [
-            s["flow_30d"] / s["market_cap_usd"] if s["market_cap_usd"] else None
-            for s in subnets
-        ]
-        return (
-            all_flow_ratios,
-            [s["unique_stakers"] for s in subnets],
-            [s["liquidity_usd"] for s in subnets],
-        )
-
     def test_output_in_range(self, subnets):
-        all_fr, all_us, all_liq = self._cross(subnets)
+        all_stakes = [s["stake_usd"] for s in subnets]
+        all_ck = [s["unique_coldkeys"] for s in subnets]
         for s in subnets:
             score = capital_conviction_score(
-                s["flow_30d"], s["market_cap_usd"], s["unique_stakers"], s["liquidity_usd"],
-                all_fr, all_us, all_liq,
+                s["stake_usd"], s["unique_coldkeys"], all_stakes, all_ck
             )
             assert 0.0 <= score <= 1.0
 
-    def test_higher_flow_scores_higher(self, subnets):
-        all_fr, all_us, all_liq = self._cross(subnets)
+    def test_higher_stake_scores_higher(self, subnets):
+        all_stakes = [s["stake_usd"] for s in subnets]
+        all_ck = [s["unique_coldkeys"] for s in subnets]
         scores = [
-            capital_conviction_score(
-                s["flow_30d"], s["market_cap_usd"], s["unique_stakers"], s["liquidity_usd"],
-                all_fr, all_us, all_liq,
-            )
+            capital_conviction_score(s["stake_usd"], s["unique_coldkeys"], all_stakes, all_ck)
             for s in subnets
         ]
-        # Last subnet has highest flow_30d and stakers → should score higher than first
         assert scores[-1] > scores[0]
 
-    def test_none_flow_returns_low_score(self, subnets):
-        all_fr, all_us, all_liq = self._cross(subnets)
-        score = capital_conviction_score(
-            None, None, None, None, all_fr, all_us, all_liq
-        )
+    def test_none_inputs_return_zero(self, subnets):
+        all_stakes = [s["stake_usd"] for s in subnets]
+        all_ck = [s["unique_coldkeys"] for s in subnets]
+        score = capital_conviction_score(None, None, all_stakes, all_ck)
         assert score == pytest.approx(0.0)
 
 
@@ -137,41 +116,27 @@ class TestCapitalConvictionScore:
 # ---------------------------------------------------------------------------
 
 class TestNetworkActivityScore:
-    def _cross(self, subnets):
-        growths = [
-            (s["miner_count_now"] - s["miner_count_30d_ago"]) / s["miner_count_30d_ago"]
-            for s in subnets
-        ]
-        return growths, [s["registrations_7d"] for s in subnets], [s["weight_commits"] for s in subnets]
-
     def test_output_in_range(self, subnets):
-        all_g, all_r, all_w = self._cross(subnets)
+        all_ar = [s["active_ratio"] for s in subnets]
+        all_val = [s["n_validators"] for s in subnets]
         for s in subnets:
-            score = network_activity_score(
-                s["miner_count_now"], s["miner_count_30d_ago"],
-                s["registrations_7d"], s["weight_commits"],
-                all_g, all_r, all_w,
-            )
+            score = network_activity_score(s["active_ratio"], s["n_validators"], all_ar, all_val)
             assert 0.0 <= score <= 1.0
 
-    def test_higher_growth_scores_higher(self, subnets):
-        all_g, all_r, all_w = self._cross(subnets)
+    def test_higher_activity_scores_higher(self, subnets):
+        all_ar = [s["active_ratio"] for s in subnets]
+        all_val = [s["n_validators"] for s in subnets]
         scores = [
-            network_activity_score(
-                s["miner_count_now"], s["miner_count_30d_ago"],
-                s["registrations_7d"], s["weight_commits"],
-                all_g, all_r, all_w,
-            )
+            network_activity_score(s["active_ratio"], s["n_validators"], all_ar, all_val)
             for s in subnets
         ]
         assert scores[-1] > scores[0]
 
-    def test_zero_miner_count_30d_ago(self, subnets):
-        all_g, all_r, all_w = self._cross(subnets)
-        score = network_activity_score(
-            100, 0, 5, 10, all_g, all_r, all_w
-        )
-        assert 0.0 <= score <= 1.0
+    def test_none_inputs_return_zero(self, subnets):
+        all_ar = [s["active_ratio"] for s in subnets]
+        all_val = [s["n_validators"] for s in subnets]
+        score = network_activity_score(None, None, all_ar, all_val)
+        assert score == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -179,24 +144,20 @@ class TestNetworkActivityScore:
 # ---------------------------------------------------------------------------
 
 class TestEmissionEfficiencyScore:
-    def _cross(self, subnets):
-        return [
-            s["market_cap_percent"] / s["emission_percent"] if s["emission_percent"] > 0 else None
-            for s in subnets
-        ]
-
     def test_output_in_range(self, subnets):
-        all_r = self._cross(subnets)
+        all_spe = [s["stake_per_emission"] for s in subnets]
         for s in subnets:
-            score = emission_efficiency_score(
-                s["emission_percent"], s["market_cap_percent"], all_r
-            )
+            score = emission_efficiency_score(s["stake_per_emission"], all_spe)
             assert 0.0 <= score <= 1.0
 
-    def test_none_emission_returns_zero(self, subnets):
-        all_r = self._cross(subnets)
-        assert emission_efficiency_score(None, 0.1, all_r) == 0.0
-        assert emission_efficiency_score(0.0, 0.1, all_r) == 0.0
+    def test_none_returns_zero(self, subnets):
+        all_spe = [s["stake_per_emission"] for s in subnets]
+        assert emission_efficiency_score(None, all_spe) == 0.0
+
+    def test_higher_stake_per_emission_scores_higher(self, subnets):
+        all_spe = [s["stake_per_emission"] for s in subnets]
+        scores = [emission_efficiency_score(s["stake_per_emission"], all_spe) for s in subnets]
+        assert scores[-1] > scores[0]
 
 
 # ---------------------------------------------------------------------------
@@ -210,21 +171,18 @@ class TestDistributionHealthScore:
         assert score == pytest.approx(1.0, abs=0.01)
 
     def test_perfect_inequality_low_score(self):
-        # One miner gets everything
         unequal = [0.0] * 19 + [1.0]
         score = distribution_health_score(unequal, top3_stake_percent=1.0)
         assert score < 0.2
 
     def test_output_in_range(self, subnets):
         for s in subnets:
-            score = distribution_health_score(
-                s["incentive_scores"], s["top3_stake_percent"]
-            )
+            score = distribution_health_score(s["incentive_scores"], s["top3_stake_fraction"])
             assert 0.0 <= score <= 1.0
 
     def test_empty_incentives_pessimistic(self):
         score = distribution_health_score([], top3_stake_percent=0.5)
-        assert score == pytest.approx(0.25, abs=0.01)  # 0.5*(1-1) + 0.5*(1-0.5)
+        assert score == pytest.approx(0.25, abs=0.01)
 
     def test_none_top3_pessimistic(self):
         score = distribution_health_score([0.5, 0.5], top3_stake_percent=None)
