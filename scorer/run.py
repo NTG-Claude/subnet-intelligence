@@ -92,11 +92,13 @@ async def run(
         save_scores(scores)
         logger.info("Scores saved to database")
 
-        # 5. Update metadata from on-chain identity
-        for score in scores:
-            identity = await get_subnet_identity(score.netuid)
+        # 5. Update metadata from on-chain identity (parallel)
+        identities = await asyncio.gather(
+            *[get_subnet_identity(s.netuid) for s in scores]
+        )
+        for identity in identities:
             upsert_metadata(
-                netuid=score.netuid,
+                netuid=identity.netuid,
                 name=identity.name,
                 github_url=identity.github_url,
                 website=identity.website,
