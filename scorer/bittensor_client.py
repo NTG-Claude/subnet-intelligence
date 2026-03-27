@@ -18,7 +18,8 @@ import bittensor as bt  # noqa: E402
 
 NETWORK = "finney"
 BLOCKS_PER_DAY = 7200  # ~12 s per block
-_MAX_CONCURRENT = 6
+_MAX_CONCURRENT = 10        # 10 concurrent chain queries
+_METRICS_TIMEOUT = 90.0     # seconds per subnet before giving up
 
 # Lazily initialised so the semaphore is always created inside the running loop
 _sem: Optional[asyncio.Semaphore] = None
@@ -219,7 +220,14 @@ async def get_current_block() -> int:
 
 async def get_subnet_metrics(netuid: int, current_block: int) -> SubnetMetrics:
     async with _get_sem():
-        return await asyncio.to_thread(_fetch_metrics, netuid, current_block)
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(_fetch_metrics, netuid, current_block),
+                timeout=_METRICS_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error("Timeout (%.0fs) fetching metrics for SN%d — skipping", _METRICS_TIMEOUT, netuid)
+            return SubnetMetrics(netuid=netuid)
 
 
 async def get_subnet_identity(netuid: int) -> SubnetIdentity:
