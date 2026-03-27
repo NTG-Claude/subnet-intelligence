@@ -87,22 +87,26 @@ def _fetch_current_block() -> int:
 
 
 def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
+    """
+    Uses neurons_lite() — much faster than metagraph() because it skips
+    building PyTorch tensor arrays (S, W, B, …) and only fetches lightweight
+    NeuronInfoLite records via a single RPC call.
+    """
     m = SubnetMetrics(netuid=netuid)
     try:
         st = _subtensor()
-        meta = st.metagraph(netuid=netuid)
+        neurons = st.neurons_lite(netuid=netuid)
 
-        n_total = int(meta.n) if hasattr(meta, "n") else len(meta.hotkeys)
-        m.n_total = n_total
+        m.n_total = len(neurons)
 
         # Aggregate stake by coldkey
         coldkey_stakes: dict[str, float] = defaultdict(float)
-        for i, ck in enumerate(meta.coldkeys):
+        for n in neurons:
             try:
-                stake_val = float(meta.S[i])
+                stake_val = float(n.total_stake)
             except (TypeError, ValueError):
                 stake_val = 0.0
-            coldkey_stakes[ck] += stake_val
+            coldkey_stakes[n.coldkey] += stake_val
 
         total_stake = sum(coldkey_stakes.values())
         m.total_stake_tao = total_stake
@@ -116,17 +120,14 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
             m.top3_stake_fraction = 1.0
 
         # Active neurons (weights set within last 7 days)
-        if hasattr(meta, "last_update"):
-            cutoff = current_block - 7 * BLOCKS_PER_DAY
-            m.n_active_7d = int(sum(1 for lu in meta.last_update if int(lu) >= cutoff))
+        cutoff = current_block - 7 * BLOCKS_PER_DAY
+        m.n_active_7d = int(sum(1 for n in neurons if int(n.last_update) >= cutoff))
 
         # Incentive scores
-        if hasattr(meta, "I"):
-            m.incentive_scores = [float(v) for v in meta.I]
+        m.incentive_scores = [float(n.incentive) for n in neurons]
 
         # Validator count
-        if hasattr(meta, "validator_permit"):
-            m.n_validators = int(sum(1 for vp in meta.validator_permit if bool(vp)))
+        m.n_validators = int(sum(1 for n in neurons if n.validator_permit))
 
         # Emission per block in TAO
         try:
@@ -139,7 +140,7 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
             logger.warning("emission fetch failed for SN%d: %s", netuid, exc)
 
     except Exception as exc:
-        logger.error("metagraph fetch failed for SN%d: %s", netuid, exc)
+        logger.error("neurons_lite fetch failed for SN%d: %s", netuid, exc)
 
     return m
 
