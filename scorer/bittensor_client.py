@@ -7,6 +7,7 @@ import asyncio
 import logging
 import threading
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -20,6 +21,12 @@ NETWORK = "finney"
 BLOCKS_PER_DAY = 7200  # ~12 s per block
 _MAX_CONCURRENT = 10        # 10 concurrent chain queries
 _METRICS_TIMEOUT = 90.0     # seconds per subnet before giving up
+
+# Explicit thread pool sized well above _MAX_CONCURRENT so timed-out threads
+# (which can't be killed) never block new tasks from getting a free worker.
+# Default ThreadPoolExecutor on GitHub Actions (2 CPUs) = only 6 workers —
+# far too few when slow chain calls pile up as zombies.
+_executor = ThreadPoolExecutor(max_workers=64, thread_name_prefix="bt_subnet")
 
 # Lazily initialised so the semaphore is always created inside the running loop
 _sem: Optional[asyncio.Semaphore] = None
@@ -214,19 +221,22 @@ def _fetch_identity(netuid: int) -> SubnetIdentity:
 
 async def get_all_netuids() -> list[int]:
     async with _get_sem():
-        return await asyncio.to_thread(_fetch_netuids)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_executor, _fetch_netuids)
 
 
 async def get_current_block() -> int:
     async with _get_sem():
-        return await asyncio.to_thread(_fetch_current_block)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_executor, _fetch_current_block)
 
 
 async def get_subnet_metrics(netuid: int, current_block: int) -> SubnetMetrics:
     async with _get_sem():
+        loop = asyncio.get_running_loop()
         try:
             return await asyncio.wait_for(
-                asyncio.to_thread(_fetch_metrics, netuid, current_block),
+                loop.run_in_executor(_executor, _fetch_metrics, netuid, current_block),
                 timeout=_METRICS_TIMEOUT,
             )
         except asyncio.TimeoutError:
@@ -238,9 +248,9 @@ async def get_subnet_identity(netuid: int) -> SubnetIdentity:
     if netuid in _identity_cache:
         return _identity_cache[netuid]
     async with _get_sem():
-        # Double-check after acquiring semaphore
         if netuid in _identity_cache:
             return _identity_cache[netuid]
-        result = await asyncio.to_thread(_fetch_identity, netuid)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(_executor, _fetch_identity, netuid)
         _identity_cache[netuid] = result
         return result
