@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +21,7 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -e ".[dev]" pytest-cov
+        run: pip install -r requirements.txt -e ".[dev]"
 
       - name: Run tests with coverage
         run: |
