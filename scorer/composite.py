@@ -73,11 +73,22 @@ class _SubnetData:
 # Data fetcher
 # ---------------------------------------------------------------------------
 
-async def _fetch_data(netuid: int, current_block: int, tao_price: float) -> _SubnetData:
+async def _fetch_data(netuid: int, current_block: int, tao_price: float, progress: list) -> _SubnetData:
     d = _SubnetData(netuid)
     d.tao_price_usd = tao_price
 
     d.metrics = await get_subnet_metrics(netuid, current_block)
+
+    # Progress log — visible in real-time in GitHub Actions (PYTHONUNBUFFERED=1)
+    progress[0] += 1
+    m = d.metrics
+    if m and m.n_total > 0:
+        logger.info(
+            "[%d/%d] SN%d OK — %d neurons, %.0f TAO staked",
+            progress[0], progress[1], netuid, m.n_total, m.total_stake_tao,
+        )
+    else:
+        logger.warning("[%d/%d] SN%d — no on-chain data (timeout or empty)", progress[0], progress[1], netuid)
 
     coords = await get_github_coords(netuid)
     if coords:
@@ -249,10 +260,13 @@ async def compute_all_subnets(netuids: Optional[list[int]] = None) -> list[Subne
 
     logger.info("Fetching data for %d subnets (block=%d, TAO=%.2f)", len(netuids), current_block, tao_price)
 
+    # Shared mutable counter [done, total] for real-time progress logging
+    progress = [0, len(netuids)]
+
     # 3. Parallel per-subnet fetch — return_exceptions so one bad subnet
     # doesn't abort the entire run
     results = await asyncio.gather(
-        *[_fetch_data(netuid, current_block, tao_price) for netuid in netuids],
+        *[_fetch_data(netuid, current_block, tao_price, progress) for netuid in netuids],
         return_exceptions=True,
     )
     all_data: list[_SubnetData] = []
