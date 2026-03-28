@@ -12,6 +12,7 @@ Verwendung:
 import argparse
 import asyncio
 import logging
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -184,7 +185,11 @@ def main() -> None:
         sys.exit(1)
 
     if not scores:
-        sys.exit(1)
+        os._exit(1)
+
+    # Force-exit: bittensor keeps WebSocket background threads alive,
+    # which would prevent Python from exiting normally and hang CI.
+    os._exit(0)
 
 
 if __name__ == "__main__":
