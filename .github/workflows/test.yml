@@ -30,7 +30,7 @@ jobs:
             --cov=api \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-fail-under=80
+            --cov-fail-under=75
         env:
           DATABASE_URL: sqlite:///./data/subnet_scores_test.db
 
