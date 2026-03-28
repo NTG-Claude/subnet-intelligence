@@ -46,6 +46,27 @@ _local = threading.local()
 # netuid within a single scoring run (e.g. from mapper + run.py)
 _identity_cache: dict[int, "SubnetIdentity"] = {}
 
+# Module-level cache for get_all_subnets_info() — fetched once per process,
+# reused by all _fetch_metrics() calls to avoid 128x redundant chain queries.
+_all_subnets_info_cache: list = []
+_all_subnets_info_lock = threading.Lock()
+
+
+def _get_cached_subnets_info() -> list:
+    global _all_subnets_info_cache
+    if _all_subnets_info_cache:
+        return _all_subnets_info_cache
+    with _all_subnets_info_lock:
+        if _all_subnets_info_cache:
+            return _all_subnets_info_cache
+        try:
+            _all_subnets_info_cache = _subtensor().get_all_subnets_info() or []
+            logger.info("Cached info for %d subnets from chain", len(_all_subnets_info_cache))
+        except Exception as exc:
+            logger.warning("get_all_subnets_info failed: %s", exc)
+            _all_subnets_info_cache = []
+    return _all_subnets_info_cache
+
 
 def _subtensor():
     if not hasattr(_local, "st"):
@@ -85,15 +106,15 @@ class SubnetMetrics:
 def _fetch_netuids() -> list[int]:
     try:
         st = _subtensor()
-        logger.info("Subtensor connected — endpoint: %s, version: %s", getattr(st, 'chain_endpoint', 'unknown'), bt.__version__)
-        result = st.get_all_subnet_netuids()
+        logger.info("Subtensor connected — bt v%s", bt.__version__)
+        result = st.get_subnets()  # correct name in bittensor 8.x (was get_all_subnet_netuids in older docs)
         if not result:
-            logger.error("get_all_subnet_netuids returned empty list — chain unreachable or API changed")
+            logger.error("get_subnets() returned empty list — chain unreachable or no subnets found")
         else:
             logger.info("Found %d subnets on chain", len(result))
         return result or []
     except Exception as exc:
-        logger.error("get_all_subnet_netuids failed: %s", exc, exc_info=True)
+        logger.error("get_subnets failed: %s", exc, exc_info=True)
         return []
 
 
@@ -150,9 +171,10 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         # Validator count
         m.n_validators = int(sum(1 for n in neurons if n.validator_permit))
 
-        # Emission per block in TAO
+        # Emission per block in TAO — use cached get_all_subnets_info() result
         try:
-            subnet_info = st.get_subnet_info(netuid)
+            all_info = _get_cached_subnets_info()
+            subnet_info = next((s for s in all_info if s.netuid == netuid), None)
             if subnet_info is not None and hasattr(subnet_info, "emission_value"):
                 raw = float(subnet_info.emission_value)
                 # emission_value is in rao (1 TAO = 1e9 rao) in bittensor 8.x
@@ -207,10 +229,11 @@ def _fetch_identity(netuid: int) -> SubnetIdentity:
         except Exception:
             pass  # storage key may not exist
 
-        # Fallback: subnet name from SubnetInfo
+        # Fallback: subnet name from cached get_all_subnets_info()
         if identity.name is None:
             try:
-                subnet_info = st.get_subnet_info(netuid)
+                all_info = _get_cached_subnets_info()
+                subnet_info = next((s for s in all_info if s.netuid == netuid), None)
                 if subnet_info:
                     identity.name = getattr(subnet_info, "subnet_name", None) or getattr(
                         subnet_info, "name", None
