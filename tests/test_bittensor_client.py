@@ -46,7 +46,7 @@ class TestDecodeBytes:
 
 def test_fetch_netuids_returns_list():
     mock_st = MagicMock()
-    mock_st.get_all_subnet_netuids.return_value = [0, 1, 2, 3, 4]
+    mock_st.get_all_subnets_netuid.return_value = [0, 1, 2, 3, 4]
 
     with patch("scorer.bittensor_client._subtensor", return_value=mock_st):
         result = _fetch_netuids()
@@ -56,7 +56,7 @@ def test_fetch_netuids_returns_list():
 
 def test_fetch_netuids_handles_error():
     mock_st = MagicMock()
-    mock_st.get_all_subnet_netuids.side_effect = RuntimeError("no connection")
+    mock_st.get_all_subnets_netuid.side_effect = RuntimeError("no connection")
 
     with patch("scorer.bittensor_client._subtensor", return_value=mock_st):
         result = _fetch_netuids()

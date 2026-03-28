@@ -187,8 +187,8 @@ async def test_mapper_uses_cache(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_mapper_fetches_from_taostats(tmp_path):
-    from scorer.taostats_client import SubnetIdentity
+async def test_mapper_fetches_from_identity(tmp_path):
+    from scorer.bittensor_client import SubnetIdentity
 
     identity = SubnetIdentity(
         netuid=10,
@@ -196,15 +196,10 @@ async def test_mapper_fetches_from_taostats(tmp_path):
         github_url="https://github.com/myorg/myrepo",
     )
 
-    mock_client_instance = AsyncMock()
-    mock_client_instance.get_subnet_identity = AsyncMock(return_value=identity)
-    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
-    mock_client_instance.__aexit__ = AsyncMock(return_value=None)
-
     with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", tmp_path / "overrides.json"), \
          patch("scorer.subnet_github_mapper._MAP_PATH", tmp_path / "github_map.json"), \
-         patch("scorer.subnet_github_mapper.TaostatsClient", return_value=mock_client_instance):
-        result = await get_github_coords(10)
+         patch("scorer.subnet_github_mapper.get_subnet_identity", AsyncMock(return_value=identity)):
+        result = await get_github_coords(10, live_fetch=True)
 
     assert result is not None
     assert result.owner == "myorg"
@@ -217,18 +212,13 @@ async def test_mapper_fetches_from_taostats(tmp_path):
 
 @pytest.mark.asyncio
 async def test_mapper_returns_none_when_no_github_url(tmp_path):
-    from scorer.taostats_client import SubnetIdentity
+    from scorer.bittensor_client import SubnetIdentity
 
     identity = SubnetIdentity(netuid=99, name="nourl")
 
-    mock_client_instance = AsyncMock()
-    mock_client_instance.get_subnet_identity = AsyncMock(return_value=identity)
-    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
-    mock_client_instance.__aexit__ = AsyncMock(return_value=None)
-
     with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", tmp_path / "overrides.json"), \
          patch("scorer.subnet_github_mapper._MAP_PATH", tmp_path / "github_map.json"), \
-         patch("scorer.subnet_github_mapper.TaostatsClient", return_value=mock_client_instance):
-        result = await get_github_coords(99)
+         patch("scorer.subnet_github_mapper.get_subnet_identity", AsyncMock(return_value=identity)):
+        result = await get_github_coords(99, live_fetch=True)
 
     assert result is None
