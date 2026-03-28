@@ -90,7 +90,7 @@ async def _fetch_data(netuid: int, current_block: int, tao_price: float, progres
     else:
         logger.warning("[%d/%d] SN%d — no on-chain data (timeout or empty)", progress[0], progress[1], netuid)
 
-    coords = await get_github_coords(netuid)
+    coords = await get_github_coords(netuid, live_fetch=True)
     if coords:
         try:
             d.commits, _ = await asyncio.gather(

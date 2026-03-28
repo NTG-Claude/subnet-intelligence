@@ -122,7 +122,7 @@ async def get_commits_last_30d(
 
     owns_client = client is None
     if owns_client:
-        client = httpx.AsyncClient()
+        client = httpx.AsyncClient(follow_redirects=True)
 
     try:
         commits: list[dict] = []
@@ -191,7 +191,7 @@ async def get_repo_stats(
     url = f"{GITHUB_API}/repos/{owner}/{repo}"
     owns_client = client is None
     if owns_client:
-        client = httpx.AsyncClient()
+        client = httpx.AsyncClient(follow_redirects=True)
 
     try:
         try:

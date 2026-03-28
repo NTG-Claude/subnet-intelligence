@@ -46,26 +46,29 @@ _local = threading.local()
 # netuid within a single scoring run (e.g. from mapper + run.py)
 _identity_cache: dict[int, "SubnetIdentity"] = {}
 
-# Module-level cache for get_all_subnets_info() — fetched once per process,
+# Module-level cache for EmissionValues — fetched once per process via query_map,
 # reused by all _fetch_metrics() calls to avoid 128x redundant chain queries.
-_all_subnets_info_cache: list = []
-_all_subnets_info_lock = threading.Lock()
+# bittensor 10.x removed get_all_subnets_info(); emission lives in
+# SubtensorModule.EmissionValues storage (netuid → rao, Compact<u64>).
+_emission_cache: dict[int, float] = {}
+_emission_cache_lock = threading.Lock()
 
 
-def _get_cached_subnets_info() -> list:
-    global _all_subnets_info_cache
-    if _all_subnets_info_cache:
-        return _all_subnets_info_cache
-    with _all_subnets_info_lock:
-        if _all_subnets_info_cache:
-            return _all_subnets_info_cache
+def _get_cached_emission_values() -> dict[int, float]:
+    global _emission_cache
+    if _emission_cache:
+        return _emission_cache
+    with _emission_cache_lock:
+        if _emission_cache:
+            return _emission_cache
         try:
-            _all_subnets_info_cache = _subtensor().get_all_subnets_info() or []
-            logger.info("Cached info for %d subnets from chain", len(_all_subnets_info_cache))
+            result = _subtensor().substrate.query_map("SubtensorModule", "EmissionValues")
+            for netuid_key, val in result:
+                _emission_cache[int(netuid_key.value)] = float(val.value or 0)
+            logger.info("Cached emission values for %d subnets from chain", len(_emission_cache))
         except Exception as exc:
-            logger.warning("get_all_subnets_info failed: %s", exc)
-            _all_subnets_info_cache = []
-    return _all_subnets_info_cache
+            logger.warning("EmissionValues query_map failed: %s", exc)
+    return _emission_cache
 
 
 def _subtensor():
@@ -174,13 +177,11 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         # Validator count
         m.n_validators = int(sum(1 for vp in getattr(meta, "validator_permit", []) if vp))
 
-        # Emission per block in TAO — use cached get_all_subnets_info() result
+        # Emission per block in TAO — SubtensorModule.EmissionValues[netuid] in rao
         try:
-            all_info = _get_cached_subnets_info()
-            subnet_info = next((s for s in all_info if s.netuid == netuid), None)
-            if subnet_info is not None and hasattr(subnet_info, "emission_value"):
-                raw = float(subnet_info.emission_value)
-                # emission_value is in rao (1 TAO = 1e9 rao)
+            emissions = _get_cached_emission_values()
+            raw = emissions.get(netuid, 0.0)
+            if raw > 0:
                 m.emission_per_block_tao = raw / 1e9 if raw > 1.0 else raw
         except Exception as exc:
             logger.warning("emission fetch failed for SN%d: %s", netuid, exc)
@@ -232,15 +233,12 @@ def _fetch_identity(netuid: int) -> SubnetIdentity:
         except Exception:
             pass  # storage key may not exist
 
-        # Fallback: subnet name from cached get_all_subnets_info()
+        # Fallback: subnet name from SubtensorModule.SubnetName storage (bittensor 10.x)
         if identity.name is None:
             try:
-                all_info = _get_cached_subnets_info()
-                subnet_info = next((s for s in all_info if s.netuid == netuid), None)
-                if subnet_info:
-                    identity.name = getattr(subnet_info, "subnet_name", None) or getattr(
-                        subnet_info, "name", None
-                    )
+                result = st.substrate.query("SubtensorModule", "SubnetName", [netuid])
+                if result is not None and result.value:
+                    identity.name = _decode_bytes(result.value)
             except Exception:
                 pass
 

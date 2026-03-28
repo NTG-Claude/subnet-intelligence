@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from scorer.bittensor_client import get_subnet_identity
+from scorer.bittensor_client import get_all_netuids, get_subnet_identity
 from scorer.composite import compute_all_subnets
 from scorer.database import create_tables, save_scores, upsert_metadata
 
@@ -69,7 +69,18 @@ async def run(
     start = time.monotonic()
     logger.info("=== Score run started at %s ===", datetime.now(timezone.utc).isoformat())
 
-    # 1. Compute scores (fetches subnet universe internally)
+    # 1. Pre-fetch all subnet identities so GitHub URLs are available during scoring.
+    # get_github_coords(live_fetch=True) will hit the _identity_cache, not the chain.
+    if netuids is None:
+        prefetch_netuids = await get_all_netuids()
+    else:
+        prefetch_netuids = netuids
+    if prefetch_netuids:
+        logger.info("Pre-fetching identities for %d subnets...", len(prefetch_netuids))
+        await asyncio.gather(*[get_subnet_identity(n) for n in prefetch_netuids])
+        logger.info("Identity pre-fetch complete")
+
+    # 2. Compute scores (uses pre-cached identities for GitHub URL discovery)
     scores = await compute_all_subnets(netuids=netuids)
 
     if not scores:
