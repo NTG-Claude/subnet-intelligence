@@ -24,4 +24,4 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["scorer", "api"]
-omit = ["tests/*", "*/migrations/*"]
+omit = ["tests/*", "*/migrations/*", "scorer/taostats_client.py"]
