@@ -50,7 +50,7 @@ export interface LeaderboardData {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API}${path}`, { next: { revalidate: 3600 } })
+  const res = await fetch(`${API}${path}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
   return res.json()
 }
