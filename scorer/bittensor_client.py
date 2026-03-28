@@ -177,12 +177,15 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         # Validator count
         m.n_validators = int(sum(1 for vp in getattr(meta, "validator_permit", []) if vp))
 
-        # Emission per block in TAO — SubtensorModule.EmissionValues[netuid] in rao
+        # Emission per block in TAO — sum of per-neuron emissions already in metagraph.
+        # NeuronInfo.emission is stored as n.emission/1e9 (rao→TAO) during decode,
+        # so meta.emission array is already in TAO. No extra chain call needed.
         try:
-            emissions = _get_cached_emission_values()
-            raw = emissions.get(netuid, 0.0)
-            if raw > 0:
-                m.emission_per_block_tao = raw / 1e9 if raw > 1.0 else raw
+            emission_arr = list(getattr(meta, "emission", []))
+            if emission_arr:
+                total_tao = sum(float(v) for v in emission_arr)
+                if total_tao > 0:
+                    m.emission_per_block_tao = total_tao
         except Exception as exc:
             logger.warning("emission fetch failed for SN%d: %s", netuid, exc)
 
