@@ -55,7 +55,7 @@ async function get<T>(path: string): Promise<T> {
   return res.json()
 }
 
-export const fetchSubnets = (limit = 100) =>
+export const fetchSubnets = (limit = 200) =>
   get<{ total: number; subnets: SubnetSummary[] }>(`/api/v1/subnets?limit=${limit}`)
 
 export const fetchSubnet = (netuid: number) =>
