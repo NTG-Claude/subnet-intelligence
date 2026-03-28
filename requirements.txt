@@ -10,7 +10,7 @@ schedule>=1.2
 pydantic>=2.7
 psycopg2-binary>=2.9
 alembic>=1.13
-bittensor>=8.0,<9.0
+bittensor>=10.2.0,<11.0
 
 # Dev
 pytest>=8.0

@@ -107,14 +107,14 @@ def _fetch_netuids() -> list[int]:
     try:
         st = _subtensor()
         logger.info("Subtensor connected — bt v%s", bt.__version__)
-        result = st.get_subnets()  # correct name in bittensor 8.x (was get_all_subnet_netuids in older docs)
+        result = st.get_all_subnets_netuid()  # bittensor 10.x API (was get_subnets() in 8.x)
         if not result:
-            logger.error("get_subnets() returned empty list — chain unreachable or no subnets found")
+            logger.error("get_all_subnets_netuid() returned empty list")
         else:
             logger.info("Found %d subnets on chain", len(result))
         return result or []
     except Exception as exc:
-        logger.error("get_subnets failed: %s", exc, exc_info=True)
+        logger.error("get_all_subnets_netuid failed: %s", exc, exc_info=True)
         return []
 
 
@@ -130,25 +130,27 @@ def _fetch_current_block() -> int:
 
 def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
     """
-    Uses neurons_lite() — much faster than metagraph() because it skips
-    building PyTorch tensor arrays (S, W, B, …) and only fetches lightweight
-    NeuronInfoLite records via a single RPC call.
+    Uses subtensor.metagraph() — bittensor 10.x replacement for neurons_lite().
+    Returns a Metagraph object with tensor arrays (S, I, last_update, etc.).
     """
     m = SubnetMetrics(netuid=netuid)
     try:
         st = _subtensor()
-        neurons = st.neurons_lite(netuid=netuid)
+        meta = st.metagraph(netuid=netuid)
 
-        m.n_total = len(neurons)
+        n = int(meta.n) if hasattr(meta, "n") else len(getattr(meta, "hotkeys", []))
+        m.n_total = n
+        if n == 0:
+            return m
 
-        # Aggregate stake by coldkey
+        # Aggregate stake by coldkey (meta.S is stake per neuron in TAO)
+        coldkeys = list(getattr(meta, "coldkeys", []))
+        stake_arr = list(getattr(meta, "S", []))
         coldkey_stakes: dict[str, float] = defaultdict(float)
-        for n in neurons:
-            try:
-                stake_val = float(n.total_stake)
-            except (TypeError, ValueError):
-                stake_val = 0.0
-            coldkey_stakes[n.coldkey] += stake_val
+        for i in range(n):
+            ck = coldkeys[i] if i < len(coldkeys) else ""
+            stake_val = float(stake_arr[i]) if i < len(stake_arr) else 0.0
+            coldkey_stakes[ck] += stake_val
 
         total_stake = sum(coldkey_stakes.values())
         m.total_stake_tao = total_stake
@@ -163,13 +165,14 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
 
         # Active neurons (weights set within last 7 days)
         cutoff = current_block - 7 * BLOCKS_PER_DAY
-        m.n_active_7d = int(sum(1 for n in neurons if int(n.last_update) >= cutoff))
+        last_update = list(getattr(meta, "last_update", []))
+        m.n_active_7d = int(sum(1 for lu in last_update if int(lu) >= cutoff))
 
         # Incentive scores
-        m.incentive_scores = [float(n.incentive) for n in neurons]
+        m.incentive_scores = [float(v) for v in getattr(meta, "I", [])]
 
         # Validator count
-        m.n_validators = int(sum(1 for n in neurons if n.validator_permit))
+        m.n_validators = int(sum(1 for vp in getattr(meta, "validator_permit", []) if vp))
 
         # Emission per block in TAO — use cached get_all_subnets_info() result
         try:
@@ -177,13 +180,13 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
             subnet_info = next((s for s in all_info if s.netuid == netuid), None)
             if subnet_info is not None and hasattr(subnet_info, "emission_value"):
                 raw = float(subnet_info.emission_value)
-                # emission_value is in rao (1 TAO = 1e9 rao) in bittensor 8.x
+                # emission_value is in rao (1 TAO = 1e9 rao)
                 m.emission_per_block_tao = raw / 1e9 if raw > 1.0 else raw
         except Exception as exc:
             logger.warning("emission fetch failed for SN%d: %s", netuid, exc)
 
     except Exception as exc:
-        logger.error("neurons_lite fetch failed for SN%d: %s", netuid, exc)
+        logger.error("metagraph fetch failed for SN%d: %s", netuid, exc)
 
     return m
 
