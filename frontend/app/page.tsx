@@ -1,4 +1,4 @@
-import { fetchLeaderboard, fetchDistribution, fetchLatestRun } from '@/lib/api'
+import { fetchSubnets, fetchLeaderboard, fetchDistribution, fetchLatestRun } from '@/lib/api'
 import SubnetTable from '@/components/SubnetTable'
 import ScoreGauge from '@/components/ScoreGauge'
 import DistributionChart from '@/components/DistributionChart'
@@ -14,14 +14,14 @@ function formatDate(iso: string | null): string {
 }
 
 export default async function HomePage() {
-  const [leaderboard, dist, latest] = await Promise.all([
+  const [{ subnets: allSubnets }, leaderboard, dist, latest] = await Promise.all([
+    fetchSubnets(200).catch(() => ({ subnets: [], total: 0 })),
     fetchLeaderboard().catch(() => ({ top: [], bottom: [] })),
     fetchDistribution().catch(() => ({ buckets: [], total_subnets: 0 })),
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
   ])
 
   const { top, bottom } = leaderboard
-  const allSubnets = [...top]
 
   return (
     <div className="space-y-10">
