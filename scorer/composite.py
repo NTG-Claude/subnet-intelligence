@@ -249,10 +249,19 @@ async def compute_all_subnets(netuids: Optional[list[int]] = None) -> list[Subne
 
     logger.info("Fetching data for %d subnets (block=%d, TAO=%.2f)", len(netuids), current_block, tao_price)
 
-    # 3. Parallel per-subnet fetch
-    all_data: list[_SubnetData] = await asyncio.gather(
-        *[_fetch_data(netuid, current_block, tao_price) for netuid in netuids]
+    # 3. Parallel per-subnet fetch — return_exceptions so one bad subnet
+    # doesn't abort the entire run
+    results = await asyncio.gather(
+        *[_fetch_data(netuid, current_block, tao_price) for netuid in netuids],
+        return_exceptions=True,
     )
+    all_data: list[_SubnetData] = []
+    for netuid, res in zip(netuids, results):
+        if isinstance(res, BaseException):
+            logger.error("Unhandled error fetching SN%d: %s", netuid, res)
+            all_data.append(_SubnetData(netuid))  # empty placeholder keeps ranking consistent
+        else:
+            all_data.append(res)
 
     # 4. Cross-subnet context
     ctx = _CrossSubnetContext(all_data)

@@ -222,13 +222,27 @@ def _fetch_identity(netuid: int) -> SubnetIdentity:
 async def get_all_netuids() -> list[int]:
     async with _get_sem():
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(_executor, _fetch_netuids)
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_netuids),
+                timeout=_METRICS_TIMEOUT,
+            )
+        except Exception as exc:
+            logger.error("Failed to fetch netuids: %s", exc)
+            return []
 
 
 async def get_current_block() -> int:
     async with _get_sem():
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(_executor, _fetch_current_block)
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_current_block),
+                timeout=_METRICS_TIMEOUT,
+            )
+        except Exception as exc:
+            logger.error("Failed to fetch current block: %s", exc)
+            return 0
 
 
 async def get_subnet_metrics(netuid: int, current_block: int) -> SubnetMetrics:
@@ -242,6 +256,9 @@ async def get_subnet_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         except asyncio.TimeoutError:
             logger.error("Timeout (%.0fs) fetching metrics for SN%d — skipping", _METRICS_TIMEOUT, netuid)
             return SubnetMetrics(netuid=netuid)
+        except Exception as exc:
+            logger.error("Error fetching metrics for SN%d: %s", netuid, exc)
+            return SubnetMetrics(netuid=netuid)
 
 
 async def get_subnet_identity(netuid: int) -> SubnetIdentity:
@@ -251,6 +268,13 @@ async def get_subnet_identity(netuid: int) -> SubnetIdentity:
         if netuid in _identity_cache:
             return _identity_cache[netuid]
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(_executor, _fetch_identity, netuid)
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_identity, netuid),
+                timeout=_METRICS_TIMEOUT,
+            )
+        except Exception as exc:
+            logger.warning("Failed to fetch identity for SN%d: %s", netuid, exc)
+            result = SubnetIdentity(netuid=netuid)
         _identity_cache[netuid] = result
         return result
