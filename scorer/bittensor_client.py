@@ -84,17 +84,26 @@ class SubnetMetrics:
 
 def _fetch_netuids() -> list[int]:
     try:
-        return _subtensor().get_all_subnet_netuids()
+        st = _subtensor()
+        logger.info("Subtensor connected — endpoint: %s, version: %s", getattr(st, 'chain_endpoint', 'unknown'), bt.__version__)
+        result = st.get_all_subnet_netuids()
+        if not result:
+            logger.error("get_all_subnet_netuids returned empty list — chain unreachable or API changed")
+        else:
+            logger.info("Found %d subnets on chain", len(result))
+        return result or []
     except Exception as exc:
-        logger.error("get_all_subnet_netuids failed: %s", exc)
+        logger.error("get_all_subnet_netuids failed: %s", exc, exc_info=True)
         return []
 
 
 def _fetch_current_block() -> int:
     try:
-        return _subtensor().get_current_block()
+        block = _subtensor().get_current_block()
+        logger.info("Current block: %d", block)
+        return block
     except Exception as exc:
-        logger.error("get_current_block failed: %s", exc)
+        logger.error("get_current_block failed: %s", exc, exc_info=True)
         return 0
 
 
