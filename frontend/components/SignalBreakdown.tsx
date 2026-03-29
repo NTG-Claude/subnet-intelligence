@@ -9,36 +9,31 @@ interface Signal {
   description: string
 }
 
+// Score v3 — Investment Intelligence Model
 const SIGNALS: Signal[] = [
   {
     key: 'capital_score',
-    label: 'Capital Conviction',
-    maxWeight: 25,
-    description: 'Net capital flow (30d), unique stakers, and liquidity pool depth. High score = money is actively moving in.',
+    label: 'Undervalue',
+    maxWeight: 30,
+    description: 'Quality-per-TAO ratio: how much network quality do you get per unit of market cap? High = fundamentally strong but under-priced. The P/E ratio for subnets.',
   },
   {
     key: 'activity_score',
-    label: 'Network Activity',
+    label: 'Yield Quality',
     maxWeight: 25,
-    description: 'Miner growth rate, new registrations (7d), and validator weight commits. Measures real participant engagement.',
+    description: 'Risk-adjusted yield: capped APY (≤500%) weighted by pool depth and emission efficiency. Shallow pools are penalised — deep pools produce stable, reliable yield.',
   },
   {
     key: 'efficiency_score',
-    label: 'Emission Efficiency',
-    maxWeight: 20,
-    description: 'Market cap generated per unit of TAO emission. >1.0 = subnet produces more value than it costs.',
-  },
-  {
-    key: 'health_score',
-    label: 'Distribution Health',
-    maxWeight: 15,
-    description: 'Gini coefficient of miner incentives + top-3 stake concentration. Low concentration = healthier subnet.',
+    label: 'Network Health',
+    maxWeight: 25,
+    description: 'Active neurons (7d weight commits), validator count, Gini coefficient of incentives, and top-3 stake concentration. Measures real, decentralised activity.',
   },
   {
     key: 'dev_score',
     label: 'Dev Activity',
-    maxWeight: 15,
-    description: 'GitHub commits (30d) and unique contributors. Measures open-source development momentum.',
+    maxWeight: 20,
+    description: 'GitHub commits and unique contributors (30d). Open-source development velocity — the long-term sustainability signal.',
   },
 ]
 
@@ -53,9 +48,15 @@ interface Props {
 }
 
 export default function SignalBreakdown({ breakdown }: Props) {
+  // v3 uses 4 active signals; health_score is 0 and hidden
+  const active = SIGNALS.filter(({ key }) => {
+    if (key === 'health_score') return false
+    return breakdown[key] > 0 || key === 'dev_score'
+  })
+
   return (
     <div className="space-y-4">
-      {SIGNALS.map(({ key, label, maxWeight, description }) => {
+      {active.map(({ key, label, maxWeight, description }) => {
         const value = breakdown[key]
         const pct = (value / maxWeight) * 100
 

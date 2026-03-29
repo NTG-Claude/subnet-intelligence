@@ -175,15 +175,15 @@ export default async function SubnetPage({ params }: Props) {
 
       {/* Score methodology note */}
       <section className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 text-xs text-slate-500 leading-relaxed space-y-1">
-        <p className="font-semibold text-slate-400">Score Methodology v{subnet.score_version}</p>
+        <p className="font-semibold text-slate-400">Score Methodology v{subnet.score_version} — Investment Intelligence</p>
         <p>
-          Composite = Capital(25) + Activity(25) + Efficiency(20) + Health(15) + Dev(15).
-          Each signal is percentile-ranked across all active subnets.
-          Missing data is scored pessimistically (0).
+          Composite = Undervalue(30) + Yield Quality(25) + Network Health(25) + Dev Activity(20).
+          <strong className="text-slate-400"> Undervalue</strong>: quality-per-TAO ratio vs on-chain market cap (the P/E ratio for subnets).
+          <strong className="text-slate-400"> Yield Quality</strong>: APY capped at 500%, weighted by pool depth — shallow pools penalised.
+          All signals percentile-ranked across all active subnets. Missing data = 0.
         </p>
         <p>
-          Data sources: Bittensor on-chain (Finney) · GitHub API · dTAO AMM pools. Updated daily at 06:00 UTC.
-          This is not financial advice.
+          Data: Bittensor Finney mainnet · dTAO AMM pools · GitHub API. Updated daily 06:00 UTC. Not financial advice.
         </p>
       </section>
     </div>

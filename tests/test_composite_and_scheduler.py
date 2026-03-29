@@ -60,13 +60,15 @@ def _make_metrics(netuid: int) -> SubnetMetrics:
         emission_per_block_tao=0.005 * (netuid + 1),
         incentive_scores=[0.5 - i * 0.02 for i in range(20)],
         n_validators=5 + netuid,
+        tao_in_pool=500.0 * (netuid + 1),   # dTAO pool data
+        alpha_in_pool=1000.0 * (netuid + 1),
+        alpha_price_tao=0.5,
     )
 
 
-def _make_data(netuid: int, tao_price: float = 300.0) -> _SubnetData:
+def _make_data(netuid: int) -> _SubnetData:
     d = _SubnetData(netuid)
     d.metrics = _make_metrics(netuid)
-    d.tao_price_usd = tao_price
     d.commits = MagicMock(commits_30d=20 * netuid, unique_contributors_30d=3 + netuid)
     return d
 
@@ -79,8 +81,9 @@ def test_cross_subnet_context_builds():
     all_data = [_make_data(n) for n in range(1, 6)]
     ctx = _CrossSubnetContext(all_data)
 
-    assert len(ctx.stakes_usd) == 5
-    assert len(ctx.unique_coldkeys) == 5
+    assert len(ctx.value_ratios) == 5
+    assert len(ctx.apys) == 5
+    assert len(ctx.pool_depths) == 5
     assert len(ctx.active_ratios) == 5
     assert len(ctx.n_validators) == 5
     assert len(ctx.stake_per_emission) == 5
@@ -88,11 +91,15 @@ def test_cross_subnet_context_builds():
     assert len(ctx.contributors_30d) == 5
 
 
-def test_cross_subnet_context_no_price():
-    """Zero TAO price → all stakes_usd should be None."""
-    all_data = [_make_data(n, tao_price=0.0) for n in range(1, 4)]
+def test_cross_subnet_context_no_metrics():
+    """Subnet with no metrics should produce None entries in all lists."""
+    d = _SubnetData(99)
+    d.metrics = None
+    d.commits = None
+    all_data = [_make_data(n) for n in range(1, 4)] + [d]
     ctx = _CrossSubnetContext(all_data)
-    assert all(v is None for v in ctx.stakes_usd)
+    assert ctx.value_ratios[-1] is None
+    assert ctx.apys[-1] is None
 
 
 # ---------------------------------------------------------------------------
@@ -103,13 +110,12 @@ def test_score_one_produces_valid_score():
     all_data = [_make_data(n) for n in range(1, 6)]
     ctx = _CrossSubnetContext(all_data)
 
-    score = _score_one(all_data[0], ctx)
+    score = _score_one(all_data[0], ctx, 0)
     assert 0.0 <= score.score <= 100.0
     assert score.netuid == 1
     assert score.breakdown.capital_score >= 0
     assert score.breakdown.activity_score >= 0
     assert score.breakdown.efficiency_score >= 0
-    assert score.breakdown.health_score >= 0
     assert score.breakdown.dev_score >= 0
 
 
@@ -117,7 +123,7 @@ def test_score_one_sums_to_total():
     all_data = [_make_data(n) for n in range(1, 4)]
     ctx = _CrossSubnetContext(all_data)
 
-    score = _score_one(all_data[1], ctx)
+    score = _score_one(all_data[1], ctx, 1)
     b = score.breakdown
     total_from_breakdown = round(
         b.capital_score + b.activity_score + b.efficiency_score + b.health_score + b.dev_score, 2
@@ -129,13 +135,12 @@ def test_score_one_missing_data_returns_valid():
     """Subnet with None metrics should still produce a valid (low) score."""
     d = _SubnetData(99)
     d.metrics = None
-    d.tao_price_usd = 300.0
     d.commits = None
 
     all_data = [_make_data(n) for n in range(1, 5)] + [d]
     ctx = _CrossSubnetContext(all_data)
 
-    score = _score_one(d, ctx)
+    score = _score_one(d, ctx, len(all_data) - 1)
     assert 0.0 <= score.score <= 100.0
 
 
@@ -149,11 +154,11 @@ async def test_compute_all_subnets_ranks_correctly():
 
     netuids = [1, 2, 3]
 
-    async def mock_fetch_data(netuid, block, price):
-        return _make_data(netuid, tao_price=price)
+    async def mock_fetch_data(netuid, block, progress):
+        progress[0] += 1
+        return _make_data(netuid)
 
     with patch("scorer.composite.get_current_block", new=AsyncMock(return_value=5_000_000)), \
-         patch("scorer.composite.get_tao_price_usd", new=AsyncMock(return_value=300.0)), \
          patch("scorer.composite.get_all_netuids", new=AsyncMock(return_value=netuids)), \
          patch("scorer.composite._fetch_data", side_effect=mock_fetch_data):
         scores = await compute_all_subnets(netuids=netuids)

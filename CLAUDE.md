@@ -44,17 +44,29 @@ data/
   github_map_overrides.json Manuelle Overrides (SN3, SN4, SN64 bekannt)
 ```
 
-## Score-Formel v2
+## Score-Formel v3 — Investment Intelligence
 ```
-score = capital(25) + activity(25) + efficiency(20) + health(15) + dev(15)
+score = undervalue(30) + yield_quality(25) + health(25) + dev(20)
 
-capital    = 0.6 * percentile(total_stake_usd) + 0.4 * percentile(unique_coldkeys)
-activity   = 0.6 * percentile(n_active_7d / n_total) + 0.4 * percentile(n_validators)
-efficiency = percentile(total_stake_tao / emission_per_block_tao)
-health     = 0.5 * (1 - gini(incentives)) + 0.5 * (1 - top3_stake_fraction)
-dev        = 0.6 * percentile(commits_30d) + 0.4 * percentile(unique_contributors_30d)
+undervalue   = percentile(quality_raw / log10(1 + market_proxy))
+               quality_raw  = 0.6 * (n_active_7d/n_total) + 0.4 * (1 - top3_stake_fraction)
+               market_proxy = tao_in_pool (if >50 TAO) else total_stake_tao
+               → "P/E ratio": much quality per TAO of market cap?
+
+yield_quality = 0.40 * percentile(APY, capped 500%, min pool 50 TAO)
+              + 0.35 * percentile(tao_in_pool)
+              + 0.25 * percentile(total_stake / emission_per_block)
+              Degrades gracefully: when no dTAO pool → only depth + efficiency
+
+health        = 0.40 * percentile(n_active_7d/n_total)
+              + 0.25 * percentile(n_validators)
+              + 0.35 * (0.5*(1-gini(incentives)) + 0.5*(1-top3_stake_fraction))
+
+dev           = 0.60 * percentile(commits_30d) + 0.40 * percentile(unique_contributors_30d)
 ```
-Jede Dimension ist percentile-ranked über alle aktiven Subnets (0.0–1.0 → gewichtet).
+Differenzierung vs Taostats: "Undervalue" berechnet niemand. Identifiziert Subnets mit
+hoher fundamentaler Qualität aber kleiner Marktkapitalisierung = beste Risk/Return.
+APY-Cap verhindert, dass kleine Pools das Yield-Signal verzerren.
 
 ## Deployment
 | Dienst    | Plattform | URL                              |
