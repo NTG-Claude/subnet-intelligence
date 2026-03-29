@@ -220,36 +220,30 @@ def _fetch_identity(netuid: int) -> SubnetIdentity:
     identity = SubnetIdentity(netuid=netuid)
     try:
         st = _subtensor()
-        # Attempt on-chain SubnetIdentities storage
-        try:
-            result = st.substrate.query("SubtensorModule", "SubnetIdentities", [netuid])
-            if result is not None and result.value:
-                val = result.value
-                if isinstance(val, dict):
-                    identity.name = _decode_bytes(val.get("subnet_name") or val.get("name"))
-                    identity.github_url = _decode_bytes(
-                        val.get("github_url") or val.get("github")
-                    )
-                    identity.website = _decode_bytes(
-                        val.get("url") or val.get("website")
-                    )
-        except Exception:
-            pass  # storage key may not exist
-
-        # Fallback: subnet name from SubtensorModule.SubnetName storage (bittensor 10.x)
-        if identity.name is None:
+        # Try SubnetIdentitiesV2 first (SubnetIdentityOfV2 struct with typed fields)
+        for storage_key in ("SubnetIdentitiesV2", "SubnetIdentities"):
             try:
-                result = st.substrate.query("SubtensorModule", "SubnetName", [netuid])
-                raw = result.value if result is not None else None
-                if netuid == 4:  # debug SN4 (Targon) specifically
-                    import sys
-                    print(f"[DEBUG] SubnetName SN4: raw={raw!r} type={type(raw).__name__}", flush=True, file=sys.stderr)
-                if raw:
-                    identity.name = _decode_bytes(raw)
-            except Exception as exc:
-                if netuid == 4:
-                    import sys
-                    print(f"[DEBUG] SubnetName SN4 EXCEPTION: {exc!r}", flush=True, file=sys.stderr)
+                result = st.substrate.query("SubtensorModule", storage_key, [netuid])
+                if result is not None and result.value:
+                    val = result.value
+                    if isinstance(val, dict):
+                        identity.name = _decode_bytes(
+                            val.get("subnet_name") or val.get("name")
+                        )
+                        identity.github_url = _decode_bytes(
+                            val.get("github_repo")
+                            or val.get("github_url")
+                            or val.get("github")
+                        )
+                        identity.website = _decode_bytes(
+                            val.get("subnet_url")
+                            or val.get("url")
+                            or val.get("website")
+                        )
+                    if identity.name:
+                        break  # found a name, no need to try next storage key
+            except Exception:
+                pass  # storage key may not exist on this runtime version
 
     except Exception as exc:
         logger.warning("identity fetch failed for SN%d: %s", netuid, exc)
