@@ -59,6 +59,10 @@ def client():
 
 def _with_db_mocks(meta_netuid=1):
     """Context manager that patches all DB-touching functions used by the API."""
+    meta = _make_meta(meta_netuid)
+    all_meta = {meta_netuid: {"name": meta.name, "github_url": meta.github_url,
+                               "website": meta.website, "first_seen": meta.first_seen,
+                               "last_updated": meta.last_updated}}
     return patch.multiple(
         "api.main",
         get_latest_scores=MagicMock(return_value=SCORES),
@@ -67,6 +71,7 @@ def _with_db_mocks(meta_netuid=1):
             {"range_start": i * 20.0, "range_end": (i + 1) * 20.0, "count": 1}
             for i in range(5)
         ]),
+        get_all_metadata=MagicMock(return_value=all_meta),
         _get_metadata=MagicMock(return_value=_make_meta(meta_netuid)),
     )
 
