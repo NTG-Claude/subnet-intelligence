@@ -241,13 +241,15 @@ def _fetch_identity(netuid: int) -> SubnetIdentity:
             try:
                 result = st.substrate.query("SubtensorModule", "SubnetName", [netuid])
                 raw = result.value if result is not None else None
-                if netuid in (0, 1, 4, 9, 64):  # debug well-known subnets
-                    logger.warning("SubnetName SN%d raw=%r type=%s", netuid, raw, type(raw).__name__)
+                if netuid == 4:  # debug SN4 (Targon) specifically
+                    import sys
+                    print(f"[DEBUG] SubnetName SN4: raw={raw!r} type={type(raw).__name__}", flush=True, file=sys.stderr)
                 if raw:
                     identity.name = _decode_bytes(raw)
             except Exception as exc:
-                if netuid in (0, 1, 4, 9, 64):
-                    logger.warning("SubnetName SN%d EXCEPTION: %s", netuid, exc)
+                if netuid == 4:
+                    import sys
+                    print(f"[DEBUG] SubnetName SN4 EXCEPTION: {exc!r}", flush=True, file=sys.stderr)
 
     except Exception as exc:
         logger.warning("identity fetch failed for SN%d: %s", netuid, exc)
