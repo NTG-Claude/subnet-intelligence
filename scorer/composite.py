@@ -10,7 +10,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from scorer.bittensor_client import SubnetMetrics, get_all_netuids, get_current_block, get_subnet_metrics
+from scorer.bittensor_client import BLOCKS_PER_DAY, SubnetMetrics, get_all_netuids, get_current_block, get_subnet_metrics
 from scorer.coingecko_client import get_tao_price_usd
 from scorer.github_client import get_commits_last_30d, get_repo_stats
 from scorer.signals import (
@@ -55,6 +55,11 @@ class SubnetScore(BaseModel):
     rank: Optional[int] = None     # filled after all scores computed
     timestamp: str
     version: str = SCORE_VERSION
+    # dTAO market data
+    alpha_price_tao: float = 0.0   # alpha token price in TAO
+    tao_in_pool: float = 0.0       # TAO locked in AMM pool
+    market_cap_tao: float = 0.0    # tao_in_pool × 2 (AMM invariant proxy)
+    staking_apy: float = 0.0       # estimated annual yield in %
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +214,16 @@ def _score_one(d: _SubnetData, ctx: _CrossSubnetContext) -> SubnetScore:
         + dev * _WEIGHTS["dev"]
     )
 
+    # dTAO market data
+    tao_pool = m.tao_in_pool if m else 0.0
+    alpha_price = m.alpha_price_tao if m else 0.0
+    # AMM constant-product: total value = 2 × tao_in_pool (since tao = alpha × price)
+    market_cap = tao_pool * 2
+    staking_apy = 0.0
+    if tao_pool > 0 and m and m.emission_per_block_tao > 0:
+        annual_tao = m.emission_per_block_tao * BLOCKS_PER_DAY * 365
+        staking_apy = round((annual_tao / tao_pool) * 100, 2)
+
     return SubnetScore(
         netuid=d.netuid,
         score=round(composite, 2),
@@ -220,6 +235,10 @@ def _score_one(d: _SubnetData, ctx: _CrossSubnetContext) -> SubnetScore:
             dev_score=round(dev * _WEIGHTS["dev"], 2),
         ),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        alpha_price_tao=round(alpha_price, 6),
+        tao_in_pool=round(tao_pool, 2),
+        market_cap_tao=round(market_cap, 2),
+        staking_apy=staking_apy,
     )
 
 

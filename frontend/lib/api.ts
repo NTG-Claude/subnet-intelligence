@@ -8,6 +8,10 @@ export interface SubnetSummary {
   percentile: number | null
   computed_at: string | null
   score_version: string
+  alpha_price_tao: number | null
+  tao_in_pool: number | null
+  market_cap_tao: number | null
+  staking_apy: number | null
 }
 
 export interface ScoreBreakdown {
@@ -36,6 +40,11 @@ export interface SubnetDetail {
   } | null
   computed_at: string | null
   score_version: string
+  alpha_price_tao: number | null
+  tao_in_pool: number | null
+  market_cap_tao: number | null
+  staking_apy: number | null
+  score_delta_7d: number | null
 }
 
 export interface DistributionBucket {

@@ -100,6 +100,10 @@ class SubnetMetrics:
     emission_per_block_tao: float = 0.0
     incentive_scores: list[float] = field(default_factory=list)
     n_validators: int = 0
+    # dTAO AMM pool data (since Feb 2025)
+    tao_in_pool: float = 0.0       # SubnetTAO / 1e9
+    alpha_in_pool: float = 0.0     # SubnetAlphaIn / 1e9
+    alpha_price_tao: float = 0.0   # tao_in_pool / alpha_in_pool
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +192,19 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
                     m.emission_per_block_tao = total_tao
         except Exception as exc:
             logger.warning("emission fetch failed for SN%d: %s", netuid, exc)
+
+        # dTAO AMM pool — SubnetTAO and SubnetAlphaIn (both stored in rao, /1e9 → TAO/Alpha)
+        try:
+            tao_res = st.substrate.query("SubtensorModule", "SubnetTAO", [netuid])
+            alpha_res = st.substrate.query("SubtensorModule", "SubnetAlphaIn", [netuid])
+            tao_val = float(tao_res.value or 0) / 1e9 if tao_res is not None else 0.0
+            alpha_val = float(alpha_res.value or 0) / 1e9 if alpha_res is not None else 0.0
+            m.tao_in_pool = tao_val
+            m.alpha_in_pool = alpha_val
+            if alpha_val > 0:
+                m.alpha_price_tao = tao_val / alpha_val
+        except Exception as exc:
+            logger.warning("dTAO pool fetch failed for SN%d: %s", netuid, exc)
 
     except Exception as exc:
         logger.error("metagraph fetch failed for SN%d: %s", netuid, exc)

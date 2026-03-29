@@ -35,6 +35,7 @@ from scorer.database import (
     SessionLocal,
     SubnetMetadataRow,
     SubnetScoreRow,
+    get_all_metadata,
     get_latest_scores,
     get_score_distribution,
     get_score_history,
@@ -125,14 +126,19 @@ def _compute_percentile(rank: Optional[int], total: int) -> Optional[float]:
     return round((1 - (rank - 1) / total) * 100, 1)
 
 
-def _row_to_summary(row: dict, total: int) -> SubnetSummaryResponse:
+def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
     return SubnetSummaryResponse(
         netuid=row["netuid"],
+        name=meta.name if meta else None,
         score=row["score"],
         rank=row["rank"],
         percentile=_compute_percentile(row.get("rank"), total),
         computed_at=row.get("computed_at"),
         score_version=row.get("score_version", "v1"),
+        alpha_price_tao=row.get("alpha_price_tao"),
+        tao_in_pool=row.get("tao_in_pool"),
+        market_cap_tao=row.get("market_cap_tao"),
+        staking_apy=row.get("staking_apy"),
     )
 
 
@@ -175,14 +181,18 @@ async def list_subnets(
         return cached
 
     all_rows = get_latest_scores()
+    meta_by_netuid = get_all_metadata()
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     total = len(filtered)
     page = filtered[offset: offset + limit]
 
-    result = SubnetListResponse(
-        total=total,
-        subnets=[_row_to_summary(r, total) for r in page],
-    )
+    subnets = []
+    for r in page:
+        meta_dict = meta_by_netuid.get(r["netuid"])
+        meta = SubnetMetadataResponse(netuid=r["netuid"], **(meta_dict or {})) if meta_dict else None
+        subnets.append(_row_to_summary(r, total, meta))
+
+    result = SubnetListResponse(total=total, subnets=subnets)
     _cache_set(cache_key, result)
     return result
 
@@ -221,6 +231,11 @@ async def get_subnet(
         for h in history_raw
     ]
 
+    # Score delta: current vs oldest point in 7-day window
+    score_delta_7d: Optional[float] = None
+    if len(history_raw) >= 2:
+        score_delta_7d = round(row["score"] - history_raw[0]["score"], 1)
+
     meta = _get_metadata(netuid)
 
     result = SubnetDetailResponse(
@@ -240,6 +255,11 @@ async def get_subnet(
         metadata=meta,
         computed_at=row.get("computed_at"),
         score_version=row.get("score_version", "v1"),
+        alpha_price_tao=row.get("alpha_price_tao"),
+        tao_in_pool=row.get("tao_in_pool"),
+        market_cap_tao=row.get("market_cap_tao"),
+        staking_apy=row.get("staking_apy"),
+        score_delta_7d=score_delta_7d,
     )
     _cache_set(cache_key, result)
     return result
@@ -315,9 +335,16 @@ async def leaderboard(
         return cached
 
     all_rows = get_latest_scores()
+    meta_by_netuid = get_all_metadata()
     total = len(all_rows)
-    top = [_row_to_summary(r, total) for r in all_rows[:20]]
-    bottom = [_row_to_summary(r, total) for r in all_rows[-5:]]
+
+    def _with_meta(r: dict) -> SubnetSummaryResponse:
+        md = meta_by_netuid.get(r["netuid"])
+        m = SubnetMetadataResponse(netuid=r["netuid"], **(md or {})) if md else None
+        return _row_to_summary(r, total, m)
+
+    top = [_with_meta(r) for r in all_rows[:20]]
+    bottom = [_with_meta(r) for r in all_rows[-5:]]
     result = LeaderboardResponse(top=top, bottom=bottom)
     _cache_set("leaderboard", result)
     return result

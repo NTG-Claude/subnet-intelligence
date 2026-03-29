@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { SubnetSummary } from '@/lib/api'
 
-type SortKey = 'rank' | 'score' | 'name' | 'netuid'
+type SortKey = 'rank' | 'score' | 'name' | 'netuid' | 'alpha_price_tao' | 'market_cap_tao' | 'staking_apy'
 
 interface Props {
   subnets: SubnetSummary[]
@@ -96,7 +96,9 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
               <th className="px-4 py-3 text-left"><SortBtn k="netuid" label="SN" /></th>
               <th className="px-4 py-3 text-left"><SortBtn k="name" label="Name" /></th>
               <th className="px-4 py-3 text-left"><SortBtn k="score" label="Score" /></th>
-              <th className="px-4 py-3 text-left hidden sm:table-cell">Percentile</th>
+              <th className="px-4 py-3 text-right hidden lg:table-cell"><SortBtn k="alpha_price_tao" label="Alpha Price" /></th>
+              <th className="px-4 py-3 text-right hidden lg:table-cell"><SortBtn k="market_cap_tao" label="Mkt Cap" /></th>
+              <th className="px-4 py-3 text-right hidden md:table-cell"><SortBtn k="staking_apy" label="APY" /></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/50">
@@ -132,8 +134,20 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-slate-400 tabular-nums hidden sm:table-cell">
-                  {s.percentile != null ? `${s.percentile}%` : '—'}
+                <td className="px-4 py-3 text-right tabular-nums text-slate-300 hidden lg:table-cell">
+                  {s.alpha_price_tao != null && s.alpha_price_tao > 0
+                    ? `τ${s.alpha_price_tao < 0.001 ? s.alpha_price_tao.toExponential(2) : s.alpha_price_tao.toFixed(4)}`
+                    : <span className="text-slate-600">—</span>}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-300 hidden lg:table-cell">
+                  {s.market_cap_tao != null && s.market_cap_tao > 0
+                    ? `τ${s.market_cap_tao >= 1000 ? (s.market_cap_tao / 1000).toFixed(1) + 'k' : s.market_cap_tao.toFixed(0)}`
+                    : <span className="text-slate-600">—</span>}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell">
+                  {s.staking_apy != null && s.staking_apy > 0
+                    ? <span className="text-green-400 font-medium">{s.staking_apy.toFixed(1)}%</span>
+                    : <span className="text-slate-600">—</span>}
                 </td>
               </tr>
             ))}

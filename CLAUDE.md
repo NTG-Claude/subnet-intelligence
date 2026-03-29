@@ -111,8 +111,26 @@ make scheduler       # täglichen Scheduler starten
 - Staking-Manipulation durch koordinierte Wallets nicht erkennbar
 - bittensor metagraph: n_active_7d basiert auf `last_update` Block — misst Gewichtssets, nicht Miner-Aktivität
 
-## Nächste geplante Verbesserungen
-# v2.1 — Token Price aus dTAO Pool direkt on-chain (statt CoinGecko)
-# v2.2 — Subnet Maturity Score (Alter vs. Score-Trend)
-# v2.3 — Cross-Subnet Validator Overlap
-# v3.0 — Redis-Cache für API, WebSocket Live-Updates
+## dTAO Pool-Daten (seit Feb 2025 on-chain)
+Jedes Subnet hat ein eigenes AMM mit zwei Reservoirs:
+- `SubtensorModule.SubnetTAO`      — TAO-Reserven im Pool (rao, /1e9 → TAO)
+- `SubtensorModule.SubnetAlphaIn`  — Alpha-Reserven im Pool (rao, /1e9 → Alpha)
+- `SubtensorModule.SubnetAlphaOut` — Alpha ausserhalb des Pools (Emissionen + Entnahmen)
+Alpha-Preis in TAO = SubnetTAO / SubnetAlphaIn (konstantes Produkt AMM)
+Staking-APY = (emission_per_block_tao * BLOCKS_PER_DAY * 365) / tao_in_pool * 100
+
+## Roadmap
+### v3.0 — dTAO Market Data (aktiv in Entwicklung)
+- SubnetMetrics: alpha_price_tao, tao_in_pool, alpha_in_pool, market_cap_tao, staking_apy
+- DB: neue Spalten, Alembic-Migration
+- API: SubnetSummary + SubnetDetail um dTAO-Felder erweitert
+- Frontend: Alpha-Preis + APY-Spalte in Tabelle, Score-Trend-Indikator
+
+### v3.1 — Score-Trend & Flows
+- Score-Trend-Pfeil in Haupttabelle (7-Tage-Delta aus history)
+- Net-Stake-Flow: daily snapshot → 7d/30d Delta sichtbar machen
+
+### v3.2 (future)
+- Cross-Subnet Validator Overlap
+- Redis-Cache für API
+- WebSocket Live-Updates

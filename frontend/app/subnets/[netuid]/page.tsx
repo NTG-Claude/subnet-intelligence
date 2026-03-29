@@ -68,6 +68,14 @@ export default async function SubnetPage({ params }: Props) {
             {subnet.percentile != null && (
               <span>Top <strong className="text-slate-200">{(100 - subnet.percentile).toFixed(0)}%</strong></span>
             )}
+            {subnet.score_delta_7d != null && (
+              <span>
+                7d{' '}
+                <strong className={subnet.score_delta_7d >= 0 ? 'text-green-400' : 'text-red-400'}>
+                  {subnet.score_delta_7d >= 0 ? '+' : ''}{subnet.score_delta_7d.toFixed(1)}
+                </strong>
+              </span>
+            )}
             {subnet.computed_at && (
               <span>Updated <strong className="text-slate-200">{formatDate(subnet.computed_at)}</strong></span>
             )}
@@ -107,6 +115,46 @@ export default async function SubnetPage({ params }: Props) {
         </div>
       </div>
 
+      {/* dTAO Market Stats */}
+      {(subnet.alpha_price_tao || subnet.tao_in_pool || subnet.staking_apy) && (
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            {
+              label: 'Alpha Price',
+              value: subnet.alpha_price_tao != null && subnet.alpha_price_tao > 0
+                ? `τ${subnet.alpha_price_tao < 0.001 ? subnet.alpha_price_tao.toExponential(2) : subnet.alpha_price_tao.toFixed(4)}`
+                : null,
+            },
+            {
+              label: 'Pool TVL',
+              value: subnet.tao_in_pool != null && subnet.tao_in_pool > 0
+                ? `τ${subnet.tao_in_pool >= 1000 ? (subnet.tao_in_pool / 1000).toFixed(1) + 'k' : subnet.tao_in_pool.toFixed(0)}`
+                : null,
+            },
+            {
+              label: 'Market Cap',
+              value: subnet.market_cap_tao != null && subnet.market_cap_tao > 0
+                ? `τ${subnet.market_cap_tao >= 1000 ? (subnet.market_cap_tao / 1000).toFixed(1) + 'k' : subnet.market_cap_tao.toFixed(0)}`
+                : null,
+            },
+            {
+              label: 'Staking APY',
+              value: subnet.staking_apy != null && subnet.staking_apy > 0
+                ? `${subnet.staking_apy.toFixed(1)}%`
+                : null,
+              highlight: true,
+            },
+          ].map(({ label, value, highlight }) => (
+            <div key={label} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              <div className="text-xs text-slate-500 mb-1">{label}</div>
+              <div className={`text-lg font-semibold ${highlight ? 'text-green-400' : 'text-slate-200'}`}>
+                {value ?? <span className="text-slate-600 text-sm">—</span>}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       {/* Score breakdown */}
       <section className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-5">
@@ -134,7 +182,7 @@ export default async function SubnetPage({ params }: Props) {
           Missing data is scored pessimistically (0).
         </p>
         <p>
-          Data sources: Taostats API · GitHub API. Updated daily at 06:00 UTC.
+          Data sources: Bittensor on-chain (Finney) · GitHub API · dTAO AMM pools. Updated daily at 06:00 UTC.
           This is not financial advice.
         </p>
       </section>

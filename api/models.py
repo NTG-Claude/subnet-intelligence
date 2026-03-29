@@ -22,6 +22,11 @@ class SubnetSummaryResponse(BaseModel):
     percentile: Optional[float] = None  # 0-100
     computed_at: Optional[str] = None
     score_version: str = "v1"
+    # dTAO market data
+    alpha_price_tao: Optional[float] = None
+    tao_in_pool: Optional[float] = None
+    market_cap_tao: Optional[float] = None
+    staking_apy: Optional[float] = None
 
 
 class SubnetMetadataResponse(BaseModel):
@@ -50,6 +55,12 @@ class SubnetDetailResponse(BaseModel):
     metadata: Optional[SubnetMetadataResponse] = None
     computed_at: Optional[str] = None
     score_version: str = "v1"
+    # dTAO market data
+    alpha_price_tao: Optional[float] = None
+    tao_in_pool: Optional[float] = None
+    market_cap_tao: Optional[float] = None
+    staking_apy: Optional[float] = None
+    score_delta_7d: Optional[float] = None
 
 
 class SubnetListResponse(BaseModel):

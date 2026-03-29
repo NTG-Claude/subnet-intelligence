@@ -21,6 +21,7 @@ from sqlalchemy import (
     desc,
     func,
     select,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -62,6 +63,11 @@ class SubnetScoreRow(Base):
     computed_at = Column(DateTime(timezone=True), nullable=False, index=True)
     score_version = Column(String(16), nullable=False, default="v1")
     raw_data = Column(JSON, nullable=True)
+    # dTAO market data (added v3.0)
+    alpha_price_tao = Column(Float, nullable=True)
+    tao_in_pool = Column(Float, nullable=True)
+    market_cap_tao = Column(Float, nullable=True)
+    staking_apy = Column(Float, nullable=True)
 
     __table_args__ = (
         Index("ix_subnet_scores_netuid_computed_at", "netuid", "computed_at"),
@@ -80,8 +86,27 @@ class SubnetMetadataRow(Base):
 
 
 def create_tables() -> None:
-    """Create all tables (idempotent, does not drop existing data)."""
+    """Create all tables and run additive migrations (idempotent)."""
     Base.metadata.create_all(bind=engine)
+    _migrate_add_dtao_columns()
+
+
+def _migrate_add_dtao_columns() -> None:
+    """Add dTAO columns to subnet_scores if they don't exist yet."""
+    new_cols = [
+        ("alpha_price_tao", "FLOAT"),
+        ("tao_in_pool", "FLOAT"),
+        ("market_cap_tao", "FLOAT"),
+        ("staking_apy", "FLOAT"),
+    ]
+    with engine.connect() as conn:
+        for col, col_type in new_cols:
+            try:
+                conn.execute(text(f"ALTER TABLE subnet_scores ADD COLUMN {col} {col_type}"))
+                conn.commit()
+                logger.info("Migration: added column subnet_scores.%s", col)
+            except Exception:
+                pass  # column already exists — safe to ignore
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +140,10 @@ def save_scores(scores: list, raw_data_by_netuid: Optional[dict] = None) -> None
             computed_at=now,
             score_version=s.version,
             raw_data=raw_data_by_netuid.get(s.netuid),
+            alpha_price_tao=getattr(s, "alpha_price_tao", None) or None,
+            tao_in_pool=getattr(s, "tao_in_pool", None) or None,
+            market_cap_tao=getattr(s, "market_cap_tao", None) or None,
+            staking_apy=getattr(s, "staking_apy", None) or None,
         )
         for s in scores
     ]
@@ -144,6 +173,22 @@ def upsert_metadata(netuid: int, name: Optional[str], github_url: Optional[str],
 # ---------------------------------------------------------------------------
 # Read functions
 # ---------------------------------------------------------------------------
+
+def get_all_metadata() -> dict[int, dict]:
+    """Return all subnet metadata rows as a dict keyed by netuid."""
+    with SessionLocal() as session:
+        rows = session.execute(select(SubnetMetadataRow)).scalars().all()
+    return {
+        r.netuid: {
+            "name": r.name,
+            "github_url": r.github_url,
+            "website": r.website,
+            "first_seen": r.first_seen.isoformat() if r.first_seen else None,
+            "last_updated": r.last_updated.isoformat() if r.last_updated else None,
+        }
+        for r in rows
+    }
+
 
 def get_latest_scores() -> list[dict]:
     """
@@ -245,4 +290,8 @@ def _row_to_dict(row: SubnetScoreRow) -> dict:
         "rank": row.rank,
         "computed_at": row.computed_at.isoformat() if row.computed_at else None,
         "score_version": row.score_version,
+        "alpha_price_tao": row.alpha_price_tao,
+        "tao_in_pool": row.tao_in_pool,
+        "market_cap_tao": row.market_cap_tao,
+        "staking_apy": row.staking_apy,
     }
