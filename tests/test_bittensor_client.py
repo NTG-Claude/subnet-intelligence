@@ -10,9 +10,11 @@ from scorer.bittensor_client import (
     SubnetIdentity,
     SubnetMetrics,
     _decode_bytes,
+    _decode_identity_val,
     _fetch_current_block,
     _fetch_netuids,
     BLOCKS_PER_DAY,
+    BLOCKS_PER_TEMPO,
 )
 
 
@@ -118,3 +120,96 @@ def test_subnet_identity_defaults():
 def test_blocks_per_day_value():
     # ~12s per block → 7200 blocks/day
     assert BLOCKS_PER_DAY == 7200
+
+
+def test_blocks_per_tempo_value():
+    # one epoch = 360 blocks
+    assert BLOCKS_PER_TEMPO == 360
+
+
+# ---------------------------------------------------------------------------
+# _decode_identity_val
+# ---------------------------------------------------------------------------
+
+class TestDecodeIdentityVal:
+    def test_all_fields_bytes(self):
+        val = {
+            "subnet_name": b"Apex",
+            "github_repo": b"opentensor/bittensor",
+            "subnet_url": b"https://apex.io",
+        }
+        name, github, website = _decode_identity_val(val)
+        assert name == "Apex"
+        assert github == "opentensor/bittensor"
+        assert website == "https://apex.io"
+
+    def test_v1_field_names(self):
+        val = {"name": "MySubnet", "github_url": "https://github.com/x/y", "url": "https://x.io"}
+        name, github, website = _decode_identity_val(val)
+        assert name == "MySubnet"
+        assert github == "https://github.com/x/y"
+        assert website == "https://x.io"
+
+    def test_missing_fields_return_none(self):
+        name, github, website = _decode_identity_val({})
+        assert name is None
+        assert github is None
+        assert website is None
+
+    def test_prefers_v2_subnet_name_over_name(self):
+        val = {"subnet_name": b"V2Name", "name": "V1Name"}
+        name, _, _ = _decode_identity_val(val)
+        assert name == "V2Name"
+
+
+# ---------------------------------------------------------------------------
+# _fetch_all_identities_sync (mocked)
+# ---------------------------------------------------------------------------
+
+def test_fetch_all_identities_sync_populates_cache():
+    import scorer.bittensor_client as bt_client
+    from scorer.bittensor_client import _fetch_all_identities_sync
+
+    # Reset module state
+    original_fetched = bt_client._all_identities_fetched
+    original_cache = bt_client._identity_cache.copy()
+    bt_client._all_identities_fetched = False
+    bt_client._identity_cache.clear()
+
+    mock_entry_key = MagicMock()
+    mock_entry_key.value = 4
+    mock_entry_val = MagicMock()
+    mock_entry_val.value = {"subnet_name": b"Targon", "github_repo": None, "subnet_url": None}
+
+    mock_st = MagicMock()
+    mock_st.substrate.query_map.return_value = [(mock_entry_key, mock_entry_val)]
+
+    try:
+        with patch("scorer.bittensor_client._subtensor", return_value=mock_st):
+            _fetch_all_identities_sync()
+
+        assert bt_client._all_identities_fetched is True
+        assert 4 in bt_client._identity_cache
+        assert bt_client._identity_cache[4].name == "Targon"
+    finally:
+        # Restore state
+        bt_client._all_identities_fetched = original_fetched
+        bt_client._identity_cache.clear()
+        bt_client._identity_cache.update(original_cache)
+
+
+def test_fetch_all_identities_sync_handles_query_map_failure():
+    import scorer.bittensor_client as bt_client
+    from scorer.bittensor_client import _fetch_all_identities_sync
+
+    bt_client._all_identities_fetched = False
+
+    mock_st = MagicMock()
+    mock_st.substrate.query_map.side_effect = RuntimeError("storage not found")
+
+    try:
+        with patch("scorer.bittensor_client._subtensor", return_value=mock_st):
+            _fetch_all_identities_sync()  # should not raise
+        assert bt_client._all_identities_fetched is True
+    finally:
+        bt_client._all_identities_fetched = False
