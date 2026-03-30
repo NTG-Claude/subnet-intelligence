@@ -49,10 +49,15 @@ async def test_run_dry_run_does_not_save():
 @pytest.mark.asyncio
 async def test_run_saves_when_not_dry_run():
     scores = [_make_score(1, 80.0)]
+    mock_tc = AsyncMock()
+    mock_tc.__aenter__ = AsyncMock(return_value=mock_tc)
+    mock_tc.__aexit__ = AsyncMock(return_value=None)
+    mock_tc.get_all_subnets = AsyncMock(return_value=[])
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity())), \
+         patch("scorer.run.TaostatsClient", return_value=mock_tc), \
          patch("scorer.run.save_scores") as mock_save, \
          patch("scorer.run.upsert_metadata"), \
          patch("scorer.run.create_tables"):
@@ -75,10 +80,15 @@ async def test_run_returns_empty_when_no_scores():
 @pytest.mark.asyncio
 async def test_run_specific_netuids():
     scores = [_make_score(4, 72.0)]
+    mock_tc = AsyncMock()
+    mock_tc.__aenter__ = AsyncMock(return_value=mock_tc)
+    mock_tc.__aexit__ = AsyncMock(return_value=None)
+    mock_tc.get_all_subnets = AsyncMock(return_value=[])
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)) as mock_compute, \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity(4))), \
+         patch("scorer.run.TaostatsClient", return_value=mock_tc), \
          patch("scorer.run.save_scores"), \
          patch("scorer.run.upsert_metadata"), \
          patch("scorer.run.create_tables"):
@@ -93,10 +103,15 @@ async def test_run_specific_netuids():
 async def test_run_force_refresh_is_accepted():
     """force_refresh param is accepted (no-op now that bittensor is always fresh)."""
     scores = [_make_score(1, 70.0)]
+    mock_tc = AsyncMock()
+    mock_tc.__aenter__ = AsyncMock(return_value=mock_tc)
+    mock_tc.__aexit__ = AsyncMock(return_value=None)
+    mock_tc.get_all_subnets = AsyncMock(return_value=[])
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity())), \
+         patch("scorer.run.TaostatsClient", return_value=mock_tc), \
          patch("scorer.run.save_scores"), \
          patch("scorer.run.upsert_metadata"), \
          patch("scorer.run.create_tables"):

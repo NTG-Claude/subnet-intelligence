@@ -305,38 +305,15 @@ def _fetch_all_identities_sync() -> None:
 
 
 def _fetch_identity(netuid: int) -> SubnetIdentity:
-    """Fetch identity for a SINGLE subnet (fallback if batch fetch failed)."""
-    identity = SubnetIdentity(netuid=netuid)
-    try:
-        st = _subtensor()
+    """
+    Return cached identity for a subnet, or an empty placeholder.
 
-        # 1. Try struct-based identity storage (SubnetIdentitiesV2 first, then V1)
-        for storage_key in ("SubnetIdentitiesV2", "SubnetIdentities"):
-            try:
-                result = st.substrate.query("SubtensorModule", storage_key, [netuid])
-                if result is not None and result.value:
-                    val = result.value
-                    if isinstance(val, dict):
-                        identity.name, identity.github_url, identity.website = (
-                            _decode_identity_val(val)
-                        )
-                    if identity.name:
-                        break
-            except Exception as exc:
-                logger.warning("SN%d identity query (%s) failed: %s", netuid, storage_key, exc)
-
-        # 2. Fallback: try SubnetName (simple string storage, present in newer runtimes)
-        if not identity.name:
-            try:
-                result = st.substrate.query("SubtensorModule", "SubnetName", [netuid])
-                if result is not None and result.value:
-                    identity.name = _decode_bytes(result.value)
-            except Exception:
-                pass  # storage key may not exist on this runtime version
-
-    except Exception as exc:
-        logger.warning("identity fetch failed for SN%d: %s", netuid, exc)
-    return identity
+    On-chain SubnetIdentitiesV2 / SubnetIdentities do not exist on the current
+    Finney runtime (confirmed via run #42 logs). Names are sourced from Taostats
+    in run.py after scores are computed, so this function only needs to avoid
+    wasteful chain queries that always fail with "Storage function not found".
+    """
+    return _identity_cache.get(netuid, SubnetIdentity(netuid=netuid))
 
 
 # ---------------------------------------------------------------------------

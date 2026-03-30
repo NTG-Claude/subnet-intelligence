@@ -26,6 +26,7 @@ import scorer.bittensor_client as _bt_client
 from scorer.bittensor_client import get_all_netuids, get_subnet_identity, prefetch_all_identities
 from scorer.composite import compute_all_subnets
 from scorer.database import create_tables, save_scores, upsert_metadata
+from scorer.taostats_client import TaostatsClient
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -100,16 +101,34 @@ async def run(
         save_scores(scores)
         logger.info("Scores saved to database")
 
-        # 5. Update metadata from on-chain identity (parallel)
+        # 5. Fetch subnet names from Taostats (single API call, 1h cached).
+        # On-chain SubnetIdentitiesV2/SubnetIdentities storage doesn't exist on this
+        # Finney runtime — Taostats is the reliable name source.
+        taostats_names: dict[int, str] = {}
+        taostats_github: dict[int, str] = {}
+        taostats_website: dict[int, str] = {}
+        try:
+            async with TaostatsClient() as tc:
+                subnets = await tc.get_all_subnets()
+            if subnets:
+                for s in subnets:
+                    if s.name:
+                        taostats_names[s.netuid] = s.name
+            logger.info("Taostats: fetched names for %d subnets", len(taostats_names))
+        except Exception as exc:
+            logger.warning("Taostats name fetch failed: %s", exc)
+
+        # 6. Update metadata — chain identity first, taostats as fallback for name/urls.
         identities = await asyncio.gather(
             *[get_subnet_identity(s.netuid) for s in scores]
         )
         for identity in identities:
+            nid = identity.netuid
             upsert_metadata(
-                netuid=identity.netuid,
-                name=identity.name,
-                github_url=identity.github_url,
-                website=identity.website,
+                netuid=nid,
+                name=identity.name or taostats_names.get(nid),
+                github_url=identity.github_url or taostats_github.get(nid),
+                website=identity.website or taostats_website.get(nid),
             )
 
         logger.info("Metadata updated for %d subnets", len(scores))
