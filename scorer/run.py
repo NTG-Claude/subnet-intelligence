@@ -11,11 +11,13 @@ Verwendung:
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -47,6 +49,47 @@ def _setup_logging(verbose: bool) -> None:
 
 
 logger = logging.getLogger(__name__)
+
+_NAMES_CACHE_FILE = Path(__file__).parent.parent / "data" / "subnet_names.json"
+_NAMES_MAX_AGE_SECONDS = 86_400  # refresh at most once per day
+
+
+async def _load_subnet_names() -> dict[int, str]:
+    """
+    Return {netuid: name} dict from Taostats, using a disk cache.
+    The cache file (data/subnet_names.json) is refreshed at most once per day,
+    keeping API usage minimal regardless of how many score runs happen.
+    """
+    # Use disk cache if it's fresh enough
+    try:
+        if _NAMES_CACHE_FILE.exists():
+            age = time.time() - _NAMES_CACHE_FILE.stat().st_mtime
+            if age < _NAMES_MAX_AGE_SECONDS:
+                data = json.loads(_NAMES_CACHE_FILE.read_text())
+                names = {int(k): v for k, v in data.items() if k != "_fetched_at"}
+                logger.info("Subnet names loaded from disk cache (%d subnets, %.0fh old)",
+                            len(names), age / 3600)
+                return names
+    except Exception as exc:
+        logger.warning("Could not read names cache: %s", exc)
+
+    # Cache stale or missing — fetch from Taostats (1 API call)
+    names: dict[int, str] = {}
+    try:
+        async with TaostatsClient() as tc:
+            subnets = await tc.get_all_subnets()
+        if subnets:
+            names = {s.netuid: s.name for s in subnets if s.name}
+        logger.info("Taostats: fetched names for %d subnets", len(names))
+        # Persist to disk
+        out = {str(k): v for k, v in names.items()}
+        out["_fetched_at"] = datetime.now(timezone.utc).isoformat()
+        _NAMES_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _NAMES_CACHE_FILE.write_text(json.dumps(out, indent=2))
+    except Exception as exc:
+        logger.warning("Taostats name fetch failed: %s", exc)
+
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -101,24 +144,10 @@ async def run(
         save_scores(scores)
         logger.info("Scores saved to database")
 
-        # 5. Fetch subnet names from Taostats (single API call, 1h cached).
-        # On-chain SubnetIdentitiesV2/SubnetIdentities storage doesn't exist on this
-        # Finney runtime — Taostats is the reliable name source.
-        taostats_names: dict[int, str] = {}
-        taostats_github: dict[int, str] = {}
-        taostats_website: dict[int, str] = {}
-        try:
-            async with TaostatsClient() as tc:
-                subnets = await tc.get_all_subnets()
-            if subnets:
-                for s in subnets:
-                    if s.name:
-                        taostats_names[s.netuid] = s.name
-            logger.info("Taostats: fetched names for %d subnets", len(taostats_names))
-        except Exception as exc:
-            logger.warning("Taostats name fetch failed: %s", exc)
+        # 5. Subnet names from Taostats (disk-cached, refreshed once per day).
+        taostats_names = await _load_subnet_names()
 
-        # 6. Update metadata — chain identity first, taostats as fallback for name/urls.
+        # 6. Update metadata — chain identity first, taostats name as fallback.
         identities = await asyncio.gather(
             *[get_subnet_identity(s.netuid) for s in scores]
         )
@@ -127,8 +156,8 @@ async def run(
             upsert_metadata(
                 netuid=nid,
                 name=identity.name or taostats_names.get(nid),
-                github_url=identity.github_url or taostats_github.get(nid),
-                website=identity.website or taostats_website.get(nid),
+                github_url=identity.github_url,
+                website=identity.website,
             )
 
         logger.info("Metadata updated for %d subnets", len(scores))
