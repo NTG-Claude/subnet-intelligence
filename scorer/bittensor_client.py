@@ -191,10 +191,12 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         try:
             emission_cache = _get_cached_emission_values()
             if netuid in emission_cache:
-                m.emission_per_block_tao = emission_cache[netuid] / 1e9
+                # EmissionValues is in rao per TEMPO (epoch ≈ 360 blocks), not per block.
+                # Divide by 1e9 (rao→TAO) then by BLOCKS_PER_TEMPO to get TAO/block.
+                m.emission_per_block_tao = emission_cache[netuid] / 1e9 / BLOCKS_PER_TEMPO
                 logger.debug("SN%d emission from EmissionValues: %.8f TAO/block", netuid, m.emission_per_block_tao)
             else:
-                # Fallback: metagraph.emission is per-tempo → divide by BLOCKS_PER_TEMPO
+                # Fallback: metagraph.emission is also per-tempo → divide by BLOCKS_PER_TEMPO
                 emission_arr = list(getattr(meta, "emission", []))
                 if emission_arr:
                     total_tao_per_tempo = sum(float(v) for v in emission_arr)
@@ -279,6 +281,7 @@ def _fetch_all_identities_sync() -> None:
         for storage_key in ("SubnetIdentitiesV2", "SubnetIdentities"):
             try:
                 identity_map = st.substrate.query_map("SubtensorModule", storage_key)
+                logger.warning("query_map(%s) returned type: %s", storage_key, type(identity_map).__name__)
                 for netuid_key, val_obj in identity_map:
                     try:
                         netuid = int(netuid_key.value)
@@ -320,19 +323,28 @@ def _fetch_identity(netuid: int) -> SubnetIdentity:
         for storage_key in ("SubnetIdentitiesV2", "SubnetIdentities"):
             try:
                 result = st.substrate.query("SubtensorModule", storage_key, [netuid])
+                # Log the raw result for the first few subnets to diagnose decoding
+                if netuid in (1, 4, 64):
+                    logger.warning(
+                        "SN%d identity (%s) raw: result=%s value=%r type=%s",
+                        netuid, storage_key,
+                        "None" if result is None else "present",
+                        result.value if result is not None else None,
+                        type(result.value).__name__ if result is not None else "N/A",
+                    )
                 if result is not None and result.value:
                     val = result.value
                     if isinstance(val, dict):
                         identity.name, identity.github_url, identity.website = (
                             _decode_identity_val(val)
                         )
-                        logger.info(
-                            "SN%d identity (%s): name=%r github=%r",
-                            netuid, storage_key, identity.name, identity.github_url,
+                        logger.warning(
+                            "SN%d identity (%s): name=%r github=%r website=%r",
+                            netuid, storage_key, identity.name, identity.github_url, identity.website,
                         )
                     else:
                         logger.warning(
-                            "SN%d identity (%s) unexpected value type %s: %r",
+                            "SN%d identity (%s) unexpected type %s: %r",
                             netuid, storage_key, type(val).__name__, val,
                         )
                     if identity.name:
