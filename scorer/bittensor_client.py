@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 import bittensor as bt  # noqa: E402
 
 NETWORK = "finney"
-BLOCKS_PER_DAY = 7200  # ~12 s per block
+BLOCKS_PER_DAY = 7200   # ~12 s per block
+BLOCKS_PER_TEMPO = 360  # one epoch (tempo) ≈ 360 blocks; NeuronInfo.emission is per-tempo
 _MAX_CONCURRENT = 10        # 10 concurrent chain queries
 _METRICS_TIMEOUT = 90.0     # seconds per subnet before giving up
 
@@ -43,13 +44,15 @@ def _get_sem() -> asyncio.Semaphore:
 _local = threading.local()
 
 # In-process identity cache — avoids re-fetching identity for the same
-# netuid within a single scoring run (e.g. from mapper + run.py)
+# netuid within a single scoring run (e.g. from mapper + run.py).
+# Populated by _fetch_all_identities_sync() (batch query_map) on first call.
 _identity_cache: dict[int, "SubnetIdentity"] = {}
+_identity_cache_lock = threading.Lock()
+_all_identities_fetched = False
 
 # Module-level cache for EmissionValues — fetched once per process via query_map,
 # reused by all _fetch_metrics() calls to avoid 128x redundant chain queries.
-# bittensor 10.x removed get_all_subnets_info(); emission lives in
-# SubtensorModule.EmissionValues storage (netuid → rao, Compact<u64>).
+# EmissionValues[netuid] = rao emitted to the subnet PER BLOCK (u64).
 _emission_cache: dict[int, float] = {}
 _emission_cache_lock = threading.Lock()
 
@@ -181,15 +184,26 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         # Validator count
         m.n_validators = int(sum(1 for vp in getattr(meta, "validator_permit", []) if vp))
 
-        # Emission per block in TAO — sum of per-neuron emissions already in metagraph.
-        # NeuronInfo.emission is stored as n.emission/1e9 (rao→TAO) during decode,
-        # so meta.emission array is already in TAO. No extra chain call needed.
+        # Emission per block in TAO.
+        # PRIMARY: EmissionValues storage map (rao / block, definitively per-block).
+        # FALLBACK: sum(meta.emission) — NeuronInfo.emission is rao/tempo after /1e9 TAO/tempo;
+        #           divide by BLOCKS_PER_TEMPO (360) to get per-block.
         try:
-            emission_arr = list(getattr(meta, "emission", []))
-            if emission_arr:
-                total_tao = sum(float(v) for v in emission_arr)
-                if total_tao > 0:
-                    m.emission_per_block_tao = total_tao
+            emission_cache = _get_cached_emission_values()
+            if netuid in emission_cache:
+                m.emission_per_block_tao = emission_cache[netuid] / 1e9
+                logger.debug("SN%d emission from EmissionValues: %.8f TAO/block", netuid, m.emission_per_block_tao)
+            else:
+                # Fallback: metagraph.emission is per-tempo → divide by BLOCKS_PER_TEMPO
+                emission_arr = list(getattr(meta, "emission", []))
+                if emission_arr:
+                    total_tao_per_tempo = sum(float(v) for v in emission_arr)
+                    if total_tao_per_tempo > 0:
+                        m.emission_per_block_tao = total_tao_per_tempo / BLOCKS_PER_TEMPO
+                        logger.debug(
+                            "SN%d emission from metagraph (÷%d): %.8f TAO/block",
+                            netuid, BLOCKS_PER_TEMPO, m.emission_per_block_tao,
+                        )
         except Exception as exc:
             logger.warning("emission fetch failed for SN%d: %s", netuid, exc)
 
@@ -233,38 +247,100 @@ def _decode_bytes(val) -> Optional[str]:
     return None
 
 
+def _decode_identity_val(val: dict) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Extract (name, github_url, website) from a decoded SubnetIdentityOf dict."""
+    name = _decode_bytes(val.get("subnet_name") or val.get("name"))
+    github_url = _decode_bytes(
+        val.get("github_repo") or val.get("github_url") or val.get("github")
+    )
+    website = _decode_bytes(
+        val.get("subnet_url") or val.get("url") or val.get("website")
+    )
+    return name, github_url, website
+
+
+def _fetch_all_identities_sync() -> None:
+    """
+    Batch-fetch ALL subnet identities via query_map (one network call).
+    Populates _identity_cache. Thread-safe; subsequent calls are no-ops.
+    """
+    global _all_identities_fetched
+    if _all_identities_fetched:
+        return
+
+    with _identity_cache_lock:
+        if _all_identities_fetched:
+            return
+
+        st = _subtensor()
+        fetched_with_name = 0
+        fetched_total = 0
+
+        for storage_key in ("SubnetIdentitiesV2", "SubnetIdentities"):
+            try:
+                identity_map = st.substrate.query_map("SubtensorModule", storage_key)
+                for netuid_key, val_obj in identity_map:
+                    try:
+                        netuid = int(netuid_key.value)
+                        identity = SubnetIdentity(netuid=netuid)
+                        v = val_obj.value if val_obj is not None else None
+                        if isinstance(v, dict):
+                            identity.name, identity.github_url, identity.website = (
+                                _decode_identity_val(v)
+                            )
+                        elif v is not None:
+                            # Unexpected type — log so we can investigate
+                            logger.warning(
+                                "SubnetIdentity for SN%d unexpected type %s: %r",
+                                netuid, type(v).__name__, v,
+                            )
+                        _identity_cache[netuid] = identity
+                        fetched_total += 1
+                        if identity.name:
+                            fetched_with_name += 1
+                    except Exception as exc:
+                        logger.warning("Error decoding identity entry: %s", exc)
+
+                logger.info(
+                    "Batch identity fetch (%s): %d subnets total, %d with names",
+                    storage_key, fetched_total, fetched_with_name,
+                )
+                break  # success — don't try fallback key
+            except Exception as exc:
+                logger.warning("query_map(%s) failed: %s — trying fallback", storage_key, exc)
+
+        _all_identities_fetched = True
+
+
 def _fetch_identity(netuid: int) -> SubnetIdentity:
+    """Fetch identity for a SINGLE subnet (fallback if batch fetch failed)."""
     identity = SubnetIdentity(netuid=netuid)
     try:
         st = _subtensor()
-        # Try SubnetIdentitiesV2 first (SubnetIdentityOfV2 struct with typed fields)
         for storage_key in ("SubnetIdentitiesV2", "SubnetIdentities"):
             try:
                 result = st.substrate.query("SubtensorModule", storage_key, [netuid])
                 if result is not None and result.value:
                     val = result.value
                     if isinstance(val, dict):
-                        identity.name = _decode_bytes(
-                            val.get("subnet_name") or val.get("name")
+                        identity.name, identity.github_url, identity.website = (
+                            _decode_identity_val(val)
                         )
-                        identity.github_url = _decode_bytes(
-                            val.get("github_repo")
-                            or val.get("github_url")
-                            or val.get("github")
+                        logger.info(
+                            "SN%d identity (%s): name=%r github=%r",
+                            netuid, storage_key, identity.name, identity.github_url,
                         )
-                        identity.website = _decode_bytes(
-                            val.get("subnet_url")
-                            or val.get("url")
-                            or val.get("website")
+                    else:
+                        logger.warning(
+                            "SN%d identity (%s) unexpected value type %s: %r",
+                            netuid, storage_key, type(val).__name__, val,
                         )
                     if identity.name:
-                        break  # found a name, no need to try next storage key
-            except Exception:
-                pass  # storage key may not exist on this runtime version
-
+                        break
+            except Exception as exc:
+                logger.warning("SN%d identity query (%s) failed: %s", netuid, storage_key, exc)
     except Exception as exc:
         logger.warning("identity fetch failed for SN%d: %s", netuid, exc)
-
     return identity
 
 
@@ -314,9 +390,35 @@ async def get_subnet_metrics(netuid: int, current_block: int) -> SubnetMetrics:
             return SubnetMetrics(netuid=netuid)
 
 
+async def prefetch_all_identities() -> None:
+    """
+    Batch-fetch all subnet identities in a single query_map call.
+    Call once before individual get_subnet_identity() calls for efficiency.
+    """
+    if _all_identities_fetched:
+        return
+    async with _get_sem():
+        if _all_identities_fetched:
+            return
+        loop = asyncio.get_running_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_all_identities_sync),
+                timeout=120.0,
+            )
+        except Exception as exc:
+            logger.warning("Batch identity prefetch failed: %s", exc)
+
+
 async def get_subnet_identity(netuid: int) -> SubnetIdentity:
+    # If batch fetch hasn't run yet, trigger it now (first call wins, rest wait on lock)
+    if not _all_identities_fetched:
+        await prefetch_all_identities()
+
     if netuid in _identity_cache:
         return _identity_cache[netuid]
+
+    # Fallback: individual query (handles subnets registered after batch fetch)
     async with _get_sem():
         if netuid in _identity_cache:
             return _identity_cache[netuid]

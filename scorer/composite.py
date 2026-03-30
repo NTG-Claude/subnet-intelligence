@@ -106,8 +106,10 @@ async def _fetch_data(netuid: int, current_block: int, progress: list) -> _Subne
     m = d.metrics
     if m and m.n_total > 0:
         logger.info(
-            "[%d/%d] SN%d OK — %d neurons, %.0f TAO staked, pool=%.0f TAO",
-            progress[0], progress[1], netuid, m.n_total, m.total_stake_tao, m.tao_in_pool,
+            "[%d/%d] SN%d OK — %d neurons, %.0f TAO staked, pool=%.2f TAO, "
+            "emission=%.6f TAO/blk, alpha_price=%.4f",
+            progress[0], progress[1], netuid, m.n_total, m.total_stake_tao,
+            m.tao_in_pool, m.emission_per_block_tao, m.alpha_price_tao,
         )
     else:
         logger.warning("[%d/%d] SN%d — no on-chain data", progress[0], progress[1], netuid)
