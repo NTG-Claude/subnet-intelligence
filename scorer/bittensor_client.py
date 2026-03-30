@@ -11,11 +11,13 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Optional
 
-logger = logging.getLogger(__name__)
-
-# Eager import so bittensor's logging setup happens before _setup_logging() runs.
-# This ensures our handlers (set in run.py) are applied AFTER bittensor's and win.
+# Import bittensor FIRST so its logging setup runs before ours.
+# bittensor may reconfigure root handlers or set propagate=False on various loggers;
+# we re-assert our logger below so it always inherits from the root handler.
 import bittensor as bt  # noqa: E402
+
+logger = logging.getLogger(__name__)
+logger.propagate = True  # bittensor import may set propagate=False; undo that
 
 NETWORK = "finney"
 BLOCKS_PER_DAY = 7200   # ~12 s per block
@@ -49,29 +51,6 @@ _local = threading.local()
 _identity_cache: dict[int, "SubnetIdentity"] = {}
 _identity_cache_lock = threading.Lock()
 _all_identities_fetched = False
-
-# Module-level cache for EmissionValues — fetched once per process via query_map,
-# reused by all _fetch_metrics() calls to avoid 128x redundant chain queries.
-# EmissionValues[netuid] = rao emitted to the subnet PER BLOCK (u64).
-_emission_cache: dict[int, float] = {}
-_emission_cache_lock = threading.Lock()
-
-
-def _get_cached_emission_values() -> dict[int, float]:
-    global _emission_cache
-    if _emission_cache:
-        return _emission_cache
-    with _emission_cache_lock:
-        if _emission_cache:
-            return _emission_cache
-        try:
-            result = _subtensor().substrate.query_map("SubtensorModule", "EmissionValues")
-            for netuid_key, val in result:
-                _emission_cache[int(netuid_key.value)] = float(val.value or 0)
-            logger.info("Cached emission values for %d subnets from chain", len(_emission_cache))
-        except Exception as exc:
-            logger.warning("EmissionValues query_map failed: %s", exc)
-    return _emission_cache
 
 
 def _subtensor():
@@ -173,60 +152,38 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         else:
             m.top3_stake_fraction = 1.0
 
-        # Active neurons (weights set within last 7 days)
+        # mechid mask — bittensor v10 supports multi-mechanism subnets.
+        # Neurons with mechid=0 use yuma consensus (weight-setting, validators);
+        # other mechids (e.g. 1=PoW, 2=custom) don't set weights the same way.
+        # We restrict activity/validator metrics to yuma neurons so multi-mechanism
+        # subnets aren't penalised for "inactive" non-yuma neurons.
+        # If mechids are absent (single-mechanism subnet), include all neurons.
+        raw_mechids = list(getattr(meta, "mechanism_ids", None) or
+                           getattr(meta, "mechids", None) or [])
+        if raw_mechids and len(raw_mechids) == n:
+            yuma_mask = [int(mid) == 0 for mid in raw_mechids]
+        else:
+            yuma_mask = [True] * n  # single-mechanism: treat all as yuma
+
+        # Active neurons (weights set within last 7 days, yuma only)
         cutoff = current_block - 7 * BLOCKS_PER_DAY
         last_update = list(getattr(meta, "last_update", []))
-        m.n_active_7d = int(sum(1 for lu in last_update if int(lu) >= cutoff))
+        m.n_active_7d = int(sum(
+            1 for i, lu in enumerate(last_update)
+            if i < n and yuma_mask[i] and int(lu) >= cutoff
+        ))
 
-        # Incentive scores
+        # Incentive scores (all neurons — used for distribution health signal)
         m.incentive_scores = [float(v) for v in getattr(meta, "I", [])]
 
-        # Validator count
-        m.n_validators = int(sum(1 for vp in getattr(meta, "validator_permit", []) if vp))
+        # Validator count (yuma neurons only)
+        m.n_validators = int(sum(
+            1 for i, vp in enumerate(getattr(meta, "validator_permit", []))
+            if i < n and yuma_mask[i] and vp
+        ))
 
-        # Emission per block in TAO.
-        # PRIMARY: EmissionValues storage map (rao / block, definitively per-block).
-        # FALLBACK: sum(meta.emission) — NeuronInfo.emission is rao/tempo after /1e9 TAO/tempo;
-        #           divide by BLOCKS_PER_TEMPO (360) to get per-block.
-        try:
-            emission_cache = _get_cached_emission_values()
-            if netuid in emission_cache:
-                raw_val = emission_cache[netuid]
-                # DIAGNOSTIC: print raw value for SN1, SN4, SN64 to understand unit
-                if netuid in (1, 4, 64):
-                    print(
-                        f"[DIAG] SN{netuid} EmissionValues raw={raw_val!r} "
-                        f"BLOCKS_PER_TEMPO={BLOCKS_PER_TEMPO} "
-                        f"/1e9={raw_val/1e9:.8f} "
-                        f"/1e9/360={raw_val/1e9/BLOCKS_PER_TEMPO:.8f}",
-                        flush=True,
-                    )
-                # EmissionValues is in rao per TEMPO (epoch ≈ 360 blocks), not per block.
-                # Divide by 1e9 (rao→TAO) then by BLOCKS_PER_TEMPO to get TAO/block.
-                m.emission_per_block_tao = emission_cache[netuid] / 1e9 / BLOCKS_PER_TEMPO
-                logger.debug("SN%d emission from EmissionValues: %.8f TAO/block", netuid, m.emission_per_block_tao)
-            else:
-                # Fallback: metagraph.emission is also per-tempo → divide by BLOCKS_PER_TEMPO
-                emission_arr = list(getattr(meta, "emission", []))
-                if netuid in (1, 4, 64):
-                    sample = [float(v) for v in emission_arr[:5]] if emission_arr else []
-                    print(
-                        f"[DIAG] SN{netuid} metagraph fallback: len={len(emission_arr)} "
-                        f"sample={sample} sum={sum(float(v) for v in emission_arr):.8f}",
-                        flush=True,
-                    )
-                if emission_arr:
-                    total_tao_per_tempo = sum(float(v) for v in emission_arr)
-                    if total_tao_per_tempo > 0:
-                        m.emission_per_block_tao = total_tao_per_tempo / BLOCKS_PER_TEMPO
-                        logger.debug(
-                            "SN%d emission from metagraph (÷%d): %.8f TAO/block",
-                            netuid, BLOCKS_PER_TEMPO, m.emission_per_block_tao,
-                        )
-        except Exception as exc:
-            logger.warning("emission fetch failed for SN%d: %s", netuid, exc)
-
-        # dTAO AMM pool — SubnetTAO and SubnetAlphaIn (both stored in rao, /1e9 → TAO/Alpha)
+        # dTAO AMM pool — fetch FIRST so alpha_price_tao is available for emission conversion.
+        # SubnetTAO and SubnetAlphaIn are both stored in rao; /1e9 → TAO / Alpha units.
         try:
             tao_res = st.substrate.query("SubtensorModule", "SubnetTAO", [netuid])
             alpha_res = st.substrate.query("SubtensorModule", "SubnetAlphaIn", [netuid])
@@ -238,6 +195,21 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
                 m.alpha_price_tao = tao_val / alpha_val
         except Exception as exc:
             logger.warning("dTAO pool fetch failed for SN%d: %s", netuid, exc)
+
+        # Emission per block in TAO.
+        # meta.emission[i] = alpha emitted to neuron i per TEMPO (SDK already divides rao /1e9).
+        # Convert alpha → TAO via alpha_price_tao, then divide by BLOCKS_PER_TEMPO for per-block.
+        # Formula: sum(alpha/tempo) * alpha_price_tao / BLOCKS_PER_TEMPO = TAO/block
+        try:
+            emission_arr = list(getattr(meta, "emission", []))
+            if emission_arr and m.alpha_price_tao > 0:
+                total_alpha_per_tempo = sum(float(v) for v in emission_arr)
+                if total_alpha_per_tempo > 0:
+                    m.emission_per_block_tao = (
+                        total_alpha_per_tempo * m.alpha_price_tao / BLOCKS_PER_TEMPO
+                    )
+        except Exception as exc:
+            logger.warning("emission fetch failed for SN%d: %s", netuid, exc)
 
     except Exception as exc:
         logger.error("metagraph fetch failed for SN%d: %s", netuid, exc)
@@ -337,37 +309,31 @@ def _fetch_identity(netuid: int) -> SubnetIdentity:
     identity = SubnetIdentity(netuid=netuid)
     try:
         st = _subtensor()
+
+        # 1. Try struct-based identity storage (SubnetIdentitiesV2 first, then V1)
         for storage_key in ("SubnetIdentitiesV2", "SubnetIdentities"):
             try:
                 result = st.substrate.query("SubtensorModule", storage_key, [netuid])
-                # Log the raw result for the first few subnets to diagnose decoding
-                if netuid in (1, 4, 64):
-                    logger.warning(
-                        "SN%d identity (%s) raw: result=%s value=%r type=%s",
-                        netuid, storage_key,
-                        "None" if result is None else "present",
-                        result.value if result is not None else None,
-                        type(result.value).__name__ if result is not None else "N/A",
-                    )
                 if result is not None and result.value:
                     val = result.value
                     if isinstance(val, dict):
                         identity.name, identity.github_url, identity.website = (
                             _decode_identity_val(val)
                         )
-                        logger.warning(
-                            "SN%d identity (%s): name=%r github=%r website=%r",
-                            netuid, storage_key, identity.name, identity.github_url, identity.website,
-                        )
-                    else:
-                        logger.warning(
-                            "SN%d identity (%s) unexpected type %s: %r",
-                            netuid, storage_key, type(val).__name__, val,
-                        )
                     if identity.name:
                         break
             except Exception as exc:
                 logger.warning("SN%d identity query (%s) failed: %s", netuid, storage_key, exc)
+
+        # 2. Fallback: try SubnetName (simple string storage, present in newer runtimes)
+        if not identity.name:
+            try:
+                result = st.substrate.query("SubtensorModule", "SubnetName", [netuid])
+                if result is not None and result.value:
+                    identity.name = _decode_bytes(result.value)
+            except Exception:
+                pass  # storage key may not exist on this runtime version
+
     except Exception as exc:
         logger.warning("identity fetch failed for SN%d: %s", netuid, exc)
     return identity
