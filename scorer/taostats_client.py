@@ -170,6 +170,14 @@ async def _get(
             resp.raise_for_status()
             data = resp.json()
 
+            # Taostats returns HTTP 200 with an error body when credits are exhausted
+            # or the request is otherwise rejected at the application level.
+            if isinstance(data, dict) and data.get("status_code") in (429, 402, 403):
+                logger.warning(
+                    "Taostats API error on %s: %s", path, data.get("message", data)
+                )
+                return None
+
             if cache_key:
                 _cache_set(cache_key, data)
             return data
