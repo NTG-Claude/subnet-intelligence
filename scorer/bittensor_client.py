@@ -191,6 +191,16 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         try:
             emission_cache = _get_cached_emission_values()
             if netuid in emission_cache:
+                raw_val = emission_cache[netuid]
+                # DIAGNOSTIC: print raw value for SN1, SN4, SN64 to understand unit
+                if netuid in (1, 4, 64):
+                    print(
+                        f"[DIAG] SN{netuid} EmissionValues raw={raw_val!r} "
+                        f"BLOCKS_PER_TEMPO={BLOCKS_PER_TEMPO} "
+                        f"/1e9={raw_val/1e9:.8f} "
+                        f"/1e9/360={raw_val/1e9/BLOCKS_PER_TEMPO:.8f}",
+                        flush=True,
+                    )
                 # EmissionValues is in rao per TEMPO (epoch ≈ 360 blocks), not per block.
                 # Divide by 1e9 (rao→TAO) then by BLOCKS_PER_TEMPO to get TAO/block.
                 m.emission_per_block_tao = emission_cache[netuid] / 1e9 / BLOCKS_PER_TEMPO
@@ -198,6 +208,13 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
             else:
                 # Fallback: metagraph.emission is also per-tempo → divide by BLOCKS_PER_TEMPO
                 emission_arr = list(getattr(meta, "emission", []))
+                if netuid in (1, 4, 64):
+                    sample = [float(v) for v in emission_arr[:5]] if emission_arr else []
+                    print(
+                        f"[DIAG] SN{netuid} metagraph fallback: len={len(emission_arr)} "
+                        f"sample={sample} sum={sum(float(v) for v in emission_arr):.8f}",
+                        flush=True,
+                    )
                 if emission_arr:
                     total_tao_per_tempo = sum(float(v) for v in emission_arr)
                     if total_tao_per_tempo > 0:
