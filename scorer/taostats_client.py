@@ -4,8 +4,10 @@ Async, rate-limited, retry-capable client for api.taostats.io
 """
 
 import asyncio
+import html
 import logging
 import os
+import re
 import time
 from typing import Any, Optional
 
@@ -18,7 +20,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.taostats.io/api"
+PUBLIC_BASE_URL = "https://taostats.io"
 _API_KEY = os.getenv("TAOSTATS_API_KEY", "")
+_PUBLIC_REQUEST_DELAY_SECONDS = 0.35
+_TITLE_RE = re.compile(r"<title>\s*(?P<title>.*?)\s*</title>", re.IGNORECASE | re.DOTALL)
 
 # ---------------------------------------------------------------------------
 # Pydantic response models
@@ -373,3 +378,49 @@ class TaostatsClient:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Could not parse ValidatorWeight: %s", exc)
         return result
+
+    async def scrape_public_subnet_names(self, netuids: list[int]) -> dict[int, str]:
+        names: dict[int, str] = {}
+        if not netuids:
+            return names
+
+        for index, netuid in enumerate(netuids):
+            if index > 0:
+                await asyncio.sleep(_PUBLIC_REQUEST_DELAY_SECONDS)
+            name = await self._scrape_public_subnet_name(netuid)
+            if name:
+                names[netuid] = name
+        return names
+
+    async def _scrape_public_subnet_name(self, netuid: int) -> Optional[str]:
+        url = f"{PUBLIC_BASE_URL}/subnets/{netuid}/distribution"
+        try:
+            response = await self._c.get(url, timeout=15.0)
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Taostats public scrape failed for SN%d: %s", netuid, exc)
+            return None
+        return _extract_public_subnet_name(response.text, netuid)
+
+
+def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
+    match = _TITLE_RE.search(page_html)
+    if not match:
+        return None
+
+    title = html.unescape(match.group("title"))
+    parts = [part.strip() for part in title.split("·") if part.strip()]
+    sn_tokens = {f"SN{netuid}".lower(), f"SN {netuid}".lower()}
+
+    for index, part in enumerate(parts):
+        if part.lower() in sn_tokens:
+            for candidate in parts[index + 1:]:
+                lower = candidate.lower()
+                if lower == "taostats":
+                    break
+                if lower in sn_tokens or re.fullmatch(r"sn\s*\d+", lower):
+                    continue
+                if re.fullmatch(r"\d+(?:\.\d+)?", candidate):
+                    continue
+                return candidate
+    return None

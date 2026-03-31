@@ -54,7 +54,15 @@ _NAMES_CACHE_FILE = Path(__file__).parent.parent / "data" / "subnet_names.json"
 _NAMES_MAX_AGE_SECONDS = 86_400  # refresh at most once per day
 
 
-async def _load_subnet_names() -> dict[int, str]:
+def _read_seed_names() -> dict[int, str]:
+    try:
+        data = json.loads(_NAMES_CACHE_FILE.read_text())
+        return {int(k): v for k, v in data.items() if str(k).isdigit()}
+    except Exception:
+        return {}
+
+
+async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, str]:
     """
     Return {netuid: name} dict from Taostats, using a disk cache.
     The cache file (data/subnet_names.json) is refreshed at most once per day,
@@ -65,8 +73,7 @@ async def _load_subnet_names() -> dict[int, str]:
         if _NAMES_CACHE_FILE.exists():
             age = time.time() - _NAMES_CACHE_FILE.stat().st_mtime
             if age < _NAMES_MAX_AGE_SECONDS:
-                data = json.loads(_NAMES_CACHE_FILE.read_text())
-                names = {int(k): v for k, v in data.items() if str(k).isdigit()}
+                names = _read_seed_names()
                 logger.info("Subnet names loaded from disk cache (%d subnets, %.0fh old)",
                             len(names), age / 3600)
                 return names
@@ -81,15 +88,36 @@ async def _load_subnet_names() -> dict[int, str]:
         if subnets:
             names = {s.netuid: s.name for s in subnets if s.name}
         logger.info("Taostats: fetched names for %d subnets", len(names))
-        # Persist to disk
-        out = {str(k): v for k, v in names.items()}
-        out["_fetched_at"] = datetime.now(timezone.utc).isoformat()
-        _NAMES_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _NAMES_CACHE_FILE.write_text(json.dumps(out, indent=2))
+        if names:
+            out = {str(k): v for k, v in names.items()}
+            out["_fetched_at"] = datetime.now(timezone.utc).isoformat()
+            _NAMES_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _NAMES_CACHE_FILE.write_text(json.dumps(out, indent=2))
+            return names
     except Exception as exc:
         logger.warning("Taostats name fetch failed: %s", exc)
 
-    return names
+    fallback_names = _read_seed_names()
+    scrape_targets = sorted(set(netuids or fallback_names.keys()))
+    if scrape_targets:
+        try:
+            async with TaostatsClient() as tc:
+                scraped_names = await tc.scrape_public_subnet_names(scrape_targets)
+            if scraped_names:
+                fallback_names.update(scraped_names)
+                logger.info("Taostats public scrape: fetched names for %d subnets", len(scraped_names))
+        except Exception as exc:
+            logger.warning("Taostats public name scrape failed: %s", exc)
+
+    # Negative-cache the fallback result for one day so repeated score runs
+    # do not keep re-hitting Taostats when the API is unavailable.
+    out = {str(k): v for k, v in fallback_names.items()}
+    out["_fetched_at"] = datetime.now(timezone.utc).isoformat()
+    out["_note"] = "Cached subnet names from seed data plus public Taostats scraping fallback"
+    _NAMES_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _NAMES_CACHE_FILE.write_text(json.dumps(out, indent=2))
+    logger.info("Subnet names fallback cached for 24h after Taostats fetch miss (%d subnets)", len(fallback_names))
+    return fallback_names
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +177,7 @@ async def run(
         logger.info("Scores saved to database")
 
         # 5. Subnet names from Taostats (disk-cached, refreshed once per day).
-        taostats_names = await _load_subnet_names()
+        taostats_names = await _load_subnet_names([score.netuid for score in scores])
 
         # 6. Update metadata — chain identity first, taostats name as fallback.
         identities = await asyncio.gather(
