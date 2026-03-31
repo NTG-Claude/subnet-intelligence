@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from scorer.bittensor_client import SubnetIdentity
 from scorer.composite import ScoreBreakdown, SubnetScore
-from scorer.run import run
+from scorer.run import _choose_preferred_subnet_name, run
 
 
 def _make_score(netuid: int, score: float) -> SubnetScore:
@@ -31,6 +31,19 @@ def _make_score(netuid: int, score: float) -> SubnetScore:
 
 def _mock_identity(netuid: int = 1) -> SubnetIdentity:
     return SubnetIdentity(netuid=netuid, name="test", github_url=None, website=None)
+
+
+def test_choose_preferred_subnet_name_prefers_richer_prefix_match():
+    assert _choose_preferred_subnet_name("GroundLa", "GroundLayer", None) == "GroundLayer"
+    assert _choose_preferred_subnet_name("Bitsec.a", "Bitsec.ai", None) == "Bitsec.ai"
+
+
+def test_choose_preferred_subnet_name_keeps_primary_when_not_related():
+    assert _choose_preferred_subnet_name("Apex", "Omron", None) == "Apex"
+
+
+def test_choose_preferred_subnet_name_uses_longer_equivalent_variant():
+    assert _choose_preferred_subnet_name("OpenKaito", "Open Kaito", None) == "Open Kaito"
 
 
 @pytest.mark.asyncio
@@ -64,6 +77,25 @@ async def test_run_saves_when_not_dry_run():
 
     assert len(result) == 1
     mock_save.assert_called_once_with(scores)
+
+
+@pytest.mark.asyncio
+async def test_run_prefers_richer_metadata_name_when_identity_is_truncated():
+    scores = [_make_score(20, 55.0)]
+    identity = SubnetIdentity(netuid=20, name="GroundLa", github_url=None, website=None)
+
+    with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
+         patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=identity)), \
+         patch("scorer.run._load_subnet_names", new=AsyncMock(return_value={20: "GroundLayer"})), \
+         patch("scorer.run._read_seed_names", return_value={20: "GroundLayer"}), \
+         patch("scorer.run.save_scores"), \
+         patch("scorer.run.create_tables"), \
+         patch("scorer.run.upsert_metadata") as mock_upsert:
+        await run(dry_run=False)
+
+    mock_upsert.assert_called_once()
+    assert mock_upsert.call_args.kwargs["name"] == "GroundLayer"
 
 
 @pytest.mark.asyncio

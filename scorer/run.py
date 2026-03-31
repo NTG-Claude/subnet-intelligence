@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -91,6 +92,46 @@ def _cache_is_fresh(fetched_at: Optional[datetime]) -> bool:
         fetched_at = fetched_at.replace(tzinfo=timezone.utc)
     age_seconds = (datetime.now(timezone.utc) - fetched_at).total_seconds()
     return age_seconds < _NAMES_MAX_AGE_SECONDS
+
+
+def _canonical_name_key(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def _choose_preferred_subnet_name(
+    identity_name: Optional[str],
+    taostats_name: Optional[str],
+    seed_name: Optional[str],
+) -> Optional[str]:
+    candidates = [name for name in (identity_name, taostats_name, seed_name) if name]
+    if not candidates:
+        return None
+
+    best = candidates[0]
+    best_key = _canonical_name_key(best)
+
+    for candidate in candidates[1:]:
+        candidate_key = _canonical_name_key(candidate)
+        if not candidate_key:
+            continue
+
+        if candidate_key == best_key and len(candidate) > len(best):
+            best = candidate
+            best_key = candidate_key
+            continue
+
+        if best_key and candidate_key.startswith(best_key) and len(candidate_key) > len(best_key):
+            best = candidate
+            best_key = candidate_key
+            continue
+
+        if not best_key:
+            best = candidate
+            best_key = candidate_key
+
+    return best
 
 
 async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, str]:
@@ -212,6 +253,7 @@ async def run(
 
         # 5. Subnet names from Taostats (disk-cached, refreshed once per day).
         taostats_names = await _load_subnet_names([score.netuid for score in scores])
+        seed_names = _read_seed_names()
 
         # 6. Update metadata — chain identity first, taostats name as fallback.
         identities = await asyncio.gather(
@@ -221,7 +263,11 @@ async def run(
             nid = identity.netuid
             upsert_metadata(
                 netuid=nid,
-                name=identity.name or taostats_names.get(nid),
+                name=_choose_preferred_subnet_name(
+                    identity.name,
+                    taostats_names.get(nid),
+                    seed_names.get(nid),
+                ),
                 github_url=identity.github_url,
                 website=identity.website,
             )
