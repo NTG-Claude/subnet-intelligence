@@ -19,11 +19,17 @@ class HistoricalFeaturePoint:
     tao_in_pool: Optional[float] = None
     emission_per_block_tao: Optional[float] = None
     active_ratio: Optional[float] = None
+    concentration_proxy: Optional[float] = None
+    liquidity_thinness: Optional[float] = None
     intrinsic_quality: Optional[float] = None
     economic_sustainability: Optional[float] = None
     reflexivity: Optional[float] = None
     stress_robustness: Optional[float] = None
     opportunity_gap: Optional[float] = None
+    fundamental_quality: Optional[float] = None
+    mispricing_signal: Optional[float] = None
+    fragility_risk: Optional[float] = None
+    signal_confidence: Optional[float] = None
 
 
 @dataclass

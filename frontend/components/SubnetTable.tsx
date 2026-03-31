@@ -65,7 +65,7 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
   }
 
   const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
-    <button onClick={() => toggleSort(k)} className="flex items-center gap-1 hover:text-lime-300 transition-colors">
+    <button onClick={() => toggleSort(k)} className="flex items-center gap-1 transition-colors hover:text-lime-300">
       {label}
       <span className="text-stone-600">{sortKey === k ? (sortAsc ? '↑' : '↓') : '↕'}</span>
     </button>
@@ -75,7 +75,7 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
     <div className="space-y-4">
       <input
         type="search"
-        placeholder="Search by name, label, or netuid…"
+        placeholder="Search by name, label, or netuid..."
         value={search}
         onChange={(e) => {
           setSearch(e.target.value)
@@ -91,25 +91,33 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
               <th className="px-4 py-3 text-left"><SortBtn k="rank" label="Rank" /></th>
               <th className="px-4 py-3 text-left"><SortBtn k="netuid" label="SN" /></th>
               <th className="px-4 py-3 text-left"><SortBtn k="name" label="Name" /></th>
-              <th className="px-4 py-3 text-left hidden xl:table-cell"><SortBtn k="label" label="Label" /></th>
+              <th className="hidden px-4 py-3 text-left xl:table-cell"><SortBtn k="label" label="Label" /></th>
               <th className="px-4 py-3 text-left"><SortBtn k="score" label="Score" /></th>
-              <th className="px-4 py-3 text-right hidden lg:table-cell"><SortBtn k="alpha_price_tao" label="Alpha Price" /></th>
-              <th className="px-4 py-3 text-right hidden lg:table-cell"><SortBtn k="market_cap_tao" label="Pool Proxy" /></th>
-              <th className="px-4 py-3 text-right hidden md:table-cell"><SortBtn k="staking_apy" label="APY" /></th>
+              <th className="hidden px-4 py-3 text-right lg:table-cell"><SortBtn k="alpha_price_tao" label="Alpha Price" /></th>
+              <th className="hidden px-4 py-3 text-right lg:table-cell"><SortBtn k="market_cap_tao" label="Pool Proxy" /></th>
+              <th className="hidden px-4 py-3 text-right md:table-cell"><SortBtn k="staking_apy" label="APY" /></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
             {pageData.map((s) => (
-              <tr key={s.netuid} className="hover:bg-white/5 transition-colors">
-                <td className="px-4 py-3 text-stone-400 tabular-nums">#{s.rank ?? '—'}</td>
+              <tr key={s.netuid} className="transition-colors hover:bg-white/5">
+                <td className="px-4 py-3 tabular-nums text-stone-400">#{s.rank ?? '—'}</td>
                 <td className="px-4 py-3 font-mono text-xs text-stone-400">{s.netuid}</td>
                 <td className="px-4 py-3">
-                  <Link href={`/subnets/${s.netuid}`} className="font-medium text-stone-100 hover:text-lime-300 transition-colors">
+                  <Link href={`/subnets/${s.netuid}`} className="font-medium text-stone-100 transition-colors hover:text-lime-300">
                     {s.name ?? `Subnet ${s.netuid}`}
                   </Link>
                   {s.thesis && <div className="mt-1 max-w-md text-xs text-stone-500">{s.thesis}</div>}
+                  {s.primary_outputs && (
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-stone-400">
+                      <span>FQ {s.primary_outputs.fundamental_quality.toFixed(0)}</span>
+                      <span>MP {s.primary_outputs.mispricing_signal.toFixed(0)}</span>
+                      <span>FR {s.primary_outputs.fragility_risk.toFixed(0)}</span>
+                      <span>CF {s.primary_outputs.signal_confidence.toFixed(0)}</span>
+                    </div>
+                  )}
                 </td>
-                <td className="px-4 py-3 hidden xl:table-cell">
+                <td className="hidden px-4 py-3 xl:table-cell">
                   <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-2.5 py-1 text-xs text-amber-100">
                     {s.label ?? 'Under Review'}
                   </span>
@@ -122,13 +130,13 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
                     <span className="font-semibold tabular-nums text-stone-100">{s.score.toFixed(1)}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 hidden text-right tabular-nums text-stone-300 lg:table-cell">
+                <td className="hidden px-4 py-3 text-right tabular-nums text-stone-300 lg:table-cell">
                   {s.alpha_price_tao != null && s.alpha_price_tao > 0 ? `τ${s.alpha_price_tao < 0.001 ? s.alpha_price_tao.toExponential(2) : s.alpha_price_tao.toFixed(4)}` : '—'}
                 </td>
-                <td className="px-4 py-3 hidden text-right tabular-nums text-stone-300 lg:table-cell">
+                <td className="hidden px-4 py-3 text-right tabular-nums text-stone-300 lg:table-cell">
                   {s.market_cap_tao != null && s.market_cap_tao > 0 ? `τ${s.market_cap_tao >= 1000 ? `${(s.market_cap_tao / 1000).toFixed(1)}k` : s.market_cap_tao.toFixed(0)}` : '—'}
                 </td>
-                <td className="px-4 py-3 hidden text-right tabular-nums md:table-cell">
+                <td className="hidden px-4 py-3 text-right tabular-nums md:table-cell">
                   {s.staking_apy != null && s.staking_apy > 0 ? <span className="font-medium text-emerald-300">{s.staking_apy.toFixed(1)}%</span> : <span className="text-stone-600">—</span>}
                 </td>
               </tr>

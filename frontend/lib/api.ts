@@ -4,6 +4,7 @@ export interface SubnetSummary {
   netuid: number
   name: string | null
   score: number
+  primary_outputs: PrimaryOutputs | null
   rank: number | null
   percentile: number | null
   computed_at: string | null
@@ -24,10 +25,33 @@ export interface ScoreBreakdown {
   dev_score: number
 }
 
+export interface PrimaryOutputs {
+  fundamental_quality: number
+  mispricing_signal: number
+  fragility_risk: number
+  signal_confidence: number
+}
+
+export interface DriverItem {
+  metric: string
+  effect: number
+  value: number | null
+  normalized: number
+  category: string
+}
+
+export interface RationaleBucket {
+  supports?: DriverItem[]
+  headwinds?: DriverItem[]
+  fragility?: DriverItem[]
+  offsets?: DriverItem[]
+}
+
 export interface SubnetDetail {
   netuid: number
   name: string | null
   score: number
+  primary_outputs: PrimaryOutputs | null
   rank: number | null
   percentile: number | null
   breakdown: ScoreBreakdown
@@ -52,9 +76,15 @@ export interface SubnetDetail {
   analysis: {
     label?: string
     thesis?: string
+    primary_outputs?: PrimaryOutputs
     component_scores?: Record<string, number>
-    top_positive_drivers?: { metric: string; effect: number; value: number | null; normalized: number; category: string }[]
-    top_negative_drivers?: { metric: string; effect: number; value: number | null; normalized: number; category: string }[]
+    top_positive_drivers?: DriverItem[]
+    top_negative_drivers?: DriverItem[]
+    why_mispriced?: RationaleBucket
+    risk_drivers?: RationaleBucket
+    confidence_rationale?: RationaleBucket
+    quality_rationale?: RationaleBucket
+    thesis_breakers?: string[]
     activated_hard_rules?: string[]
     stress_drawdown?: number
     fragility_class?: string
@@ -77,14 +107,16 @@ export interface LeaderboardData {
 export interface BacktestLabelSummary {
   label: string
   observations: number
-  avg_future_score_change: number | null
-  avg_future_return_proxy: number | null
-  avg_future_slippage_deterioration: number | null
-  avg_future_concentration_increase: number | null
+  avg_relative_forward_return_vs_tao_30d: number | null
+  avg_relative_forward_return_vs_tao_90d: number | null
+  avg_drawdown_risk: number | null
+  avg_liquidity_deterioration_risk: number | null
+  avg_concentration_deterioration_risk: number | null
 }
 
 export interface BacktestData {
   observations: number
+  targets: string[]
   labels: BacktestLabelSummary[]
   examples: {
     netuid: number
@@ -92,12 +124,17 @@ export interface BacktestData {
     end_at: string | null
     label: string
     score: number | null
-    future_score_change: number | null
-    future_return_proxy: number | null
-    future_slippage_deterioration: number | null
-    future_concentration_increase: number | null
-    opportunity_gap: number | null
-    stress_robustness: number | null
+    fundamental_quality: number | null
+    mispricing_signal: number | null
+    fragility_risk: number | null
+    signal_confidence: number | null
+    relative_forward_return_vs_tao_30d: number | null
+    relative_forward_return_vs_tao_90d: number | null
+    drawdown_risk: number | null
+    liquidity_deterioration_risk: number | null
+    concentration_deterioration_risk: number | null
+    legacy_opportunity_gap: number | null
+    legacy_stress_robustness: number | null
   }[]
 }
 

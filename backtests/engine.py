@@ -27,6 +27,38 @@ def _metric(row: dict, path: list[str], default=None):
     return current if current is not None else default
 
 
+def _avg(items: list[dict], key: str):
+    vals = [item[key] for item in items if item.get(key) is not None]
+    return round(fmean(vals), 4) if vals else None
+
+
+def _primary_output(row: dict, key: str) -> float | None:
+    return _metric(row, ["analysis", "primary_outputs", key])
+
+
+def _legacy_component(row: dict, key: str) -> float | None:
+    return _metric(row, ["analysis", "component_scores", key])
+
+
+INVESTMENT_TARGETS = {
+    "relative_forward_return_vs_tao_30d": lambda current, future: future_return_proxy(
+        current.get("alpha_price_tao"), future.get("alpha_price_tao")
+    ),
+    "relative_forward_return_vs_tao_90d": lambda current, future: future_return_proxy(
+        current.get("alpha_price_tao"), future.get("alpha_price_tao")
+    ),
+    "drawdown_risk": lambda current, future: future_score_decay(current.get("score"), future.get("score")),
+    "liquidity_deterioration_risk": lambda current, future: future_slippage_deterioration(
+        _metric(current, ["raw_metrics", "slippage_10_tao"]),
+        _metric(future, ["raw_metrics", "slippage_10_tao"]),
+    ),
+    "concentration_deterioration_risk": lambda current, future: future_slippage_deterioration(
+        _metric(current, ["raw_metrics", "performance_driven_by_few_actors"]),
+        _metric(future, ["raw_metrics", "performance_driven_by_few_actors"]),
+    ),
+}
+
+
 def build_backtest_summary(rows: list[dict]) -> dict:
     by_netuid: dict[int, list[dict]] = defaultdict(list)
     for row in rows:
@@ -38,31 +70,23 @@ def build_backtest_summary(rows: list[dict]) -> dict:
     for netuid, history in by_netuid.items():
         ordered = sorted(history, key=lambda item: item["computed_at"] or "")
         for current, future in zip(ordered, ordered[1:]):
+            targets = {name: fn(current, future) for name, fn in INVESTMENT_TARGETS.items()}
             observation = {
                 "netuid": netuid,
                 "start_at": current.get("computed_at"),
                 "end_at": future.get("computed_at"),
                 "label": _label(current),
                 "score": current.get("score"),
-                "future_score_change": future_score_decay(current.get("score"), future.get("score")),
-                "future_return_proxy": future_return_proxy(current.get("alpha_price_tao"), future.get("alpha_price_tao")),
-                "future_slippage_deterioration": future_slippage_deterioration(
-                    _metric(current, ["raw_metrics", "slippage_10_tao"]),
-                    _metric(future, ["raw_metrics", "slippage_10_tao"]),
-                ),
-                "future_concentration_increase": future_slippage_deterioration(
-                    _metric(current, ["raw_metrics", "performance_driven_by_few_actors"]),
-                    _metric(future, ["raw_metrics", "performance_driven_by_few_actors"]),
-                ),
-                "opportunity_gap": (_analysis(current).get("component_scores") or {}).get("opportunity_gap"),
-                "stress_robustness": (_analysis(current).get("component_scores") or {}).get("stress_robustness"),
+                "fundamental_quality": _primary_output(current, "fundamental_quality"),
+                "mispricing_signal": _primary_output(current, "mispricing_signal"),
+                "fragility_risk": _primary_output(current, "fragility_risk"),
+                "signal_confidence": _primary_output(current, "signal_confidence"),
+                "legacy_opportunity_gap": _legacy_component(current, "opportunity_gap"),
+                "legacy_stress_robustness": _legacy_component(current, "stress_robustness"),
+                **targets,
             }
             observations.append(observation)
             label_stats[observation["label"]].append(observation)
-
-    def _avg(items: list[dict], key: str):
-        vals = [item[key] for item in items if item.get(key) is not None]
-        return round(fmean(vals), 4) if vals else None
 
     label_summary = []
     for label, items in sorted(label_stats.items(), key=lambda item: len(item[1]), reverse=True):
@@ -70,10 +94,11 @@ def build_backtest_summary(rows: list[dict]) -> dict:
             {
                 "label": label,
                 "observations": len(items),
-                "avg_future_score_change": _avg(items, "future_score_change"),
-                "avg_future_return_proxy": _avg(items, "future_return_proxy"),
-                "avg_future_slippage_deterioration": _avg(items, "future_slippage_deterioration"),
-                "avg_future_concentration_increase": _avg(items, "future_concentration_increase"),
+                "avg_relative_forward_return_vs_tao_30d": _avg(items, "relative_forward_return_vs_tao_30d"),
+                "avg_relative_forward_return_vs_tao_90d": _avg(items, "relative_forward_return_vs_tao_90d"),
+                "avg_drawdown_risk": _avg(items, "drawdown_risk"),
+                "avg_liquidity_deterioration_risk": _avg(items, "liquidity_deterioration_risk"),
+                "avg_concentration_deterioration_risk": _avg(items, "concentration_deterioration_risk"),
             }
         )
 
@@ -81,4 +106,5 @@ def build_backtest_summary(rows: list[dict]) -> dict:
         "observations": len(observations),
         "labels": label_summary,
         "examples": observations[:25],
+        "targets": list(INVESTMENT_TARGETS),
     }

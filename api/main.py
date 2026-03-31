@@ -29,6 +29,7 @@ from api.models import (
     HealthResponse,
     LeaderboardResponse,
     LatestRunResponse,
+    PrimaryOutputsResponse,
     ScoreBreakdownResponse,
     ScoreHistoryPoint,
     SubnetDetailResponse,
@@ -155,10 +156,12 @@ def _is_investable_row(row: dict) -> bool:
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
     fallback_name = _seed_name_map().get(row["netuid"])
+    primary_outputs = raw_data.get("analysis", {}).get("primary_outputs") or raw_data.get("primary_outputs")
     return SubnetSummaryResponse(
         netuid=row["netuid"],
         name=(meta.name if meta else None) or fallback_name,
         score=row["score"],
+        primary_outputs=PrimaryOutputsResponse(**primary_outputs) if primary_outputs else None,
         rank=row["rank"],
         percentile=_compute_percentile(row.get("rank"), total),
         computed_at=row.get("computed_at"),
@@ -283,10 +286,13 @@ async def get_subnet(
 
     meta = _get_metadata(netuid)
 
+    detail_primary_outputs = (((row.get("raw_data") or {}).get("analysis", {}) or {}).get("primary_outputs"))
+
     result = SubnetDetailResponse(
         netuid=netuid,
         name=(meta.name if meta else None) or _seed_name_map().get(netuid),
         score=row["score"],
+        primary_outputs=PrimaryOutputsResponse(**detail_primary_outputs) if detail_primary_outputs else None,
         rank=row.get("rank"),
         percentile=_compute_percentile(row.get("rank"), total),
         breakdown=ScoreBreakdownResponse(
@@ -444,6 +450,7 @@ async def backtest_labels(
     summary = build_backtest_summary(rows)
     result = BacktestResponse(
         observations=summary["observations"],
+        targets=summary["targets"],
         labels=[BacktestLabelSummary(**row) for row in summary["labels"]],
         examples=[BacktestObservation(**row) for row in summary["examples"]],
     )
