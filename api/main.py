@@ -59,6 +59,7 @@ logger = logging.getLogger(__name__)
 _cache: dict[str, tuple[Any, float]] = {}
 _CACHE_TTL = 3600  # 1 hour
 _SEED_NAMES_PATH = Path(__file__).resolve().parent.parent / "data" / "subnet_names.json"
+_NAME_OVERRIDES_PATH = Path(__file__).resolve().parent.parent / "data" / "subnet_name_overrides.json"
 
 
 def _cache_get(key: str) -> Any:
@@ -94,6 +95,19 @@ def _seed_name_map() -> dict[int, str]:
     except Exception:
         result = {}
     _cache_set("seed_names", result)
+    return result
+
+
+def _override_name_map() -> dict[int, str]:
+    cached = _cache_get("override_names")
+    if cached is not None:
+        return cached
+    try:
+        raw = json.loads(_NAME_OVERRIDES_PATH.read_text(encoding="utf-8"))
+        result = {int(k): v for k, v in raw.items() if k.isdigit() and isinstance(v, str)}
+    except Exception:
+        result = {}
+    _cache_set("override_names", result)
     return result
 
 
@@ -167,7 +181,7 @@ def _is_investable_row(row: dict) -> bool:
 
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
-    fallback_name = _seed_name_map().get(row["netuid"])
+    fallback_name = _override_name_map().get(row["netuid"])
     primary_outputs = raw_data.get("analysis", {}).get("primary_outputs") or raw_data.get("primary_outputs")
     return SubnetSummaryResponse(
         netuid=row["netuid"],
@@ -194,7 +208,7 @@ def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
             return None
         return SubnetMetadataResponse(
             netuid=row.netuid,
-            name=row.name or _seed_name_map().get(netuid),
+            name=row.name or _override_name_map().get(netuid),
             github_url=row.github_url,
             website=row.website,
             first_seen=row.first_seen.isoformat() if row.first_seen else None,
@@ -303,7 +317,7 @@ async def get_subnet(
 
     result = SubnetDetailResponse(
         netuid=netuid,
-        name=(meta.name if meta else None) or _seed_name_map().get(netuid),
+        name=(meta.name if meta else None) or _override_name_map().get(netuid),
         score=row["score"],
         primary_outputs=PrimaryOutputsResponse(**detail_primary_outputs) if detail_primary_outputs else None,
         rank=row.get("rank"),

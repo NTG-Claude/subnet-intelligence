@@ -52,6 +52,7 @@ def _setup_logging(verbose: bool) -> None:
 logger = logging.getLogger(__name__)
 
 _SEED_NAMES_FILE = Path(__file__).parent.parent / "data" / "subnet_names.json"
+_NAME_OVERRIDES_FILE = Path(__file__).parent.parent / "data" / "subnet_name_overrides.json"
 _NAMES_CACHE_FILE = Path(__file__).parent.parent / "data" / "subnet_names_cache.json"
 _NAMES_MAX_AGE_SECONDS = 86_400  # refresh at most once per day
 
@@ -78,6 +79,11 @@ def _read_names_file(path: Path) -> tuple[dict[int, str], Optional[datetime]]:
 
 def _read_seed_names() -> dict[int, str]:
     names, _ = _read_names_file(_SEED_NAMES_FILE)
+    return names
+
+
+def _read_name_overrides() -> dict[int, str]:
+    names, _ = _read_names_file(_NAME_OVERRIDES_FILE)
     return names
 
 
@@ -132,6 +138,46 @@ def _choose_preferred_subnet_name(
             best_key = candidate_key
 
     return best
+
+
+def _looks_low_confidence_subnet_name(name: Optional[str]) -> bool:
+    if not name:
+        return True
+
+    value = str(name).strip()
+    if not value:
+        return True
+
+    lower = value.lower()
+    if lower in {"unknown", "for sale"}:
+        return True
+    if "..." in value or "â€¦" in value:
+        return True
+
+    if len(value) <= 8:
+        if " " in value or "." in value:
+            return True
+        if value[0].islower():
+            return True
+        if any(ch.isupper() for ch in value[1:-1]):
+            return True
+
+    return False
+
+
+def _resolve_canonical_subnet_name(
+    netuid: int,
+    identity_name: Optional[str],
+    scraped_name: Optional[str],
+    override_name: Optional[str],
+) -> Optional[str]:
+    if override_name:
+        return override_name
+
+    candidate = _choose_preferred_subnet_name(identity_name, scraped_name, None)
+    if _looks_low_confidence_subnet_name(candidate):
+        return None
+    return candidate
 
 
 async def _refresh_names_from_public_sources(
@@ -294,7 +340,7 @@ async def run(
 
         # 5. Subnet names from Taostats (disk-cached, refreshed once per day).
         taostats_names = await _load_subnet_names([score.netuid for score in scores])
-        seed_names = _read_seed_names()
+        override_names = _read_name_overrides()
 
         # 6. Update metadata — chain identity first, taostats name as fallback.
         identities = await asyncio.gather(
@@ -304,10 +350,11 @@ async def run(
             nid = identity.netuid
             upsert_metadata(
                 netuid=nid,
-                name=_choose_preferred_subnet_name(
+                name=_resolve_canonical_subnet_name(
+                    nid,
                     identity.name,
                     taostats_names.get(nid),
-                    seed_names.get(nid),
+                    override_names.get(nid),
                 ),
                 github_url=identity.github_url,
                 website=identity.website,

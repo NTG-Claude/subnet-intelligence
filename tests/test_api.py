@@ -250,7 +250,7 @@ def test_get_subnet_detail():
     assert data["metadata"]["name"] == "subnet-1"
 
 
-def test_list_subnets_uses_seed_name_fallback():
+def test_list_subnets_uses_override_name_fallback():
     rows = [
         {
             **SCORES[0],
@@ -264,7 +264,7 @@ def test_list_subnets_uses_seed_name_fallback():
          patch("api.main.get_score_distribution", return_value=[]), \
          patch("api.main.get_scores_since", return_value=rows), \
           patch("api.main._get_metadata", return_value=None), \
-         patch("api.main._seed_name_map", return_value={64: "Chutes"}), \
+         patch("api.main._override_name_map", return_value={64: "Chutes"}), \
          patch("api.main._cache_get", return_value=None):
         from api.main import app
         with TestClient(app) as c:

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from scorer.bittensor_client import SubnetIdentity
 from scorer.composite import ScoreBreakdown, SubnetScore
-from scorer.run import _choose_preferred_subnet_name, run
+from scorer.run import _choose_preferred_subnet_name, _looks_low_confidence_subnet_name, _resolve_canonical_subnet_name, run
 
 
 def _make_score(netuid: int, score: float) -> SubnetScore:
@@ -44,6 +44,20 @@ def test_choose_preferred_subnet_name_keeps_primary_when_not_related():
 
 def test_choose_preferred_subnet_name_uses_longer_equivalent_variant():
     assert _choose_preferred_subnet_name("OpenKaito", "Open Kaito", None) == "Open Kaito"
+
+
+def test_low_confidence_subnet_name_flags_truncated_patterns():
+    assert _looks_low_confidence_subnet_name("GroundLa") is True
+    assert _looks_low_confidence_subnet_name("lium.io") is True
+    assert _looks_low_confidence_subnet_name("Data Uni") is True
+    assert _looks_low_confidence_subnet_name("Apex") is False
+    assert _looks_low_confidence_subnet_name("Targon") is False
+
+
+def test_resolve_canonical_subnet_name_prefers_override_and_hides_untrusted_name():
+    assert _resolve_canonical_subnet_name(20, None, "GroundLa", "GroundLayer") == "GroundLayer"
+    assert _resolve_canonical_subnet_name(51, None, "lium.io", None) is None
+    assert _resolve_canonical_subnet_name(4, None, "Targon", None) == "Targon"
 
 
 @pytest.mark.asyncio
