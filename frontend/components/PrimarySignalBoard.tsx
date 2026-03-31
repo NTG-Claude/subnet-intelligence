@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { PrimaryOutputs, SubnetSummary } from '@/lib/api'
+import { selectSignalLeaders } from '@/lib/signalSelection'
 
 interface SignalCardConfig {
   keyName: keyof PrimaryOutputs
@@ -54,14 +55,7 @@ export default function PrimarySignalBoard({ subnets }: { subnets: SubnetSummary
   return (
     <div className="grid gap-4 xl:grid-cols-4">
       {CARDS.map((card) => {
-        const ranked = [...subnets]
-          .filter((subnet) => subnet.primary_outputs)
-          .sort((left, right) => {
-            const a = valueOf(left, card.keyName)
-            const b = valueOf(right, card.keyName)
-            return card.invert ? a - b : b - a
-          })
-          .slice(0, 5)
+        const ranked = selectSignalLeaders(subnets, card.keyName, !!card.invert, 5)
 
         return (
           <div key={card.keyName} className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5">

@@ -4,6 +4,7 @@ import PrimarySignalBoard from '@/components/PrimarySignalBoard'
 import ScoreGauge from '@/components/ScoreGauge'
 import SubnetTable from '@/components/SubnetTable'
 import { fetchDistribution, fetchLabelBacktests, fetchLatestRun, fetchSubnets } from '@/lib/api'
+import { selectSignalLeaders } from '@/lib/signalSelection'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,20 +29,23 @@ export default async function HomePage() {
   ])
 
   const investableWithSignals = allSubnets.filter((subnet) => subnet.primary_outputs)
+  const bestMispricing = selectSignalLeaders(investableWithSignals, 'mispricing_signal', false, 1)[0]
+  const bestQuality = selectSignalLeaders(investableWithSignals, 'fundamental_quality', false, 1)[0]
+  const lowestFragility = selectSignalLeaders(investableWithSignals, 'fragility_risk', true, 1)[0]
   const signalLeaders = [
     {
       title: 'Best Mispricing Setup',
-      subnet: [...investableWithSignals].sort((a, b) => (b.primary_outputs?.mispricing_signal ?? -1) - (a.primary_outputs?.mispricing_signal ?? -1))[0],
+      subnet: bestMispricing,
       accent: 'text-sky-300',
     },
     {
       title: 'Best Fundamental Quality',
-      subnet: [...investableWithSignals].sort((a, b) => (b.primary_outputs?.fundamental_quality ?? -1) - (a.primary_outputs?.fundamental_quality ?? -1))[0],
+      subnet: bestQuality,
       accent: 'text-emerald-300',
     },
     {
       title: 'Lowest Fragility',
-      subnet: [...investableWithSignals].sort((a, b) => (a.primary_outputs?.fragility_risk ?? 999) - (b.primary_outputs?.fragility_risk ?? 999))[0],
+      subnet: lowestFragility,
       accent: 'text-amber-200',
     },
   ]
