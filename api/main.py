@@ -72,6 +72,18 @@ def _cache_set(key: str, value: Any) -> None:
     _cache[key] = (value, time.time() + _CACHE_TTL)
 
 
+def _run_fingerprint(rows: Optional[list[dict]] = None) -> str:
+    live_rows = rows if rows is not None else get_latest_scores()
+    last_ts = max((row["computed_at"] for row in live_rows if row.get("computed_at")), default="none")
+    return f"{last_ts}:{len(live_rows)}"
+
+
+def _live_cache_key(prefix: str, *parts: Any, rows: Optional[list[dict]] = None) -> str:
+    serialized_parts = ":".join(str(part) for part in parts)
+    base = f"{prefix}:{serialized_parts}" if serialized_parts else prefix
+    return f"{base}:run={_run_fingerprint(rows)}"
+
+
 def _seed_name_map() -> dict[int, str]:
     cached = _cache_get("seed_names")
     if cached is not None:
@@ -222,12 +234,13 @@ async def list_subnets(
     max_score: float = Query(100.0, ge=0, le=100),
     _: None = Depends(_check_rate_limit),
 ) -> SubnetListResponse:
-    cache_key = f"list:{limit}:{offset}:{min_score}:{max_score}"
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("list", limit, offset, min_score, max_score, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    all_rows = [r for r in get_latest_scores() if _is_investable_row(r)]
+    all_rows = [r for r in all_rows if _is_investable_row(r)]
     meta_by_netuid = get_all_metadata()
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     total = len(filtered)
@@ -256,12 +269,12 @@ async def get_subnet(
     netuid: int,
     _: None = Depends(_check_rate_limit),
 ) -> SubnetDetailResponse:
-    cache_key = f"subnet:{netuid}"
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("subnet", netuid, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    all_rows = get_latest_scores()
     investable_rows = [r for r in all_rows if _is_investable_row(r)]
     total = len(investable_rows)
 
@@ -332,7 +345,8 @@ async def get_subnet_history(
     days: int = Query(30, ge=1, le=365),
     _: None = Depends(_check_rate_limit),
 ) -> list[ScoreHistoryPoint]:
-    cache_key = f"history:{netuid}:{days}"
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("history", netuid, days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -363,15 +377,16 @@ async def latest_run(
     request: Request,
     _: None = Depends(_check_rate_limit),
 ) -> LatestRunResponse:
-    cached = _cache_get("latest_run")
+    rows = get_latest_scores()
+    cache_key = _live_cache_key("latest_run", rows=rows)
+    cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    rows = get_latest_scores()
     investable_rows = [r for r in rows if _is_investable_row(r)]
     last_ts = max((r["computed_at"] for r in rows if r.get("computed_at")), default=None)
     result = LatestRunResponse(last_score_run=last_ts, subnet_count=len(investable_rows))
-    _cache_set("latest_run", result)
+    _cache_set(cache_key, result)
     return result
 
 
@@ -385,11 +400,13 @@ async def leaderboard(
     request: Request,
     _: None = Depends(_check_rate_limit),
 ) -> LeaderboardResponse:
-    cached = _cache_get("leaderboard")
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("leaderboard", rows=all_rows)
+    cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    all_rows = [r for r in get_latest_scores() if _is_investable_row(r)]
+    all_rows = [r for r in all_rows if _is_investable_row(r)]
     meta_by_netuid = get_all_metadata()
     total = len(all_rows)
 
@@ -401,7 +418,7 @@ async def leaderboard(
     top = [_with_meta(r) for r in all_rows[:20]]
     bottom = [_with_meta(r) for r in all_rows[-5:]]
     result = LeaderboardResponse(top=top, bottom=bottom)
-    _cache_set("leaderboard", result)
+    _cache_set(cache_key, result)
     return result
 
 
@@ -416,7 +433,8 @@ async def score_distribution(
     buckets: int = Query(10, ge=2, le=20),
     _: None = Depends(_check_rate_limit),
 ) -> DistributionResponse:
-    cache_key = f"distribution:{buckets}"
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("distribution", buckets, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -441,7 +459,8 @@ async def backtest_labels(
     days: int = Query(90, ge=7, le=365),
     _: None = Depends(_check_rate_limit),
 ) -> BacktestResponse:
-    cache_key = f"backtests:{days}"
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("backtests", days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached

@@ -457,7 +457,8 @@ def test_backtest_labels():
             },
         },
     ]
-    with patch("api.main.get_scores_since", return_value=rows):
+    with patch("api.main.get_scores_since", return_value=rows), \
+         patch("api.main.get_latest_scores", return_value=rows):
         from api.main import app
         with TestClient(app) as c:
             resp = c.get("/api/v1/backtests/labels?days=90")
@@ -466,6 +467,19 @@ def test_backtest_labels():
     assert data["observations"] == 1
     assert "relative_forward_return_vs_tao_30d" in data["targets"]
     assert data["labels"][0]["label"] == "Hidden Compounder"
+
+
+def test_live_cache_key_changes_when_new_run_arrives():
+    from api.main import _live_cache_key
+
+    earlier_rows = [{"netuid": 1, "computed_at": "2026-03-31T14:00:00+00:00"}]
+    later_rows = [{"netuid": 1, "computed_at": "2026-03-31T15:00:00+00:00"}]
+
+    first_key = _live_cache_key("list", 50, 0, 0.0, 100.0, rows=earlier_rows)
+    second_key = _live_cache_key("list", 50, 0, 0.0, 100.0, rows=later_rows)
+
+    assert first_key != second_key
+    assert "run=2026-03-31T15:00:00+00:00:1" in second_key
 
 
 # ---------------------------------------------------------------------------
