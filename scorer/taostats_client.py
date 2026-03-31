@@ -22,10 +22,12 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.taostats.io/api"
 PUBLIC_BASE_URL = "https://taostats.io"
+TAO_APP_BASE_URL = "https://www.tao.app"
 _API_KEY = os.getenv("TAOSTATS_API_KEY", "")
 _PUBLIC_REQUEST_DELAY_SECONDS = 0.35
 _TITLE_RE = re.compile(r"<title>\s*(?P<title>.*?)\s*</title>", re.IGNORECASE | re.DOTALL)
 _NETUID_RE = re.compile(r'"netuid"\s*:\s*(?P<netuid>\d+)', re.IGNORECASE)
+_TAO_APP_NAME_RE_TEMPLATE = r"Subnet\s*{netuid}\s*:\s*(?P<name>[^<\n\r|]+)"
 _JSON_NAME_PATTERNS = (
     re.compile(r'"subnet_name"\s*:\s*"(?P<name>[^"]+)"', re.IGNORECASE),
     re.compile(r'"name"\s*:\s*"(?P<name>[^"]+)"', re.IGNORECASE),
@@ -423,8 +425,24 @@ class TaostatsClient:
                 continue
             candidate = _extract_public_subnet_name(response.text, netuid)
             if candidate:
-                return candidate
-        return None
+                tao_app_candidate = await self._scrape_tao_app_subnet_name(netuid, headers)
+                return _prefer_richer_public_name(candidate, tao_app_candidate) or candidate
+
+        return await self._scrape_tao_app_subnet_name(netuid, headers)
+
+    async def _scrape_tao_app_subnet_name(
+        self,
+        netuid: int,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Optional[str]:
+        url = f"{TAO_APP_BASE_URL}/subnets/{netuid}?active_tab=metagraph"
+        try:
+            response = await self._c.get(url, timeout=15.0, headers=headers)
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("TAO.app public scrape failed for SN%d: %s", netuid, exc)
+            return None
+        return _extract_tao_app_subnet_name(response.text, netuid)
 
 
 def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
@@ -486,6 +504,21 @@ def _extract_public_subnet_name_from_json(html_text: str, netuid: int) -> Option
     return None
 
 
+def _extract_tao_app_subnet_name(page_html: str, netuid: int) -> Optional[str]:
+    html_text = html.unescape(page_html)
+    pattern = re.compile(
+        _TAO_APP_NAME_RE_TEMPLATE.format(netuid=netuid),
+        re.IGNORECASE,
+    )
+    match = pattern.search(html_text)
+    if not match:
+        return None
+    candidate = _normalize_public_subnet_name(match.group("name"))
+    if _is_valid_public_subnet_name(candidate):
+        return candidate
+    return None
+
+
 def _normalize_public_subnet_name(candidate: Optional[str]) -> str:
     value = unicodedata.normalize("NFKC", html.unescape(candidate or "")).strip()
     replacements = {
@@ -499,6 +532,27 @@ def _normalize_public_subnet_name(candidate: Optional[str]) -> str:
             value = value.replace(source, target)
     value = re.sub(r"\s+", " ", value)
     return value.strip()
+
+
+def _canonical_public_name_key(candidate: Optional[str]) -> str:
+    if not candidate:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", candidate.lower())
+
+
+def _prefer_richer_public_name(primary: Optional[str], alternate: Optional[str]) -> Optional[str]:
+    if not primary:
+        return alternate
+    if not alternate:
+        return primary
+
+    primary_key = _canonical_public_name_key(primary)
+    alternate_key = _canonical_public_name_key(alternate)
+    if alternate_key == primary_key and len(alternate) > len(primary):
+        return alternate
+    if primary_key and alternate_key.startswith(primary_key) and len(alternate_key) > len(primary_key):
+        return alternate
+    return primary
 
 
 def _is_valid_public_subnet_name(candidate: Optional[str]) -> bool:

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from scorer.taostats_client import _extract_public_subnet_name, _get
+from scorer.taostats_client import _extract_public_subnet_name, _extract_tao_app_subnet_name, _get
 
 
 @pytest.mark.asyncio
@@ -54,3 +54,11 @@ def test_extract_public_subnet_name_ignores_suspicious_meta_payload():
         '</body></html>'
     )
     assert _extract_public_subnet_name(html, 86) is None
+
+
+def test_extract_tao_app_subnet_name_from_heading():
+    html = (
+        "<html><body><h1>Subnet 20: GroundLayer</h1>"
+        "<div>Price τ 0.003794|$1.24</div></body></html>"
+    )
+    assert _extract_tao_app_subnet_name(html, 20) == "GroundLayer"
