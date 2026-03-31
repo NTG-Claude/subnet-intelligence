@@ -150,6 +150,36 @@ def test_thin_liquidity_forces_overrewarded_structure_label():
     assert label == "Overrewarded Structure"
 
 
+def test_concentration_alone_does_not_force_overrewarded_structure():
+    snapshot = _snapshot(
+        tao_in_pool=5000.0,
+        emission_per_block_tao=0.03,
+        active_neurons_7d=8,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.8,
+        slippage_10_tao=0.02,
+        slippage_50_tao=0.08,
+        validator_dominance=0.7,
+        incentive_concentration=0.7,
+        validator_weight_entropy=0.5,
+        cross_validator_disagreement=0.2,
+        meaningful_discrimination=0.4,
+        dereg_risk_proxy=0.1,
+    )
+    rules = evaluate_hard_rules(snapshot, bundle)
+    axes = AxisScores(
+        intrinsic_quality=0.35,
+        economic_sustainability=0.5,
+        reflexivity=0.3,
+        stress_robustness=0.3,
+        opportunity_gap=0.05,
+    )
+    label, _ = assign_label(axes, bundle, _stress(0.21, robustness=0.3), rules)
+    assert label == "Under Review"
+
+
 def test_consensus_hollow_forces_consensus_hollow_label():
     snapshot = _snapshot(
         tao_in_pool=5000.0,

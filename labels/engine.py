@@ -20,6 +20,7 @@ def assign_label(
     thin_liquidity = "thin_liquidity_caps_economic_sustainability" in rules.activated
     micro_pool = "micro_pool_apy_caps_total_score" in rules.activated
     inactive = "inactive_subnet_blocks_positive_label" in rules.activated
+    concentration_capped = "concentration_caps_intrinsic_quality" in rules.activated
 
     if rules.force_label == "Consensus Hollow":
         return "Consensus Hollow", "Validators appear aligned, but the consensus is not meaningfully discriminating."
@@ -44,8 +45,12 @@ def assign_label(
         return "Consensus Hollow", "Validators appear aligned, but the consensus is not meaningfully discriminating."
     if reflexivity > 0.68 and concentration > 0.55:
         return "Reflexive Crowded Trade", "Price and participation optics depend too heavily on flows and concentration."
-    if concentration > 0.60 and stress.max_drawdown > 0.20:
+    if concentration_capped and reflexivity > 0.45 and stress.max_drawdown > 0.24 and opportunity < 0.0:
         return "Overrewarded Structure", "The market is rewarding a structure that remains too concentrated and stress-sensitive."
+    if concentration_capped and economic > 0.55 and stress.max_drawdown > 0.18:
+        return "Fragile Yield Trap", "Economics look strong on the surface, but concentration leaves the yield profile exposed under stress."
+    if concentration_capped and intrinsic < 0.40 and opportunity <= 0.10:
+        return "Under Review", "Concentration is elevated, but the structure lacks enough distortion evidence for a stronger regime call."
     if inactive or dereg_risk > 0.55 or (stress.max_drawdown > 0.18 and opportunity < 0.05):
         return "Dereg Candidate", "Weak resilience and poor market-quality alignment suggest elevated downside and replacement risk."
     return "Under Review", "Signal mix is mixed; no single structural regime dominates yet."
