@@ -24,6 +24,8 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     active_ratio = bundle.raw.get("active_ratio") or 0.0
     max_slippage = max(bundle.raw.get("slippage_10_tao") or 0.0, bundle.raw.get("slippage_50_tao") or 0.0)
     concentration = max(bundle.raw.get("validator_dominance") or 0.0, bundle.raw.get("incentive_concentration") or 0.0)
+    update_freshness = bundle.raw.get("update_freshness") or 0.0
+    participation = bundle.raw.get("participation_breadth") or 0.0
     pool_depth = snapshot.tao_in_pool or 0.0
     staking_apy = 0.0
     if pool_depth > 0:
@@ -34,10 +36,18 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         and (bundle.raw.get("meaningful_discrimination") or 0.0) < 0.12
     )
 
-    if snapshot.yuma_neurons == 0 or active_ratio < 0.10:
+    structurally_inactive = (
+        snapshot.yuma_neurons == 0
+        or (
+            active_ratio < 0.03
+            and update_freshness < 0.03
+            and participation < 0.35
+            and pool_depth < 5000
+        )
+    )
+    if structurally_inactive:
         activated.append("inactive_subnet_blocks_positive_label")
-        economic_cap = 0.18 if economic_cap is None else min(economic_cap, 0.18)
-        total_cap = 0.20 if total_cap is None else min(total_cap, 0.20)
+        total_cap = 0.24 if total_cap is None else min(total_cap, 0.24)
         force_negative_label = True
         force_label = "Dereg Candidate"
 

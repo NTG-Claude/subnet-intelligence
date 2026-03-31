@@ -4,8 +4,8 @@ Uses mocks — does not require a real chain connection.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
 import numpy as np
+from unittest.mock import MagicMock, patch
 
 from scorer.bittensor_client import (
     SubnetIdentity,
@@ -131,11 +131,6 @@ def test_blocks_per_tempo_value():
     assert BLOCKS_PER_TEMPO == 360
 
 
-def test_first_non_empty_sequence_handles_numpy_arrays():
-    arr = np.array([1, 2, 3])
-    assert _first_non_empty_sequence(None, arr) == [1, 2, 3]
-
-
 # ---------------------------------------------------------------------------
 # _decode_identity_val
 # ---------------------------------------------------------------------------
@@ -233,3 +228,9 @@ def test_clear_caches_resets_identity_state():
 
     assert bt_client._identity_cache == {}
     assert bt_client._all_identities_fetched is False
+
+
+def test_first_non_empty_sequence_handles_numpy_arrays():
+    arr = np.array([1, 2, 3])
+    result = _first_non_empty_sequence(None, arr, [])
+    assert result == [1, 2, 3]

@@ -131,12 +131,15 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     )
     validator_weight_entropy = (
         fmean(normalized_entropy(row) for row in snapshot.validator_weight_matrix)
-        if snapshot.validator_weight_matrix else 0.0
+        if snapshot.validator_weight_matrix else None
     )
-    cross_validator_disagreement = mean_pairwise_l1(snapshot.validator_weight_matrix)
+    cross_validator_disagreement = (
+        mean_pairwise_l1(snapshot.validator_weight_matrix)
+        if snapshot.validator_weight_matrix else None
+    )
     meaningful_discrimination = (
         fmean(1.0 - normalized_entropy(row) for row in snapshot.validator_weight_matrix)
-        if snapshot.validator_weight_matrix else 0.0
+        if snapshot.validator_weight_matrix else None
     )
     bond_responsiveness = (
         fmean(1.0 - normalized_entropy(row) for row in snapshot.validator_bond_matrix)
@@ -256,15 +259,18 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
                 "validator_participation",
                 "incentive_distribution_quality",
                 "update_freshness",
-                "validator_weight_entropy",
-                "cross_validator_disagreement",
-                "meaningful_discrimination",
-                "bond_responsiveness",
                 "incentive_concentration",
                 "validator_dominance",
                 "repo_recency",
             }:
                 normalized = clamp01(value or 0.0)
+            elif key in {
+                "validator_weight_entropy",
+                "cross_validator_disagreement",
+                "meaningful_discrimination",
+                "bond_responsiveness",
+            }:
+                normalized = 0.5 if value is None else clamp01(value)
             else:
                 normalized = percentile_rank(value, all_values[key])
             metrics[key] = FeatureMetric(
