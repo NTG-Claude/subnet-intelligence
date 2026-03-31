@@ -71,6 +71,12 @@ class _Cluster:
     source_count: int
 
 
+def _is_placeholder_name(name: Optional[str]) -> bool:
+    if not name:
+        return True
+    return canonical_name_key(name) in {"", "unknown"}
+
+
 def resolve_subnet_name(netuid: int, candidates_by_source: dict[str, Optional[str]]) -> Optional[str]:
     override = candidates_by_source.get("override")
     if override:
@@ -99,16 +105,24 @@ def resolve_subnet_name(netuid: int, candidates_by_source: dict[str, Optional[st
     if not clusters:
         return None
 
-    best = max(
+    ranked = sorted(
         clusters,
         key=lambda cluster: (
             cluster.confidence + (0.08 if cluster.source_count > 1 else 0.0),
             len(cluster.representative),
         ),
+        reverse=True,
     )
+    best = ranked[0]
+    best_trusted = next((cluster for cluster in ranked if not looks_low_confidence_subnet_name(cluster.representative)), None)
 
-    if looks_low_confidence_subnet_name(best.representative):
+    if best_trusted is not None and looks_low_confidence_subnet_name(best.representative):
+        trust_gap = best.confidence - best_trusted.confidence
+        if trust_gap <= 0.18:
+            best = best_trusted
+
+    if _is_placeholder_name(best.representative):
         return None
-    if best.confidence < _MIN_ACCEPTABLE_CONFIDENCE:
-        return None
+    if best.confidence < _MIN_ACCEPTABLE_CONFIDENCE and best_trusted is not None:
+        return best_trusted.representative
     return best.representative

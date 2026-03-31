@@ -59,7 +59,7 @@ def test_low_confidence_subnet_name_flags_truncated_patterns():
 
 def test_resolve_canonical_subnet_name_prefers_override_and_hides_untrusted_name():
     assert _resolve_canonical_subnet_name(20, None, "GroundLa", "GroundLayer") == "GroundLayer"
-    assert _resolve_canonical_subnet_name(51, None, "lium.io", None) is None
+    assert _resolve_canonical_subnet_name(51, None, "lium.io", None) == "lium.io"
     assert _resolve_canonical_subnet_name(4, None, "Targon", None) == "Targon"
 
 
