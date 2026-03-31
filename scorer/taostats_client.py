@@ -402,12 +402,30 @@ class TaostatsClient:
         for index, netuid in enumerate(netuids):
             if index > 0:
                 await asyncio.sleep(_PUBLIC_REQUEST_DELAY_SECONDS)
-            name = await self._scrape_public_subnet_name(netuid)
+            candidates = await self._scrape_public_subnet_name_candidates(netuid)
+            name = _merge_public_name_candidates(candidates)
             if name:
                 names[netuid] = name
         return names
 
+    async def scrape_public_subnet_name_candidates(self, netuids: list[int]) -> dict[int, dict[str, str]]:
+        names: dict[int, dict[str, str]] = {}
+        if not netuids:
+            return names
+
+        for index, netuid in enumerate(netuids):
+            if index > 0:
+                await asyncio.sleep(_PUBLIC_REQUEST_DELAY_SECONDS)
+            candidates = await self._scrape_public_subnet_name_candidates(netuid)
+            if candidates:
+                names[netuid] = candidates
+        return names
+
     async def _scrape_public_subnet_name(self, netuid: int) -> Optional[str]:
+        return _merge_public_name_candidates(await self._scrape_public_subnet_name_candidates(netuid))
+
+    async def _scrape_public_subnet_name_candidates(self, netuid: int) -> dict[str, str]:
+        candidates: dict[str, str] = {}
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -425,10 +443,13 @@ class TaostatsClient:
                 continue
             candidate = _extract_public_subnet_name(response.text, netuid)
             if candidate:
-                tao_app_candidate = await self._scrape_tao_app_subnet_name(netuid, headers)
-                return _prefer_richer_public_name(candidate, tao_app_candidate) or candidate
+                candidates["taostats_public"] = candidate
+                break
 
-        return await self._scrape_tao_app_subnet_name(netuid, headers)
+        tao_app_candidate = await self._scrape_tao_app_subnet_name(netuid, headers)
+        if tao_app_candidate:
+            candidates["tao_app_public"] = tao_app_candidate
+        return candidates
 
     async def _scrape_tao_app_subnet_name(
         self,
@@ -553,6 +574,15 @@ def _prefer_richer_public_name(primary: Optional[str], alternate: Optional[str])
     if primary_key and alternate_key.startswith(primary_key) and len(alternate_key) > len(primary_key):
         return alternate
     return primary
+
+
+def _merge_public_name_candidates(candidates: Optional[dict[str, str]]) -> Optional[str]:
+    if not candidates:
+        return None
+    return _prefer_richer_public_name(
+        candidates.get("taostats_public"),
+        candidates.get("tao_app_public"),
+    ) or candidates.get("taostats_public") or candidates.get("tao_app_public")
 
 
 def _is_valid_public_subnet_name(candidate: Optional[str]) -> bool:

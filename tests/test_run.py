@@ -50,6 +50,9 @@ def test_low_confidence_subnet_name_flags_truncated_patterns():
     assert _looks_low_confidence_subnet_name("GroundLa") is True
     assert _looks_low_confidence_subnet_name("lium.io") is True
     assert _looks_low_confidence_subnet_name("Data Uni") is True
+    assert _looks_low_confidence_subnet_name("iota") is False
+    assert _looks_low_confidence_subnet_name("grail") is False
+    assert _looks_low_confidence_subnet_name("NOVA") is False
     assert _looks_low_confidence_subnet_name("Apex") is False
     assert _looks_low_confidence_subnet_name("Targon") is False
 
@@ -82,7 +85,7 @@ async def test_run_saves_when_not_dry_run():
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity())), \
-         patch("scorer.run._load_subnet_names", new=AsyncMock(return_value={})), \
+         patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={})), \
          patch("scorer.run.save_scores") as mock_save, \
          patch("scorer.run.upsert_metadata"), \
          patch("scorer.run.create_tables"):
@@ -101,8 +104,7 @@ async def test_run_prefers_richer_metadata_name_when_identity_is_truncated():
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=identity)), \
-         patch("scorer.run._load_subnet_names", new=AsyncMock(return_value={20: "GroundLayer"})), \
-         patch("scorer.run._read_seed_names", return_value={20: "GroundLayer"}), \
+         patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={20: {"cached_consensus": "GroundLayer"}})), \
          patch("scorer.run.save_scores"), \
          patch("scorer.run.create_tables"), \
          patch("scorer.run.upsert_metadata") as mock_upsert:
@@ -128,7 +130,7 @@ async def test_run_specific_netuids():
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)) as mock_compute, \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity(4))), \
-         patch("scorer.run._load_subnet_names", new=AsyncMock(return_value={})), \
+         patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={})), \
          patch("scorer.run.save_scores"), \
          patch("scorer.run.upsert_metadata"), \
          patch("scorer.run.create_tables"):
@@ -148,7 +150,7 @@ async def test_run_force_refresh_is_accepted():
          patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity())), \
-         patch("scorer.run._load_subnet_names", new=AsyncMock(return_value={})), \
+         patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={})), \
          patch("scorer.run.save_scores"), \
          patch("scorer.run.upsert_metadata"), \
          patch("scorer.run.create_tables"):

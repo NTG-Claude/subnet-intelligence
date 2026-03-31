@@ -29,6 +29,9 @@ import scorer.bittensor_client as _bt_client
 from scorer.bittensor_client import clear_caches, get_all_netuids, get_subnet_identity, prefetch_all_identities
 from scorer.composite import compute_all_subnets
 from scorer.database import create_tables, save_scores, upsert_metadata
+from scorer.name_resolver import canonical_name_key as _canonical_name_key_impl
+from scorer.name_resolver import looks_low_confidence_subnet_name as _looks_low_confidence_subnet_name_impl
+from scorer.name_resolver import resolve_subnet_name
 from scorer.taostats_client import TaostatsClient, _normalize_public_subnet_name
 
 
@@ -101,9 +104,7 @@ def _cache_is_fresh(fetched_at: Optional[datetime]) -> bool:
 
 
 def _canonical_name_key(value: Optional[str]) -> str:
-    if not value:
-        return ""
-    return re.sub(r"[^a-z0-9]+", "", value.lower())
+    return _canonical_name_key_impl(value)
 
 
 def _choose_preferred_subnet_name(
@@ -141,28 +142,7 @@ def _choose_preferred_subnet_name(
 
 
 def _looks_low_confidence_subnet_name(name: Optional[str]) -> bool:
-    if not name:
-        return True
-
-    value = str(name).strip()
-    if not value:
-        return True
-
-    lower = value.lower()
-    if lower in {"unknown", "for sale"}:
-        return True
-    if "..." in value or "â€¦" in value:
-        return True
-
-    if len(value) <= 8:
-        if " " in value or "." in value:
-            return True
-        if value[0].islower():
-            return True
-        if any(ch.isupper() for ch in value[1:-1]):
-            return True
-
-    return False
+    return _looks_low_confidence_subnet_name_impl(name)
 
 
 def _resolve_canonical_subnet_name(
@@ -171,13 +151,44 @@ def _resolve_canonical_subnet_name(
     scraped_name: Optional[str],
     override_name: Optional[str],
 ) -> Optional[str]:
-    if override_name:
-        return override_name
+    return resolve_subnet_name(
+        netuid,
+        {
+            "override": override_name,
+            "onchain_identity": identity_name,
+            "cached_consensus": scraped_name,
+        },
+    )
 
-    candidate = _choose_preferred_subnet_name(identity_name, scraped_name, None)
-    if _looks_low_confidence_subnet_name(candidate):
-        return None
-    return candidate
+
+async def _load_subnet_name_candidates(netuids: list[int]) -> dict[int, dict[str, str]]:
+    cached_names = await _load_subnet_names(netuids)
+    seed_names = _read_seed_names()
+    override_names = _read_name_overrides()
+    public_candidates: dict[int, dict[str, str]] = {}
+
+    try:
+        async with TaostatsClient() as tc:
+            public_candidates = await tc.scrape_public_subnet_name_candidates(netuids)
+    except Exception as exc:
+        logger.warning("Public subnet name candidate refresh failed: %s", exc)
+
+    all_netuids = sorted(set(netuids) | set(cached_names) | set(seed_names) | set(override_names) | set(public_candidates))
+    result: dict[int, dict[str, str]] = {}
+    for netuid in all_netuids:
+        candidates: dict[str, str] = {}
+        if override_names.get(netuid):
+            candidates["override"] = override_names[netuid]
+        if cached_names.get(netuid):
+            candidates["cached_consensus"] = cached_names[netuid]
+        if seed_names.get(netuid):
+            candidates["seed_name"] = seed_names[netuid]
+        for source, name in public_candidates.get(netuid, {}).items():
+            if name:
+                candidates[source] = name
+        if candidates:
+            result[netuid] = candidates
+    return result
 
 
 async def _refresh_names_from_public_sources(
@@ -338,9 +349,9 @@ async def run(
         save_scores(scores)
         logger.info("Scores saved to database")
 
-        # 5. Subnet names from Taostats (disk-cached, refreshed once per day).
-        taostats_names = await _load_subnet_names([score.netuid for score in scores])
-        override_names = _read_name_overrides()
+        # 5. Resolve subnet names from multiple sources instead of trusting a
+        # single public display label.
+        name_candidates = await _load_subnet_name_candidates([score.netuid for score in scores])
 
         # 6. Update metadata — chain identity first, taostats name as fallback.
         identities = await asyncio.gather(
@@ -348,14 +359,12 @@ async def run(
         )
         for identity in identities:
             nid = identity.netuid
+            candidates = dict(name_candidates.get(nid, {}))
+            if identity.name:
+                candidates["onchain_identity"] = identity.name
             upsert_metadata(
                 netuid=nid,
-                name=_resolve_canonical_subnet_name(
-                    nid,
-                    identity.name,
-                    taostats_names.get(nid),
-                    override_names.get(nid),
-                ),
+                name=resolve_subnet_name(nid, candidates),
                 github_url=identity.github_url,
                 website=identity.website,
             )
