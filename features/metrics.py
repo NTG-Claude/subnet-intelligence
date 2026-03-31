@@ -216,6 +216,35 @@ def _market_structure_floor(
     )
 
 
+def _confidence_market_integrity(
+    market_structure_floor: float,
+    dereg_risk_proxy: float,
+    crowding_proxy: float,
+    liquidity_thinness: float | None,
+) -> float:
+    return clamp01(
+        0.40 * market_structure_floor
+        + 0.25 * (1.0 - dereg_risk_proxy)
+        + 0.20 * (1.0 - crowding_proxy)
+        + 0.15 * (1.0 - clamp01(liquidity_thinness or 0.0))
+    )
+
+
+def _confidence_thesis_coherence(
+    reversal_risk: float,
+    price_move_without_quality_improvement: float,
+    emission_spike_without_participation_improvement: float,
+    flow_to_price_elasticity: float,
+) -> float:
+    contradiction = clamp01(
+        0.35 * reversal_risk
+        + 0.30 * price_move_without_quality_improvement
+        + 0.20 * emission_spike_without_participation_improvement
+        + 0.15 * clamp01(max(0.0, flow_to_price_elasticity - 1.0))
+    )
+    return clamp01(1.0 - contradiction)
+
+
 def _cohort_key(bundle: FeatureBundle) -> str:
     reserve_depth = bundle.raw.get("reserve_depth") or 0.0
     active_ratio = bundle.raw.get("active_ratio") or 0.0
@@ -330,6 +359,25 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         participation_breadth,
         validator_participation,
     )
+    dereg_risk_proxy = clamp01(
+        0.45 * max(0.0, 0.35 - active_ratio)
+        + 0.25 * max(0.0, 0.20 - participation_breadth)
+        + 0.20 * concentration_now
+        + 0.10 * (1.0 if snapshot.registration_allowed else 0.0)
+    )
+    flow_to_price_elasticity = safe_ratio(abs(price_change or 0.0), abs(reserve_change or 0.0) + 0.01)
+    confidence_market_integrity = _confidence_market_integrity(
+        market_structure_floor,
+        dereg_risk_proxy,
+        crowding_proxy,
+        avg_slippage,
+    )
+    confidence_thesis_coherence = _confidence_thesis_coherence(
+        reversal_risk,
+        max(0.0, (price_change or 0.0) - max(quality_change or 0.0, 0.0)),
+        max(0.0, (emission_change or 0.0) - max(quality_change or 0.0, 0.0)),
+        flow_to_price_elasticity,
+    )
     raw = {
         "active_ratio": active_ratio,
         "participation_breadth": participation_breadth,
@@ -353,7 +401,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "emission_concentration": incentive_concentration,
         "emission_persistence": _persistence(emission_history),
         "flow_stability": _persistence(flow_history),
-        "flow_to_price_elasticity": safe_ratio(abs(price_change or 0.0), abs(reserve_change or 0.0) + 0.01),
+        "flow_to_price_elasticity": flow_to_price_elasticity,
         "price_move_without_quality_improvement": max(0.0, (price_change or 0.0) - max(quality_change or 0.0, 0.0)),
         "emission_spike_without_participation_improvement": max(0.0, (emission_change or 0.0) - max(quality_change or 0.0, 0.0)),
         "reserve_sensitivity": avg_slippage,
@@ -368,15 +416,12 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "pow_registration_enabled": 1.0 if snapshot.difficulty > 0 else 0.0,
         "burn_registration_enabled": 1.0 if snapshot.min_burn > 0 or snapshot.max_burn > 0 else 0.0,
         "immunity_period": float(snapshot.immunity_period),
-        "dereg_risk_proxy": clamp01(
-            0.45 * max(0.0, 0.35 - active_ratio)
-            + 0.25 * max(0.0, 0.20 - participation_breadth)
-            + 0.20 * concentration_now
-            + 0.10 * (1.0 if snapshot.registration_allowed else 0.0)
-        ),
+        "dereg_risk_proxy": dereg_risk_proxy,
         "repo_commits_30d": float(snapshot.github.commits_30d) if snapshot.github else None,
         "repo_contributors_30d": float(snapshot.github.contributors_30d) if snapshot.github else None,
         "repo_recency": None if not snapshot.github or not snapshot.github.last_push else 1.0,
+        "confidence_market_integrity": confidence_market_integrity,
+        "confidence_thesis_coherence": confidence_thesis_coherence,
         "quality_acceleration": quality_acceleration,
         "liquidity_improvement_rate": liquidity_improvement_rate,
         "concentration_delta": concentration_change,
@@ -475,6 +520,8 @@ METRIC_MAP = {
     "low_manipulation_signal_share": ("derived_onchain", "signal_confidence", 0.16, False),
     "confidence_market_relevance": ("derived_onchain", "signal_confidence", 0.06, False),
     "confidence_market_structure_floor": ("derived_onchain", "signal_confidence", 0.10, False),
+    "confidence_market_integrity": ("derived_onchain", "signal_confidence", 0.16, False),
+    "confidence_thesis_coherence": ("needs_history", "signal_confidence", 0.18, False),
     "repo_commits_30d": ("external_proxy", "signal_confidence", 0.04, False),
     "repo_contributors_30d": ("external_proxy", "signal_confidence", 0.04, False),
     "repo_recency": ("external_proxy", "signal_confidence", 0.02, False),
@@ -494,6 +541,8 @@ def _normalize_metric_value(key: str, value: float | None, population: list[floa
         "history_depth_score",
         "proxy_reliance_penalty",
         "low_manipulation_signal_share",
+        "confidence_market_integrity",
+        "confidence_thesis_coherence",
         "repo_recency",
     }
     if key in bounded:
