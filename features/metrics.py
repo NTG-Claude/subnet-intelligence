@@ -254,16 +254,19 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         for key, (category, axis, weight, inverse) in metric_map.items():
             value = bundle.raw.get(key)
             if key in {
-                "active_ratio",
                 "participation_breadth",
-                "validator_participation",
                 "incentive_distribution_quality",
-                "update_freshness",
                 "incentive_concentration",
                 "validator_dominance",
                 "repo_recency",
             }:
                 normalized = clamp01(value or 0.0)
+            elif key in {
+                "active_ratio",
+                "validator_participation",
+                "update_freshness",
+            }:
+                normalized = percentile_rank(value, all_values[key])
             elif key in {
                 "validator_weight_entropy",
                 "cross_validator_disagreement",

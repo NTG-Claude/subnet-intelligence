@@ -1,6 +1,7 @@
+from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from features.types import AxisScores
 from regimes.hard_rules import HardRuleResult
-from scoring.engine import _apply_total_cap
+from scoring.engine import _apply_total_cap, build_scores
 
 
 def test_apply_total_cap_keeps_plain_caps_for_non_negative_rules():
@@ -37,3 +38,55 @@ def test_apply_total_cap_preserves_ordering_for_negative_regimes():
 
     assert stronger < 0.2
     assert weaker < stronger
+
+
+def test_incomplete_snapshot_uses_recent_history_instead_of_dereg_penalty():
+    snapshot = RawSubnetSnapshot(
+        netuid=4,
+        current_block=1000,
+        n_total=256,
+        yuma_neurons=256,
+        active_neurons_7d=0,
+        total_stake_tao=3_000_000.0,
+        unique_coldkeys=0,
+        top3_stake_fraction=0.58,
+        emission_per_block_tao=0.2,
+        incentive_scores=[],
+        n_validators=0,
+        tao_in_pool=0.0,
+        alpha_in_pool=0.0,
+        alpha_price_tao=0.0,
+        coldkey_stakes=[],
+        validator_stakes=[],
+        validator_weight_matrix=[],
+        validator_bond_matrix=[],
+        last_update_blocks=[],
+        yuma_mask=[],
+        mechanism_ids=[],
+        immunity_period=0,
+        registration_allowed=False,
+        target_regs_per_interval=0,
+        min_burn=0.0,
+        max_burn=0.0,
+        difficulty=0.0,
+        history=[
+            HistoricalFeaturePoint(
+                timestamp="2026-03-31T11:46:31+00:00",
+                alpha_price_tao=0.064,
+                tao_in_pool=133684.0,
+                emission_per_block_tao=0.2,
+                active_ratio=0.04,
+                intrinsic_quality=0.56,
+                economic_sustainability=0.71,
+                reflexivity=0.67,
+                stress_robustness=0.56,
+                opportunity_gap=-0.03,
+            )
+        ],
+    )
+
+    artifacts = build_scores([snapshot])[4]
+
+    assert artifacts.score > 40.0
+    assert artifacts.label == "Under Review"
+    assert "telemetry_gap_uses_recent_history" in artifacts.explanation["activated_hard_rules"]

@@ -209,3 +209,36 @@ def test_consensus_hollow_forces_consensus_hollow_label():
     )
     label, _ = assign_label(axes, bundle, _stress(0.1, robustness=0.7), rules)
     assert label == "Consensus Hollow"
+
+
+def test_liquid_hyped_subnet_can_be_reflexive_crowded_trade():
+    snapshot = _snapshot(
+        tao_in_pool=100000.0,
+        emission_per_block_tao=0.03,
+        active_neurons_7d=7,
+        unique_coldkeys=30,
+        top3_stake_fraction=0.58,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.2,
+        slippage_10_tao=0.02,
+        slippage_50_tao=0.09,
+        validator_dominance=0.58,
+        incentive_concentration=0.61,
+        validator_weight_entropy=0.52,
+        cross_validator_disagreement=0.22,
+        meaningful_discrimination=0.36,
+        dereg_risk_proxy=0.18,
+    )
+    rules = evaluate_hard_rules(snapshot, bundle)
+    axes = AxisScores(
+        intrinsic_quality=0.56,
+        economic_sustainability=0.69,
+        reflexivity=0.74,
+        stress_robustness=0.57,
+        opportunity_gap=-0.04,
+    )
+    label, thesis = assign_label(axes, bundle, _stress(0.23, robustness=0.57), rules)
+    assert label == "Reflexive Crowded Trade"
+    assert "crowded" in thesis.lower()
