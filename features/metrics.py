@@ -94,6 +94,43 @@ def _history_values(history: list[HistoricalFeaturePoint], attr: str) -> list[fl
     return [float(v) for v in vals if v is not None]
 
 
+def _quality_history_series(history: list[HistoricalFeaturePoint]) -> list[float]:
+    series: list[float] = []
+    for point in history:
+        if point.fundamental_quality is not None:
+            series.append(float(point.fundamental_quality))
+            continue
+        candidates = [
+            value
+            for value in (
+                point.intrinsic_quality,
+                point.economic_sustainability,
+            )
+            if value is not None
+        ]
+        if candidates:
+            series.append(float(fmean(candidates)))
+    return series
+
+
+def _current_quality_state(
+    active_ratio: float,
+    participation_breadth: float,
+    validator_participation: float,
+    incentive_distribution_quality: float,
+) -> float:
+    return clamp01(
+        fmean(
+            [
+                active_ratio,
+                participation_breadth,
+                validator_participation,
+                incentive_distribution_quality,
+            ]
+        )
+    )
+
+
 def _persistence(history: list[float]) -> float | None:
     if len(history) < 3:
         return None
@@ -195,9 +232,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
 
     history = snapshot.history or []
     price_history = _history_values(history, "alpha_price_tao")
-    quality_history = _history_values(history, "fundamental_quality")
-    if not quality_history:
-        quality_history = _history_values(history, "intrinsic_quality")
+    quality_history = _quality_history_series(history)
     active_history = _history_values(history, "active_ratio")
     emission_history = _history_values(history, "emission_per_block_tao")
     flow_history = _history_values(history, "tao_in_pool")
@@ -206,15 +241,22 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
 
     price_change = _change_vs_history(snapshot.alpha_price_tao, price_history)
     active_change = _change_vs_history(active_ratio, active_history)
-    quality_anchor = active_history if active_history else quality_history
-    quality_change = _change_vs_history(active_ratio, quality_anchor)
+    quality_change = _change_vs_history(
+        _current_quality_state(
+            active_ratio,
+            participation_breadth,
+            validator_participation,
+            incentive_distribution_quality,
+        ),
+        quality_history,
+    )
     emission_change = _change_vs_history(snapshot.emission_per_block_tao, emission_history)
     reserve_change = _change_vs_history(snapshot.tao_in_pool, flow_history)
     concentration_now = max(validator_dominance, incentive_concentration)
     concentration_change = _change_vs_history(concentration_now, concentration_history)
     liquidity_change = _change_vs_history(avg_slippage or 0.0, liquidity_history) if avg_slippage is not None else None
 
-    quality_acceleration = _acceleration(quality_history if len(quality_history) >= 3 else active_history)
+    quality_acceleration = _acceleration(quality_history)
     liquidity_improvement_rate = None
     if reserve_change is not None or liquidity_change is not None:
         liquidity_improvement_rate = (reserve_change or 0.0) - max(liquidity_change or 0.0, 0.0)

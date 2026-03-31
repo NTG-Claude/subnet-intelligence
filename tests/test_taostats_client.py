@@ -38,6 +38,14 @@ def test_extract_public_subnet_name_prefers_full_json_name_over_truncated_title(
     assert _extract_public_subnet_name(html, 13) == "Data Universe"
 
 
+def test_extract_public_subnet_name_normalizes_mojibake_templar():
+    html = (
+        '<html><head><title>0.0448 Â· SN3 Â· Ï„emplar Â· taostats</title></head>'
+        '<body>{"netuid":3,"name":"Ï„emplar"}</body></html>'
+    )
+    assert _extract_public_subnet_name(html, 3) == "Templar"
+
+
 def test_extract_public_subnet_name_ignores_suspicious_meta_payload():
     html = (
         '<html><head><title>0.0044 · SN86 · taostats</title></head>'

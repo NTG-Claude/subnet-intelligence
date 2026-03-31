@@ -28,7 +28,7 @@ import scorer.bittensor_client as _bt_client
 from scorer.bittensor_client import clear_caches, get_all_netuids, get_subnet_identity, prefetch_all_identities
 from scorer.composite import compute_all_subnets
 from scorer.database import create_tables, save_scores, upsert_metadata
-from scorer.taostats_client import TaostatsClient
+from scorer.taostats_client import TaostatsClient, _normalize_public_subnet_name
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -58,7 +58,11 @@ _NAMES_MAX_AGE_SECONDS = 86_400  # refresh at most once per day
 def _read_names_file(path: Path) -> tuple[dict[int, str], Optional[datetime]]:
     try:
         data = json.loads(path.read_text())
-        names = {int(k): v for k, v in data.items() if str(k).isdigit()}
+        names = {
+            int(k): _normalize_public_subnet_name(v)
+            for k, v in data.items()
+            if str(k).isdigit()
+        }
         fetched_at_raw = data.get("_fetched_at")
         fetched_at = None
         if isinstance(fetched_at_raw, str):
@@ -112,7 +116,7 @@ async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, s
         async with TaostatsClient() as tc:
             subnets = await tc.get_all_subnets()
         if subnets:
-            names = {s.netuid: s.name for s in subnets if s.name}
+            names = {s.netuid: _normalize_public_subnet_name(s.name) for s in subnets if s.name}
         logger.info("Taostats: fetched names for %d subnets", len(names))
         if names:
             out = {str(k): v for k, v in names.items()}
@@ -130,7 +134,7 @@ async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, s
             async with TaostatsClient() as tc:
                 scraped_names = await tc.scrape_public_subnet_names(scrape_targets)
             if scraped_names:
-                fallback_names.update(scraped_names)
+                fallback_names.update({netuid: _normalize_public_subnet_name(name) for netuid, name in scraped_names.items()})
                 logger.info("Taostats public scrape: fetched names for %d subnets", len(scraped_names))
         except Exception as exc:
             logger.warning("Taostats public name scrape failed: %s", exc)

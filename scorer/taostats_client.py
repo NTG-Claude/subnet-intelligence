@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import time
+import unicodedata
 from typing import Any, Optional
 
 import httpx
@@ -30,6 +31,11 @@ _JSON_NAME_PATTERNS = (
     re.compile(r'"name"\s*:\s*"(?P<name>[^"]+)"', re.IGNORECASE),
 )
 _PUBLIC_NAME_RE_TEMPLATE = r"SN\s*{netuid}\s*(?:\s*[^\w\s]+\s*)+(?P<name>.+?)\s*(?:\s*[^\w\s]+\s*)+taostats"
+_PUBLIC_NAME_PATHS = (
+    "/subnets/{netuid}/distribution",
+    "/subnets/{netuid}/metagraph",
+    "/subnets/{netuid}",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -400,14 +406,25 @@ class TaostatsClient:
         return names
 
     async def _scrape_public_subnet_name(self, netuid: int) -> Optional[str]:
-        url = f"{PUBLIC_BASE_URL}/subnets/{netuid}/distribution"
-        try:
-            response = await self._c.get(url, timeout=15.0)
-            response.raise_for_status()
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Taostats public scrape failed for SN%d: %s", netuid, exc)
-            return None
-        return _extract_public_subnet_name(response.text, netuid)
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        for path_template in _PUBLIC_NAME_PATHS:
+            url = f"{PUBLIC_BASE_URL}{path_template.format(netuid=netuid)}"
+            try:
+                response = await self._c.get(url, timeout=15.0, headers=headers)
+                response.raise_for_status()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Taostats public scrape failed for SN%d (%s): %s", netuid, path_template, exc)
+                continue
+            candidate = _extract_public_subnet_name(response.text, netuid)
+            if candidate:
+                return candidate
+        return None
 
 
 def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
@@ -423,7 +440,7 @@ def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
     )
     html_match = pattern.search(html_text)
     if html_match:
-        candidate = html_match.group("name").strip()
+        candidate = _normalize_public_subnet_name(html_match.group("name"))
         if _is_valid_public_subnet_name(candidate):
             return candidate
 
@@ -445,6 +462,7 @@ def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
                     continue
                 if re.fullmatch(r"\d+(?:\.\d+)?", candidate):
                     continue
+                candidate = _normalize_public_subnet_name(candidate)
                 if _is_valid_public_subnet_name(candidate):
                     return candidate
     return None
@@ -462,10 +480,25 @@ def _extract_public_subnet_name_from_json(html_text: str, netuid: int) -> Option
             name_match = pattern.search(window)
             if not name_match:
                 continue
-            candidate = html.unescape(name_match.group("name")).strip()
+            candidate = _normalize_public_subnet_name(name_match.group("name"))
             if _is_valid_public_subnet_name(candidate):
                 return candidate
     return None
+
+
+def _normalize_public_subnet_name(candidate: Optional[str]) -> str:
+    value = unicodedata.normalize("NFKC", html.unescape(candidate or "")).strip()
+    replacements = {
+        "Ï„": "T",
+        "τ": "T",
+        "Τ": "T",
+        "Â·": "·",
+    }
+    for source, target in replacements.items():
+        if source in value:
+            value = value.replace(source, target)
+    value = re.sub(r"\s+", " ", value)
+    return value.strip()
 
 
 def _is_valid_public_subnet_name(candidate: Optional[str]) -> bool:

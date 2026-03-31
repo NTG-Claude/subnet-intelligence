@@ -256,7 +256,7 @@ async def test_load_subnet_names_uses_fetched_at_not_file_mtime():
              patch("scorer.run.TaostatsClient", return_value=mock_client):
             names = await _load_subnet_names([3])
 
-        assert names[3] == "τemplar"
+        assert names[3] == "Templar"
     finally:
         if cache_file.exists():
             cache_file.unlink()

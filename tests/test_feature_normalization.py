@@ -1,4 +1,4 @@
-from collectors.models import RawSubnetSnapshot
+from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from features.metrics import compute_raw_features, normalize_features
 
 
@@ -45,4 +45,25 @@ def test_missing_consensus_metrics_are_neutral_not_zeroed():
     assert debug["validator_weight_entropy"].normalized == 0.5
     assert debug["cross_validator_disagreement"].normalized == 0.5
     assert debug["meaningful_discrimination"].normalized == 0.5
+
+
+def test_mispricing_temporal_features_follow_quality_history_not_active_history():
+    snapshot = _snapshot(
+        active_neurons_7d=5,
+        unique_coldkeys=8,
+        n_validators=6,
+        incentive_scores=[0.4, 0.3, 0.3],
+        alpha_price_tao=10.0,
+        history=[
+            HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, active_ratio=0.9, fundamental_quality=0.20),
+            HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.0, active_ratio=0.9, fundamental_quality=0.28),
+            HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.0, active_ratio=0.9, fundamental_quality=0.38),
+        ],
+    )
+
+    bundle = compute_raw_features(snapshot)
+
+    assert bundle.raw["quality_acceleration"] is not None
+    assert bundle.raw["quality_acceleration"] > 0
+    assert bundle.raw["price_response_lag_to_quality_shift"] > 0
 

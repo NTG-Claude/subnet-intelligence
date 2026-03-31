@@ -38,6 +38,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     concentration = max(bundle.raw.get("validator_dominance") or 0.0, bundle.raw.get("incentive_concentration") or 0.0)
     update_freshness = bundle.raw.get("update_freshness") or 0.0
     participation = bundle.raw.get("participation_breadth") or 0.0
+    concentration_delta = bundle.raw.get("concentration_delta")
     pool_depth = snapshot.tao_in_pool or 0.0
     confidence_inputs = bundle.raw.get("data_coverage") or 0.0
     staking_apy = 0.0
@@ -96,10 +97,22 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         force_negative_label = True
         force_label = "Dereg Candidate"
 
+    liquid_flagship_concentration = (
+        pool_depth >= 50_000
+        and max_slippage <= 0.03
+        and participation >= 0.45
+        and (concentration_delta is None or concentration_delta <= 0.02)
+    )
+
     if concentration > 0.60:
         activated.append("concentration_caps_fundamental_quality")
-        quality_cap = 0.42 if quality_cap is None else min(quality_cap, 0.42)
-        fragility_floor = 0.65 if fragility_floor is None else max(fragility_floor, 0.65)
+        if liquid_flagship_concentration:
+            activated.append("liquid_flagship_concentration_watchlist")
+            quality_cap = 0.52 if quality_cap is None else min(quality_cap, 0.52)
+            fragility_floor = 0.58 if fragility_floor is None else max(fragility_floor, 0.58)
+        else:
+            quality_cap = 0.42 if quality_cap is None else min(quality_cap, 0.42)
+            fragility_floor = 0.65 if fragility_floor is None else max(fragility_floor, 0.65)
 
     if consensus_hollow:
         activated.append("uninformative_consensus_caps_confidence")

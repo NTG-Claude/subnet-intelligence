@@ -211,6 +211,37 @@ def test_consensus_hollow_forces_consensus_hollow_label():
     assert label == "Consensus Hollow"
 
 
+def test_deep_liquid_concentration_uses_watchlist_caps_not_harsh_cap():
+    snapshot = _snapshot(
+        tao_in_pool=150000.0,
+        emission_per_block_tao=0.04,
+        active_neurons_7d=10,
+        unique_coldkeys=7,
+        n_validators=5,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.5,
+        participation_breadth=0.52,
+        slippage_10_tao=0.01,
+        slippage_50_tao=0.02,
+        validator_dominance=0.92,
+        incentive_concentration=0.65,
+        concentration_delta=-0.03,
+        validator_weight_entropy=0.55,
+        cross_validator_disagreement=0.18,
+        meaningful_discrimination=0.32,
+        dereg_risk_proxy=0.12,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "concentration_caps_fundamental_quality" in rules.activated
+    assert "liquid_flagship_concentration_watchlist" in rules.activated
+    assert rules.quality_cap == 0.52
+    assert rules.fragility_floor == 0.58
+
+
 def test_liquid_hyped_subnet_can_be_reflexive_crowded_trade():
     snapshot = _snapshot(
         tao_in_pool=100000.0,

@@ -4,7 +4,7 @@
   "0": "Root",
   "1": "Apex",
   "2": "Omron",
-  "3": "MyShell",
+  "3": "Templar",
   "4": "Targon",
   "5": "OpenKaito",
   "6": "Nous Research",
@@ -54,5 +54,6 @@
   "51": "Celium",
   "52": "Datura",
   "57": "Gaia",
-  "64": "Chutes"
+  "64": "Chutes",
+  "75": "Hippius"
 }
