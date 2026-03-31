@@ -1,7 +1,8 @@
 from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from features.types import AxisScores
+from features.types import FeatureBundle, PrimarySignals
 from regimes.hard_rules import HardRuleResult
-from scoring.engine import _apply_total_cap, build_scores
+from scoring.engine import _apply_total_cap, _ranking_priority_score, build_scores
 
 
 def test_apply_total_cap_keeps_plain_caps_for_non_negative_rules():
@@ -90,3 +91,16 @@ def test_incomplete_snapshot_uses_recent_history_instead_of_dereg_penalty():
     assert artifacts.score > 40.0
     assert artifacts.label == "Under Review"
     assert "telemetry_gap_uses_recent_history" in artifacts.explanation["activated_hard_rules"]
+
+
+def test_ranking_priority_rewards_market_relevance_for_flagship_like_subnets():
+    signals = PrimarySignals(
+        fundamental_quality=0.50,
+        mispricing_signal=0.62,
+        fragility_risk=0.60,
+        signal_confidence=0.48,
+    )
+    flagship_bundle = FeatureBundle(raw={"market_relevance_proxy": 0.78})
+    micro_bundle = FeatureBundle(raw={"market_relevance_proxy": 0.12})
+
+    assert _ranking_priority_score(signals, flagship_bundle) > _ranking_priority_score(signals, micro_bundle)

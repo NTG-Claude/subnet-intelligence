@@ -242,6 +242,38 @@ def test_deep_liquid_concentration_uses_watchlist_caps_not_harsh_cap():
     assert rules.fragility_floor == 0.58
 
 
+def test_market_relevant_concentration_uses_watchlist_caps():
+    snapshot = _snapshot(
+        tao_in_pool=25_000.0,
+        emission_per_block_tao=0.03,
+        active_neurons_7d=7,
+        unique_coldkeys=5,
+        n_validators=4,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.35,
+        participation_breadth=0.34,
+        market_relevance_proxy=0.66,
+        slippage_10_tao=0.02,
+        slippage_50_tao=0.05,
+        validator_dominance=0.82,
+        incentive_concentration=0.66,
+        concentration_delta=0.01,
+        validator_weight_entropy=0.52,
+        cross_validator_disagreement=0.18,
+        meaningful_discrimination=0.31,
+        dereg_risk_proxy=0.15,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "concentration_caps_fundamental_quality" in rules.activated
+    assert "market_relevant_concentration_watchlist" in rules.activated
+    assert rules.quality_cap == 0.56
+    assert rules.fragility_floor == 0.60
+
+
 def test_liquid_hyped_subnet_can_be_reflexive_crowded_trade():
     snapshot = _snapshot(
         tao_in_pool=100000.0,

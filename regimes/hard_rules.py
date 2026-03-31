@@ -40,6 +40,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     participation = bundle.raw.get("participation_breadth") or 0.0
     concentration_delta = bundle.raw.get("concentration_delta")
     pool_depth = snapshot.tao_in_pool or 0.0
+    market_relevance = bundle.raw.get("market_relevance_proxy") or 0.0
     confidence_inputs = bundle.raw.get("data_coverage") or 0.0
     staking_apy = 0.0
     if pool_depth > 0:
@@ -103,6 +104,13 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         and participation >= 0.45
         and (concentration_delta is None or concentration_delta <= 0.02)
     )
+    market_relevant_concentration = (
+        pool_depth >= 15_000
+        and market_relevance >= 0.55
+        and max_slippage <= 0.06
+        and participation >= 0.30
+        and (concentration_delta is None or concentration_delta <= 0.05)
+    )
 
     if concentration > 0.60:
         activated.append("concentration_caps_fundamental_quality")
@@ -110,6 +118,10 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
             activated.append("liquid_flagship_concentration_watchlist")
             quality_cap = 0.52 if quality_cap is None else min(quality_cap, 0.52)
             fragility_floor = 0.58 if fragility_floor is None else max(fragility_floor, 0.58)
+        elif market_relevant_concentration:
+            activated.append("market_relevant_concentration_watchlist")
+            quality_cap = 0.56 if quality_cap is None else min(quality_cap, 0.56)
+            fragility_floor = 0.60 if fragility_floor is None else max(fragility_floor, 0.60)
         else:
             quality_cap = 0.42 if quality_cap is None else min(quality_cap, 0.42)
             fragility_floor = 0.65 if fragility_floor is None else max(fragility_floor, 0.65)

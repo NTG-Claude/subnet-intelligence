@@ -67,3 +67,24 @@ def test_mispricing_temporal_features_follow_quality_history_not_active_history(
     assert bundle.raw["quality_acceleration"] > 0
     assert bundle.raw["price_response_lag_to_quality_shift"] > 0
 
+
+def test_market_relevance_proxy_rewards_scaled_participating_subnets():
+    flagship = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=8,
+            unique_coldkeys=9,
+            n_validators=7,
+            tao_in_pool=75_000.0,
+        )
+    )
+    micro = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=2,
+            unique_coldkeys=2,
+            n_validators=2,
+            tao_in_pool=120.0,
+        )
+    )
+
+    assert flagship.raw["market_relevance_proxy"] > micro.raw["market_relevance_proxy"]
+

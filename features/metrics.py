@@ -175,6 +175,25 @@ def _coverage_ratio(values: dict[str, float | None], keys: list[str]) -> float:
     return safe_ratio(available, len(keys))
 
 
+def _market_relevance_proxy(
+    reserve_depth: float,
+    active_ratio: float,
+    participation_breadth: float,
+    validator_participation: float,
+) -> float:
+    reserve_score = clamp01(math.log1p(max(reserve_depth, 0.0)) / math.log(200_000))
+    return clamp01(
+        fmean(
+            [
+                reserve_score,
+                active_ratio,
+                participation_breadth,
+                validator_participation,
+            ]
+        )
+    )
+
+
 def _cohort_key(bundle: FeatureBundle) -> str:
     reserve_depth = bundle.raw.get("reserve_depth") or 0.0
     active_ratio = bundle.raw.get("active_ratio") or 0.0
@@ -276,6 +295,12 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     )
     reversal_risk = max(0.0, (price_change or 0.0) - max(quality_change or 0.0, 0.0))
     crowding_proxy = fmean([concentration_now, clamp01(avg_slippage or 0.0), clamp01(max(price_change or 0.0, 0.0))])
+    market_relevance = _market_relevance_proxy(
+        snapshot.tao_in_pool,
+        active_ratio,
+        participation_breadth,
+        validator_participation,
+    )
     raw = {
         "active_ratio": active_ratio,
         "participation_breadth": participation_breadth,
@@ -306,6 +331,8 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "crowding_proxy": crowding_proxy,
         "sharp_short_term_reversal_risk": reversal_risk,
         "performance_driven_by_few_actors": concentration_now,
+        "market_relevance_proxy": market_relevance,
+        "confidence_market_relevance": market_relevance,
         "registration_openness": 1.0 if snapshot.registration_allowed else 0.0,
         "pow_registration_enabled": 1.0 if snapshot.difficulty > 0 else 0.0,
         "burn_registration_enabled": 1.0 if snapshot.min_burn > 0 or snapshot.max_burn > 0 else 0.0,
@@ -378,6 +405,7 @@ METRIC_MAP = {
     "participation_breadth": ("direct_onchain", "fundamental_quality", 0.10, False),
     "validator_participation": ("direct_onchain", "fundamental_quality", 0.08, False),
     "incentive_distribution_quality": ("derived_onchain", "fundamental_quality", 0.10, False),
+    "market_relevance_proxy": ("derived_onchain", "fundamental_quality", 0.06, False),
     "update_freshness": ("direct_onchain", "signal_confidence", 0.18, False),
     "validator_weight_entropy": ("derived_onchain", "fundamental_quality", 0.05, False),
     "cross_validator_disagreement": ("derived_onchain", "fundamental_quality", 0.10, False),
@@ -413,6 +441,7 @@ METRIC_MAP = {
     "history_depth_score": ("needs_history", "signal_confidence", 0.18, False),
     "proxy_reliance_penalty": ("derived_onchain", "signal_confidence", 0.20, True),
     "low_manipulation_signal_share": ("derived_onchain", "signal_confidence", 0.16, False),
+    "confidence_market_relevance": ("derived_onchain", "signal_confidence", 0.06, False),
     "repo_commits_30d": ("external_proxy", "signal_confidence", 0.04, False),
     "repo_contributors_30d": ("external_proxy", "signal_confidence", 0.04, False),
     "repo_recency": ("external_proxy", "signal_confidence", 0.02, False),
@@ -453,17 +482,21 @@ def _build_cohort_edges(raw_bundles: list[FeatureBundle]) -> None:
         quality_population = [b.raw.get("active_ratio") for b in group]
         reserve_population = [b.raw.get("reserve_depth") for b in group]
         change_population = [b.raw.get("price_response_lag_to_quality_shift") for b in group]
+        relevance_population = [b.raw.get("market_relevance_proxy") for b in group]
         for bundle in group:
             bundle.raw["cohort_quality_edge"] = percentile_rank(bundle.raw.get("active_ratio"), quality_population)
             bundle.raw["cohort_liquidity_edge"] = percentile_rank(bundle.raw.get("reserve_depth"), reserve_population)
             bundle.raw["cohort_mispricing_edge"] = percentile_rank(bundle.raw.get("price_response_lag_to_quality_shift"), change_population)
+            bundle.raw["cohort_relevance_edge"] = percentile_rank(bundle.raw.get("market_relevance_proxy"), relevance_population)
 
 
 def _inject_cohort_metrics(bundle: FeatureBundle) -> None:
     for name, category, output, weight in [
         ("cohort_quality_edge", "cohort_relative", "fundamental_quality", 0.02),
         ("cohort_liquidity_edge", "cohort_relative", "fundamental_quality", 0.02),
+        ("cohort_relevance_edge", "cohort_relative", "fundamental_quality", 0.03),
         ("cohort_mispricing_edge", "cohort_relative", "mispricing_signal", 0.06),
+        ("cohort_relevance_edge", "cohort_relative", "signal_confidence", 0.04),
     ]:
         value = bundle.raw.get(name)
         bundle.metrics[name] = FeatureMetric(

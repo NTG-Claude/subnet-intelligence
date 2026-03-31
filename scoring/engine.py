@@ -173,15 +173,19 @@ def _legacy_axes_from_primary(signals: PrimarySignals, bundle: FeatureBundle, st
     )
 
 
-def _legacy_total_score(signals: PrimarySignals) -> float:
+def _ranking_priority_score(signals: PrimarySignals, bundle: FeatureBundle) -> float:
+    market_relevance = bundle.raw.get("market_relevance_proxy") or bundle.raw.get("cohort_relevance_edge") or 0.0
+    fragility_headwind = max(0.0, (signals.fragility_risk - 0.55) / 0.45)
+    resilience = max(0.0, 1.0 - fragility_headwind)
     return max(
         0.0,
         min(
             1.0,
-            0.40 * signals.fundamental_quality
-            + 0.25 * signals.mispricing_signal
-            + 0.20 * (1.0 - signals.fragility_risk)
-            + 0.15 * signals.signal_confidence,
+            0.30 * signals.fundamental_quality
+            + 0.32 * signals.mispricing_signal
+            + 0.16 * signals.signal_confidence
+            + 0.14 * resilience
+            + 0.08 * market_relevance,
         ),
     )
 
@@ -233,7 +237,7 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
                 signal_confidence=max(0.35, fallback_primary.signal_confidence),
             )
             axes = _legacy_axes_from_primary(fallback_primary, bundle, stress.robustness)
-            score = _legacy_total_score(fallback_primary)
+            score = _ranking_priority_score(fallback_primary, bundle)
             label = "Under Review"
             thesis = (
                 "Latest telemetry is incomplete, so the framework falls back to the subnet's recently validated "
@@ -263,7 +267,7 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
             signal_confidence=primary.signal_confidence,
         )
         axes = _legacy_axes_from_primary(primary, bundle, stress.robustness)
-        score = _apply_total_cap(_legacy_total_score(primary), primary, rules)
+        score = _apply_total_cap(_ranking_priority_score(primary, bundle), primary, rules)
         label, thesis = assign_label(primary, bundle, stress, rules)
         explanation = build_explanation(bundle, primary, axes, stress, rules, label, thesis)
         results[snapshot.netuid] = ScoreArtifacts(
