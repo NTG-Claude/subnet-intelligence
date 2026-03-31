@@ -16,7 +16,7 @@ async def test_get_skips_when_api_key_missing():
 
 
 def test_extract_public_subnet_name_from_title():
-    html = "<html><head><title>0.0448 Â· SN4 Â· Targon Â· taostats</title></head></html>"
+    html = "<html><head><title>0.0448 · SN4 · Targon · taostats</title></head></html>"
     assert _extract_public_subnet_name(html, 4) == "Targon"
 
 
@@ -36,3 +36,13 @@ def test_extract_public_subnet_name_prefers_full_json_name_over_truncated_title(
         '<body>{"netuid":13,"name":"Data Universe","subnet_name":"Data Universe"}</body></html>'
     )
     assert _extract_public_subnet_name(html, 13) == "Data Universe"
+
+
+def test_extract_public_subnet_name_ignores_suspicious_meta_payload():
+    html = (
+        '<html><head><title>0.0044 · SN86 · taostats</title></head>'
+        '<body>{"netuid":86,"name":"description","content":"0.0044 · SN86 · taostats\\"}],'
+        '[\\"$\\",\\"meta\\",\\"1\\",{\\"name\\":\\"description\\"}]}'
+        '</body></html>'
+    )
+    assert _extract_public_subnet_name(html, 86) is None

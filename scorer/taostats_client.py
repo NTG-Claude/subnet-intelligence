@@ -24,8 +24,13 @@ PUBLIC_BASE_URL = "https://taostats.io"
 _API_KEY = os.getenv("TAOSTATS_API_KEY", "")
 _PUBLIC_REQUEST_DELAY_SECONDS = 0.35
 _TITLE_RE = re.compile(r"<title>\s*(?P<title>.*?)\s*</title>", re.IGNORECASE | re.DOTALL)
-_PUBLIC_NAME_RE_TEMPLATE = r"SN\s*{netuid}\s*(?:·|Â·)\s*(?P<name>.+?)\s*(?:·|Â·)\s*taostats"
-_PUBLIC_JSON_NAME_RE_TEMPLATE = r'"netuid"\s*:\s*{netuid}\b(?P<body>.{{0,2500}}?)"(?:name|subnet_name)"\s*:\s*"(?P<name>[^"]+)"'
+_NETUID_RE = re.compile(r'"netuid"\s*:\s*(?P<netuid>\d+)', re.IGNORECASE)
+_JSON_NAME_PATTERNS = (
+    re.compile(r'"subnet_name"\s*:\s*"(?P<name>[^"]+)"', re.IGNORECASE),
+    re.compile(r'"name"\s*:\s*"(?P<name>[^"]+)"', re.IGNORECASE),
+)
+_PUBLIC_NAME_RE_TEMPLATE = r"SN\s*{netuid}\s*(?:\s*[^\w\s]+\s*)+(?P<name>.+?)\s*(?:\s*[^\w\s]+\s*)+taostats"
+
 
 # ---------------------------------------------------------------------------
 # Pydantic response models
@@ -408,15 +413,9 @@ class TaostatsClient:
 def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
     html_text = html.unescape(page_html)
 
-    json_pattern = re.compile(
-        _PUBLIC_JSON_NAME_RE_TEMPLATE.format(netuid=netuid),
-        re.IGNORECASE | re.DOTALL,
-    )
-    json_match = json_pattern.search(html_text)
-    if json_match:
-        candidate = html.unescape(json_match.group("name")).strip()
-        if candidate and "..." not in candidate and "\u2026" not in candidate:
-            return candidate
+    json_candidate = _extract_public_subnet_name_from_json(html_text, netuid)
+    if json_candidate:
+        return json_candidate
 
     pattern = re.compile(
         _PUBLIC_NAME_RE_TEMPLATE.format(netuid=netuid),
@@ -425,7 +424,7 @@ def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
     html_match = pattern.search(html_text)
     if html_match:
         candidate = html_match.group("name").strip()
-        if candidate and "..." not in candidate and "\u2026" not in candidate:
+        if _is_valid_public_subnet_name(candidate):
             return candidate
 
     match = _TITLE_RE.search(page_html)
@@ -433,7 +432,7 @@ def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
         return None
 
     title = html.unescape(match.group("title"))
-    parts = [part.strip() for part in re.split(r"(?:·|Â·)", title) if part.strip()]
+    parts = [part.strip() for part in re.split(r"\s*[^\w\s]+\s*", title) if part.strip()]
     sn_tokens = {f"SN{netuid}".lower(), f"SN {netuid}".lower()}
 
     for index, part in enumerate(parts):
@@ -446,5 +445,42 @@ def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
                     continue
                 if re.fullmatch(r"\d+(?:\.\d+)?", candidate):
                     continue
+                if _is_valid_public_subnet_name(candidate):
+                    return candidate
+    return None
+
+
+def _extract_public_subnet_name_from_json(html_text: str, netuid: int) -> Optional[str]:
+    matches = list(_NETUID_RE.finditer(html_text))
+    for index, match in enumerate(matches):
+        if int(match.group("netuid")) != netuid:
+            continue
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else min(len(html_text), start + 4000)
+        window = html_text[start:end]
+        for pattern in _JSON_NAME_PATTERNS:
+            name_match = pattern.search(window)
+            if not name_match:
+                continue
+            candidate = html.unescape(name_match.group("name")).strip()
+            if _is_valid_public_subnet_name(candidate):
                 return candidate
     return None
+
+
+def _is_valid_public_subnet_name(candidate: Optional[str]) -> bool:
+    if not candidate:
+        return False
+    value = candidate.strip()
+    if not value or len(value) > 128:
+        return False
+    if "..." in value or "…" in value:
+        return False
+    lower = value.lower()
+    if lower in {"description", "content", "title", "viewport", "metadata"}:
+        return False
+    if "taostats" in lower or lower.startswith("http"):
+        return False
+    if any(token in value for token in ('<', '>', '{', '}', '[', ']', '\\"', "\\u", "\\n")):
+        return False
+    return True

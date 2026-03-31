@@ -170,12 +170,13 @@ def save_scores(scores: list, raw_data_by_netuid: Optional[dict] = None) -> None
 def upsert_metadata(netuid: int, name: Optional[str], github_url: Optional[str], website: Optional[str]) -> None:
     """Insert or update a subnet's metadata row."""
     now = datetime.now(timezone.utc)
+    safe_name = _sanitize_metadata_name(name, netuid)
     with SessionLocal() as session:
         row = session.get(SubnetMetadataRow, netuid)
         if row is None:
             row = SubnetMetadataRow(netuid=netuid, first_seen=now)
             session.add(row)
-        row.name = name
+        row.name = safe_name
         row.github_url = github_url
         row.website = website
         row.last_updated = now
@@ -320,3 +321,18 @@ def _row_to_dict(row: SubnetScoreRow) -> dict:
         "staking_apy": row.staking_apy,
         "raw_data": row.raw_data,
     }
+
+
+def _sanitize_metadata_name(name: Optional[str], netuid: int) -> Optional[str]:
+    if name is None:
+        return None
+    value = str(name).strip()
+    if not value:
+        return None
+    if len(value) > 128:
+        logger.warning("Skipping suspiciously long subnet name for SN%d (%d chars)", netuid, len(value))
+        return None
+    if any(token in value for token in ("taostats", "<", ">", "{", "}", "[", "]", '\\"', "\\u", "\\n")):
+        logger.warning("Skipping suspicious subnet name payload for SN%d: %r", netuid, value[:80])
+        return None
+    return value[:128]

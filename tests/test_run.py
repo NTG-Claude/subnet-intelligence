@@ -144,6 +144,29 @@ async def test_load_subnet_names_ignores_metadata_keys():
 
 
 @pytest.mark.asyncio
+async def test_run_logs_top3_sorted_by_score():
+    a = _make_score(1, 45.0)
+    a.analysis = {"investable": True}
+    b = _make_score(2, 36.0)
+    b.analysis = {"investable": True}
+    c = _make_score(3, 41.0)
+    c.analysis = {"investable": True}
+
+    with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=[a, b, c])), \
+         patch("scorer.run.save_scores"), \
+         patch("scorer.run.create_tables"), \
+         patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity())), \
+         patch("scorer.run._load_subnet_names", new=AsyncMock(return_value={})), \
+         patch("scorer.run.upsert_metadata"), \
+         patch("scorer.run.logger") as mock_logger:
+        await run(dry_run=False)
+
+    top3_logs = [call.args[1] for call in mock_logger.info.call_args_list if call.args and call.args[0] == "Top 3: %s"]
+    assert top3_logs == ["SN1(45), SN3(41), SN2(36)"]
+
+
+@pytest.mark.asyncio
 async def test_run_logs_top3_from_investable_subnets():
     root = _make_score(0, 99.0)
     root.analysis = {"investable": False}

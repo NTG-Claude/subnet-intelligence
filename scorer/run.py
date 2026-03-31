@@ -190,7 +190,11 @@ async def run(
     logger.info("Computed %d scores in %.1fs", len(scores), elapsed_fetch)
 
     # 3. Summary log: Top 3
-    top3 = [score for score in scores if score.analysis.get("investable", True)][:3]
+    top3 = sorted(
+        [score for score in scores if score.analysis.get("investable", True)],
+        key=lambda score: score.score,
+        reverse=True,
+    )[:3]
     top3_str = ", ".join(f"SN{s.netuid}({s.score:.0f})" for s in top3)
     logger.info("Top 3: %s", top3_str)
 
