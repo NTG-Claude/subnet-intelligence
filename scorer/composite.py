@@ -126,9 +126,15 @@ def _to_snapshot(d: _SubnetData, current_block: int, history: list) -> RawSubnet
 
 
 def _analysis_payload(snapshot: RawSubnetSnapshot, artifacts) -> dict:
+    is_root = snapshot.netuid == 0
     return {
-        "label": artifacts.label,
-        "thesis": artifacts.thesis,
+        "label": "Root Infrastructure" if is_root else artifacts.label,
+        "thesis": (
+            "Root subnet metrics are reported for context only and excluded from investable opportunity rankings."
+            if is_root else artifacts.thesis
+        ),
+        "investable": not is_root,
+        "special_case": "root_subnet" if is_root else None,
         "analysis": artifacts.explanation,
         "raw_metrics": {
             **artifacts.bundle.raw,
@@ -210,7 +216,11 @@ async def compute_all_subnets(netuids: Optional[list[int]] = None) -> list[Subne
             )
         )
 
-    scores.sort(key=lambda s: s.score, reverse=True)
-    for index, score in enumerate(scores, start=1):
+    investable_scores = sorted(
+        [score for score in scores if score.analysis.get("investable", True)],
+        key=lambda s: s.score,
+        reverse=True,
+    )
+    for index, score in enumerate(investable_scores, start=1):
         score.rank = index
     return scores

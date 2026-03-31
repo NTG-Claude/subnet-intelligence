@@ -122,13 +122,18 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 def _total_subnet_count() -> int:
-    return len(get_latest_scores())
+    return len([row for row in get_latest_scores() if _is_investable_row(row)])
 
 
 def _compute_percentile(rank: Optional[int], total: int) -> Optional[float]:
     if rank is None or total == 0:
         return None
     return round((1 - (rank - 1) / total) * 100, 1)
+
+
+def _is_investable_row(row: dict) -> bool:
+    raw_data = row.get("raw_data") or {}
+    return raw_data.get("investable", True)
 
 
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
@@ -202,7 +207,7 @@ async def list_subnets(
     if cached is not None:
         return cached
 
-    all_rows = get_latest_scores()
+    all_rows = [r for r in get_latest_scores() if _is_investable_row(r)]
     meta_by_netuid = get_all_metadata()
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     total = len(filtered)
@@ -237,7 +242,8 @@ async def get_subnet(
         return cached
 
     all_rows = get_latest_scores()
-    total = len(all_rows)
+    investable_rows = [r for r in all_rows if _is_investable_row(r)]
+    total = len(investable_rows)
 
     row = next((r for r in all_rows if r["netuid"] == netuid), None)
     if row is None:
@@ -339,8 +345,9 @@ async def latest_run(
         return cached
 
     rows = get_latest_scores()
+    investable_rows = [r for r in rows if _is_investable_row(r)]
     last_ts = max((r["computed_at"] for r in rows if r.get("computed_at")), default=None)
-    result = LatestRunResponse(last_score_run=last_ts, subnet_count=len(rows))
+    result = LatestRunResponse(last_score_run=last_ts, subnet_count=len(investable_rows))
     _cache_set("latest_run", result)
     return result
 
@@ -359,7 +366,7 @@ async def leaderboard(
     if cached is not None:
         return cached
 
-    all_rows = get_latest_scores()
+    all_rows = [r for r in get_latest_scores() if _is_investable_row(r)]
     meta_by_netuid = get_all_metadata()
     total = len(all_rows)
 
