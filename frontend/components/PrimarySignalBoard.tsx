@@ -76,6 +76,10 @@ export default function PrimarySignalBoard({ subnets }: { subnets: SubnetSummary
                   <div className="min-w-0">
                     <div className="text-xs uppercase tracking-[0.2em] text-stone-500">#{index + 1} SN{subnet.netuid}</div>
                     <div className="truncate text-sm font-medium text-stone-100">{subnet.name ?? `Subnet ${subnet.netuid}`}</div>
+                    <div className="mt-1 text-[11px] text-stone-500">
+                      Pool {(subnet.tao_in_pool ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} · APY{' '}
+                      {subnet.staking_apy != null ? `${subnet.staking_apy.toFixed(0)}%` : 'n/a'}
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-semibold text-stone-100">{valueOf(subnet, card.keyName).toFixed(0)}</div>

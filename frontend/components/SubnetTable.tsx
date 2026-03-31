@@ -5,8 +5,6 @@ import Link from 'next/link'
 import { SubnetSummary } from '@/lib/api'
 
 type SortKey =
-  | 'rank'
-  | 'score'
   | 'name'
   | 'netuid'
   | 'label'
@@ -15,17 +13,11 @@ type SortKey =
   | 'fragility_risk'
   | 'signal_confidence'
 
-type ViewMode = 'mispricing' | 'quality' | 'resilience' | 'confidence' | 'legacy'
+type ViewMode = 'mispricing' | 'quality' | 'resilience' | 'confidence'
 
 interface Props {
   subnets: SubnetSummary[]
   pageSize?: number
-}
-
-function scoreBarColor(score: number): string {
-  if (score >= 70) return 'bg-emerald-400'
-  if (score >= 40) return 'bg-amber-300'
-  return 'bg-rose-400'
 }
 
 function signalBarColor(value: number, tone: 'quality' | 'mispricing' | 'fragility' | 'confidence'): string {
@@ -35,7 +27,10 @@ function signalBarColor(value: number, tone: 'quality' | 'mispricing' | 'fragili
   return value >= 65 ? 'bg-fuchsia-400' : value >= 40 ? 'bg-rose-300' : 'bg-stone-600'
 }
 
-function signalValue(subnet: SubnetSummary, key: 'fundamental_quality' | 'mispricing_signal' | 'fragility_risk' | 'signal_confidence'): number | null {
+function signalValue(
+  subnet: SubnetSummary,
+  key: 'fundamental_quality' | 'mispricing_signal' | 'fragility_risk' | 'signal_confidence',
+): number | null {
   return subnet.primary_outputs?.[key] ?? null
 }
 
@@ -48,7 +43,12 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return subnets.filter((s) => (s.name ?? '').toLowerCase().includes(q) || String(s.netuid).includes(q) || (s.label ?? '').toLowerCase().includes(q))
+    return subnets.filter(
+      (s) =>
+        (s.name ?? '').toLowerCase().includes(q) ||
+        String(s.netuid).includes(q) ||
+        (s.label ?? '').toLowerCase().includes(q),
+    )
   }, [subnets, search])
 
   const sorted = useMemo(() => {
@@ -62,15 +62,17 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
       } else if (sortKey === 'label') {
         va = a.label ?? ''
         vb = b.label ?? ''
-      } else if (sortKey === 'fundamental_quality' || sortKey === 'mispricing_signal' || sortKey === 'fragility_risk' || sortKey === 'signal_confidence') {
+      } else if (
+        sortKey === 'fundamental_quality' ||
+        sortKey === 'mispricing_signal' ||
+        sortKey === 'fragility_risk' ||
+        sortKey === 'signal_confidence'
+      ) {
         va = signalValue(a, sortKey) ?? (sortKey === 'fragility_risk' ? 999 : -1)
         vb = signalValue(b, sortKey) ?? (sortKey === 'fragility_risk' ? 999 : -1)
-      } else if (sortKey === 'rank') {
-        va = a.rank ?? 9999
-        vb = b.rank ?? 9999
       } else {
-        va = ((a as unknown as Record<string, unknown>)[sortKey] as number) ?? 0
-        vb = ((b as unknown as Record<string, unknown>)[sortKey] as number) ?? 0
+        va = ((a as unknown as Record<string, unknown>)[sortKey] as number | string) ?? 0
+        vb = ((b as unknown as Record<string, unknown>)[sortKey] as number | string) ?? 0
       }
 
       if (va < vb) return sortAsc ? -1 : 1
@@ -83,11 +85,34 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
   const pageData = sorted.slice(page * pageSize, (page + 1) * pageSize)
 
   const viewButtons: { mode: ViewMode; label: string; key: SortKey; asc: boolean; description: string }[] = [
-    { mode: 'mispricing', label: 'Mispricing First', key: 'mispricing_signal', asc: false, description: 'Expectation gaps and delayed price recognition first.' },
-    { mode: 'quality', label: 'Quality First', key: 'fundamental_quality', asc: false, description: 'Structural quality first, independent of the legacy score.' },
-    { mode: 'resilience', label: 'Lowest Fragility', key: 'fragility_risk', asc: true, description: 'Stress resilience first, with lower fragility ranked higher.' },
-    { mode: 'confidence', label: 'Highest Confidence', key: 'signal_confidence', asc: false, description: 'Evidence quality and signal trustworthiness first.' },
-    { mode: 'legacy', label: 'Legacy Composite', key: 'score', asc: false, description: 'Compatibility mode using the old composite score.' },
+    {
+      mode: 'mispricing',
+      label: 'Mispricing',
+      key: 'mispricing_signal',
+      asc: false,
+      description: 'Start with expectation gaps that may not be priced yet.',
+    },
+    {
+      mode: 'quality',
+      label: 'Quality',
+      key: 'fundamental_quality',
+      asc: false,
+      description: 'Sort by structural quality without collapsing back into one score.',
+    },
+    {
+      mode: 'resilience',
+      label: 'Resilience',
+      key: 'fragility_risk',
+      asc: true,
+      description: 'Lower fragility first when you want sturdier structures.',
+    },
+    {
+      mode: 'confidence',
+      label: 'Confidence',
+      key: 'signal_confidence',
+      asc: false,
+      description: 'Prioritize clean evidence and lower proxy dependence.',
+    },
   ]
 
   const setView = (mode: ViewMode) => {
@@ -153,14 +178,27 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
         <table className="w-full text-sm">
           <thead className="bg-white/5 text-xs uppercase tracking-[0.24em] text-stone-400">
             <tr>
-              <th className="px-4 py-3 text-left"><SortBtn k="netuid" label="SN" /></th>
-              <th className="px-4 py-3 text-left"><SortBtn k="name" label="Name" /></th>
-              <th className="hidden px-4 py-3 text-left xl:table-cell"><SortBtn k="label" label="Label" /></th>
-              <th className="hidden px-4 py-3 text-right lg:table-cell"><SortBtn k="fundamental_quality" label="FQ" /></th>
-              <th className="px-4 py-3 text-right"><SortBtn k="mispricing_signal" label="MP" /></th>
-              <th className="hidden px-4 py-3 text-right md:table-cell"><SortBtn k="fragility_risk" label="FR" /></th>
-              <th className="hidden px-4 py-3 text-right xl:table-cell"><SortBtn k="signal_confidence" label="CF" /></th>
-              <th className="px-4 py-3 text-right"><SortBtn k="score" label="Legacy" /></th>
+              <th className="px-4 py-3 text-left">
+                <SortBtn k="netuid" label="SN" />
+              </th>
+              <th className="px-4 py-3 text-left">
+                <SortBtn k="name" label="Name" />
+              </th>
+              <th className="hidden px-4 py-3 text-left lg:table-cell">
+                <SortBtn k="label" label="View" />
+              </th>
+              <th className="hidden px-4 py-3 text-right lg:table-cell">
+                <SortBtn k="fundamental_quality" label="FQ" />
+              </th>
+              <th className="px-4 py-3 text-right">
+                <SortBtn k="mispricing_signal" label="MP" />
+              </th>
+              <th className="hidden px-4 py-3 text-right md:table-cell">
+                <SortBtn k="fragility_risk" label="FR" />
+              </th>
+              <th className="hidden px-4 py-3 text-right xl:table-cell">
+                <SortBtn k="signal_confidence" label="CF" />
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
@@ -171,15 +209,18 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
                   <Link href={`/subnets/${s.netuid}`} className="font-medium text-stone-100 transition-colors hover:text-lime-300">
                     {s.name ?? `Subnet ${s.netuid}`}
                   </Link>
-                  {s.thesis && <div className="mt-1 max-w-md text-xs text-stone-500">{s.thesis}</div>}
+                  {s.thesis && <div className="mt-1 max-w-md text-xs leading-5 text-stone-500">{s.thesis}</div>}
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-400">
-                    <span>Rank #{s.rank ?? '—'}</span>
-                    <span>{s.percentile != null ? `${s.percentile.toFixed(1)} pct` : 'No percentile'}</span>
-                    <span>{s.alpha_price_tao != null && s.alpha_price_tao > 0 ? `Price τ${s.alpha_price_tao < 0.001 ? s.alpha_price_tao.toExponential(2) : s.alpha_price_tao.toFixed(4)}` : 'No price'}</span>
+                    <span>Pool {(s.tao_in_pool ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                    <span>
+                      {s.alpha_price_tao != null && s.alpha_price_tao > 0
+                        ? `Price t${s.alpha_price_tao < 0.001 ? s.alpha_price_tao.toExponential(2) : s.alpha_price_tao.toFixed(4)}`
+                        : 'No price'}
+                    </span>
                     <span>{s.staking_apy != null && s.staking_apy > 0 ? `APY ${s.staking_apy.toFixed(1)}%` : 'No APY'}</span>
                   </div>
                 </td>
-                <td className="hidden px-4 py-3 xl:table-cell">
+                <td className="hidden px-4 py-3 lg:table-cell">
                   <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-2.5 py-1 text-xs text-amber-100">
                     {s.label ?? 'Under Review'}
                   </span>
@@ -189,7 +230,10 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
                     <div className="space-y-1">
                       <div className="font-semibold tabular-nums text-stone-100">{s.primary_outputs.fundamental_quality.toFixed(1)}</div>
                       <div className="ml-auto h-1.5 w-20 overflow-hidden rounded-full bg-stone-900">
-                        <div className={`h-full rounded-full ${signalBarColor(s.primary_outputs.fundamental_quality, 'quality')}`} style={{ width: `${s.primary_outputs.fundamental_quality}%` }} />
+                        <div
+                          className={`h-full rounded-full ${signalBarColor(s.primary_outputs.fundamental_quality, 'quality')}`}
+                          style={{ width: `${s.primary_outputs.fundamental_quality}%` }}
+                        />
                       </div>
                     </div>
                   ) : (
@@ -201,7 +245,10 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
                     <div className="space-y-1">
                       <div className="font-semibold tabular-nums text-stone-100">{s.primary_outputs.mispricing_signal.toFixed(1)}</div>
                       <div className="ml-auto h-1.5 w-20 overflow-hidden rounded-full bg-stone-900">
-                        <div className={`h-full rounded-full ${signalBarColor(s.primary_outputs.mispricing_signal, 'mispricing')}`} style={{ width: `${s.primary_outputs.mispricing_signal}%` }} />
+                        <div
+                          className={`h-full rounded-full ${signalBarColor(s.primary_outputs.mispricing_signal, 'mispricing')}`}
+                          style={{ width: `${s.primary_outputs.mispricing_signal}%` }}
+                        />
                       </div>
                     </div>
                   ) : (
@@ -213,7 +260,10 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
                     <div className="space-y-1">
                       <div className="font-semibold tabular-nums text-stone-100">{s.primary_outputs.fragility_risk.toFixed(1)}</div>
                       <div className="ml-auto h-1.5 w-20 overflow-hidden rounded-full bg-stone-900">
-                        <div className={`h-full rounded-full ${signalBarColor(s.primary_outputs.fragility_risk, 'fragility')}`} style={{ width: `${s.primary_outputs.fragility_risk}%` }} />
+                        <div
+                          className={`h-full rounded-full ${signalBarColor(s.primary_outputs.fragility_risk, 'fragility')}`}
+                          style={{ width: `${s.primary_outputs.fragility_risk}%` }}
+                        />
                       </div>
                     </div>
                   ) : (
@@ -225,20 +275,15 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
                     <div className="space-y-1">
                       <div className="font-semibold tabular-nums text-stone-100">{s.primary_outputs.signal_confidence.toFixed(1)}</div>
                       <div className="ml-auto h-1.5 w-20 overflow-hidden rounded-full bg-stone-900">
-                        <div className={`h-full rounded-full ${signalBarColor(s.primary_outputs.signal_confidence, 'confidence')}`} style={{ width: `${s.primary_outputs.signal_confidence}%` }} />
+                        <div
+                          className={`h-full rounded-full ${signalBarColor(s.primary_outputs.signal_confidence, 'confidence')}`}
+                          style={{ width: `${s.primary_outputs.signal_confidence}%` }}
+                        />
                       </div>
                     </div>
                   ) : (
                     <span className="text-stone-600">Awaiting run</span>
                   )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-2">
-                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-stone-900">
-                      <div className={`h-full rounded-full ${scoreBarColor(s.score)}`} style={{ width: `${s.score}%` }} />
-                    </div>
-                    <span className="font-semibold tabular-nums text-stone-100">{s.score.toFixed(1)}</span>
-                  </div>
                 </td>
               </tr>
             ))}
@@ -255,15 +300,17 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
               disabled={page === 0}
               className="rounded-2xl bg-white/5 px-3 py-1.5 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              ← Prev
+              Prev
             </button>
-            <span className="px-3 py-1.5">{page + 1} / {totalPages}</span>
+            <span className="px-3 py-1.5">
+              {page + 1} / {totalPages}
+            </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page === totalPages - 1}
               className="rounded-2xl bg-white/5 px-3 py-1.5 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Next →
+              Next
             </button>
           </div>
         </div>

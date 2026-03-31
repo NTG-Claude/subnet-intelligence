@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 
 import AxisBreakdown from '@/components/AxisBreakdown'
-import ScoreGauge from '@/components/ScoreGauge'
 import ThesisPanel from '@/components/ThesisPanel'
 import { fetchSubnet, PrimaryOutputs } from '@/lib/api'
 
@@ -12,7 +11,7 @@ interface Props {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -26,18 +25,18 @@ function countSignals(outputs: PrimaryOutputs | null): number {
   return Object.values(outputs).filter((value) => Number.isFinite(value)).length
 }
 
-function formatPool(value: number | null): string {
-  if (value == null) return '—'
-  return value.toLocaleString('en-US', { maximumFractionDigits: 0 })
+function formatNumber(value: number | null, digits = 0): string {
+  if (value == null) return '-'
+  return value.toLocaleString('en-US', { maximumFractionDigits: digits, minimumFractionDigits: digits })
 }
 
 function formatPrice(value: number | null): string {
-  if (value == null) return '—'
-  return `τ${value.toFixed(4)}`
+  if (value == null) return '-'
+  return `t${value.toFixed(4)}`
 }
 
 function formatPercent(value: number | null): string {
-  if (value == null) return '—'
+  if (value == null) return '-'
   return `${value.toFixed(1)}%`
 }
 
@@ -68,117 +67,150 @@ export default async function SubnetPage({ params }: Props) {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <a href="/" className="inline-flex items-center gap-1 text-sm text-stone-400 transition-colors hover:text-stone-100">
-        ← All Subnets
+        Back to research universe
       </a>
 
       <section className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.18),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(52,211,153,0.16),_transparent_28%),linear-gradient(135deg,_rgba(28,25,23,0.96),_rgba(12,10,9,0.92))] p-8">
-        <div className="grid gap-8 lg:grid-cols-[0.72fr_1.28fr]">
-          <div className="flex justify-center">
-            <div className="space-y-3 text-center">
-              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Compatibility Score</div>
-              <ScoreGauge score={subnet.score} signalsWithData={signalCount} />
-              <p className="max-w-xs text-xs leading-relaxed text-stone-500">
-                Secondary only. The investment view should be driven by the four primary outputs, the thesis, and the break risks below.
-              </p>
-            </div>
-          </div>
-
+        <div className="space-y-6">
           <div className="space-y-5">
             <div className="flex flex-wrap items-start gap-3">
-              <h1 className="min-w-0 flex-[1_1_20rem] break-words text-3xl font-semibold text-stone-50">{subnet.name ?? `Subnet ${netuid}`}</h1>
+              <h1 className="min-w-0 flex-[1_1_20rem] break-words text-3xl font-semibold text-stone-50">
+                {subnet.name ?? `Subnet ${netuid}`}
+              </h1>
               <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-mono text-stone-300">SN{netuid}</span>
-              <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-3 py-1 text-xs text-amber-100">{subnet.label ?? 'Under Review'}</span>
+              <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-3 py-1 text-xs text-amber-100">
+                {subnet.label ?? 'Under Review'}
+              </span>
             </div>
 
-            <p className="max-w-3xl text-base leading-7 text-stone-300">{subnet.thesis ?? 'No concise thesis generated yet.'}</p>
+            <p className="max-w-3xl text-base leading-7 text-stone-300">
+              {subnet.thesis ?? 'No concise thesis generated yet.'}
+            </p>
 
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-stone-400">
-              {subnet.rank && <span>Rank <strong className="text-stone-100">#{subnet.rank}</strong></span>}
-              {subnet.percentile != null && <span>Percentile <strong className="text-stone-100">{subnet.percentile.toFixed(1)}</strong></span>}
-              {subnet.computed_at && <span>Updated <strong className="text-stone-100">{formatDate(subnet.computed_at)}</strong></span>}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-4">
-              {primary ? (
-                [
-                  { label: 'Fundamental Quality', value: primary.fundamental_quality },
-                  { label: 'Mispricing Signal', value: primary.mispricing_signal },
-                  { label: 'Fragility Risk', value: primary.fragility_risk },
-                  { label: 'Signal Confidence', value: primary.signal_confidence },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-3xl border border-white/10 bg-black/20 p-4">
-                    <div className="text-xs uppercase tracking-[0.24em] text-stone-500">{item.label}</div>
-                    <div className="mt-2 text-2xl font-semibold text-stone-100">{item.value.toFixed(1)}</div>
-                  </div>
-                ))
-              ) : (
-                <div className="sm:col-span-4 rounded-3xl border border-amber-300/15 bg-amber-300/5 p-4 text-sm text-amber-100">
-                  This live row has not been rescored into the new investment framework yet. A fresh production score run will populate the four primary outputs.
-                </div>
+              {subnet.rank && (
+                <span>
+                  Rank <strong className="text-stone-100">#{subnet.rank}</strong>
+                </span>
               )}
+              {subnet.percentile != null && (
+                <span>
+                  Percentile <strong className="text-stone-100">{subnet.percentile.toFixed(1)}</strong>
+                </span>
+              )}
+              {subnet.computed_at && (
+                <span>
+                  Updated <strong className="text-stone-100">{formatDate(subnet.computed_at)}</strong>
+                </span>
+              )}
+              <span>
+                Signals with data <strong className="text-stone-100">{signalCount}/4</strong>
+              </span>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-[1.75rem] border border-white/10 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Investment Read</div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Market Structure</div>
+                    <div className="mt-2 text-lg font-semibold text-stone-100">{formatNumber(subnet.tao_in_pool)} pool</div>
+                    <div className="mt-1 text-sm text-stone-500">{formatPercent(subnet.staking_apy)} staking APY</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Stress Profile</div>
+                    <div className="mt-2 text-lg font-semibold text-stone-100">{analysis?.fragility_class ?? 'unknown'}</div>
+                    <div className="mt-1 text-sm text-stone-500">Drawdown {analysis?.stress_drawdown?.toFixed(1) ?? '-'}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[1.75rem] border border-white/10 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Primary Outputs</div>
+                {primary ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {[
+                      { label: 'Fundamental Quality', value: primary.fundamental_quality },
+                      { label: 'Mispricing Signal', value: primary.mispricing_signal },
+                      { label: 'Fragility Risk', value: primary.fragility_risk },
+                      { label: 'Signal Confidence', value: primary.signal_confidence },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div className="text-xs uppercase tracking-[0.24em] text-stone-500">{item.label}</div>
+                        <div className="mt-2 text-2xl font-semibold text-stone-100">{item.value.toFixed(1)}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-3xl border border-amber-300/15 bg-amber-300/5 p-4 text-sm text-amber-100">
+                    This live row has not been rescored into the new investment framework yet. A fresh production score run will populate the four primary outputs.
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-4">
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Pool Depth</div>
-                <div className="mt-2 text-2xl font-semibold text-stone-100">{formatPool(subnet.tao_in_pool)}</div>
-              </div>
               <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
                 <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Alpha Price</div>
                 <div className="mt-2 text-2xl font-semibold text-stone-100">{formatPrice(subnet.alpha_price_tao)}</div>
               </div>
               <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Staking APY</div>
-                <div className="mt-2 text-2xl font-semibold text-stone-100">{formatPercent(subnet.staking_apy)}</div>
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Market Cap</div>
+                <div className="mt-2 text-2xl font-semibold text-stone-100">{formatNumber(subnet.market_cap_tao)}</div>
               </div>
               <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Stress Drawdown</div>
-                <div className="mt-2 text-2xl font-semibold text-stone-100">{analysis?.stress_drawdown?.toFixed(1) ?? '—'}</div>
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Pool Depth</div>
+                <div className="mt-2 text-2xl font-semibold text-stone-100">{formatNumber(subnet.tao_in_pool)}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Staking APY</div>
+                <div className="mt-2 text-2xl font-semibold text-stone-100">{formatPercent(subnet.staking_apy)}</div>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-3 pt-1">
-              <a href={`https://taostats.io/subnet/${netuid}`} target="_blank" rel="noopener noreferrer" className="rounded-2xl bg-white/5 px-3 py-1.5 text-xs text-stone-300 transition-colors hover:bg-white/10">
-                Taostats ↗
+              <a
+                href={`https://taostats.io/subnet/${netuid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-2xl bg-white/5 px-3 py-1.5 text-xs text-stone-300 transition-colors hover:bg-white/10"
+              >
+                Taostats
               </a>
-              {metadata?.github_url && <a href={metadata.github_url} target="_blank" rel="noopener noreferrer" className="rounded-2xl bg-white/5 px-3 py-1.5 text-xs text-stone-300 transition-colors hover:bg-white/10">GitHub ↗</a>}
-              {metadata?.website && <a href={metadata.website} target="_blank" rel="noopener noreferrer" className="rounded-2xl bg-white/5 px-3 py-1.5 text-xs text-stone-300 transition-colors hover:bg-white/10">Website ↗</a>}
+              {metadata?.github_url && (
+                <a
+                  href={metadata.github_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-2xl bg-white/5 px-3 py-1.5 text-xs text-stone-300 transition-colors hover:bg-white/10"
+                >
+                  GitHub
+                </a>
+              )}
+              {metadata?.website && (
+                <a
+                  href={metadata.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-2xl bg-white/5 px-3 py-1.5 text-xs text-stone-300 transition-colors hover:bg-white/10"
+                >
+                  Website
+                </a>
+              )}
             </div>
           </div>
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Primary Outputs</h2>
-        <AxisBreakdown componentScores={componentScores} />
-      </section>
-
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Stress Readout</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Fragility Class</div>
-              <div className="mt-2 text-xl font-semibold capitalize text-stone-100">{analysis?.fragility_class ?? 'unknown'}</div>
-            </div>
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Stress Drawdown</div>
-              <div className="mt-2 text-xl font-semibold text-stone-100">{analysis?.stress_drawdown?.toFixed(1) ?? '—'}</div>
-            </div>
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Signal Profile</h2>
+            <p className="mt-2 max-w-2xl text-sm text-stone-500">
+              This is the core investment view. Quality and mispricing matter only if fragility and confidence do not break the thesis.
+            </p>
           </div>
-          <div className="mt-4 space-y-3">
-            {(analysis?.stress_scenarios ?? []).map((scenario) => (
-              <div key={scenario.name} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-stone-200">{scenario.name}</span>
-                  <span className="text-xs font-mono text-stone-400">drawdown {scenario.drawdown.toFixed(1)}</span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-stone-900">
-                  <div className="h-2 rounded-full bg-gradient-to-r from-fuchsia-400 to-rose-300" style={{ width: `${Math.min(100, scenario.drawdown)}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          <AxisBreakdown componentScores={componentScores} />
         </div>
 
         <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
@@ -187,7 +219,9 @@ export default async function SubnetPage({ params }: Props) {
             <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
               <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Thesis Breakers</div>
               <div className="mt-3 space-y-2">
-                {(analysis?.thesis_breakers ?? []).length === 0 && <div className="text-sm text-stone-500">No explicit thesis breakers recorded.</div>}
+                {(analysis?.thesis_breakers ?? []).length === 0 && (
+                  <div className="text-sm text-stone-500">No explicit thesis breakers recorded.</div>
+                )}
                 {(analysis?.thesis_breakers ?? []).map((breaker) => (
                   <div key={breaker} className="rounded-2xl border border-amber-300/15 bg-amber-300/5 p-3 text-sm text-stone-300">
                     {breaker}
@@ -207,6 +241,65 @@ export default async function SubnetPage({ params }: Props) {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
+          <h2 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Stress Readout</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Fragility Class</div>
+              <div className="mt-2 text-xl font-semibold capitalize text-stone-100">{analysis?.fragility_class ?? 'unknown'}</div>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Stress Drawdown</div>
+              <div className="mt-2 text-xl font-semibold text-stone-100">{analysis?.stress_drawdown?.toFixed(1) ?? '-'}</div>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            {(analysis?.stress_scenarios ?? []).map((scenario) => (
+              <div key={scenario.name} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-stone-200">{scenario.name}</span>
+                  <span className="text-xs font-mono text-stone-400">drawdown {scenario.drawdown.toFixed(1)}</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-stone-900">
+                  <div
+                    className="h-2 rounded-full bg-gradient-to-r from-fuchsia-400 to-rose-300"
+                    style={{ width: `${Math.min(100, scenario.drawdown)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Quick Context</h2>
+            <p className="mt-2 text-sm text-stone-500">
+              These fields stay visible because they often decide whether an otherwise interesting thesis is actually investable.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Pool Depth</div>
+              <div className="mt-2 text-xl font-semibold text-stone-100">{formatNumber(subnet.tao_in_pool)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Alpha Price</div>
+              <div className="mt-2 text-xl font-semibold text-stone-100">{formatPrice(subnet.alpha_price_tao)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Market Cap</div>
+              <div className="mt-2 text-xl font-semibold text-stone-100">{formatNumber(subnet.market_cap_tao)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Staking APY</div>
+              <div className="mt-2 text-xl font-semibold text-stone-100">{formatPercent(subnet.staking_apy)}</div>
+            </div>
           </div>
         </div>
       </section>
