@@ -328,6 +328,66 @@ def test_market_relevant_concentration_uses_watchlist_caps():
     assert rules.fragility_floor == 0.60
 
 
+def test_signal_fabrication_risk_caps_mispricing_and_confidence():
+    snapshot = _snapshot(
+        tao_in_pool=6_000.0,
+        emission_per_block_tao=0.08,
+        active_neurons_7d=6,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.28,
+        participation_breadth=0.18,
+        slippage_10_tao=0.04,
+        slippage_50_tao=0.11,
+        validator_dominance=0.84,
+        incentive_concentration=0.88,
+        data_coverage=0.38,
+        proxy_reliance_penalty=0.66,
+        confidence_thesis_coherence=0.44,
+        signal_fabrication_risk=0.71,
+        low_evidence_high_conviction=0.49,
+        underreaction_score=0.58,
+        market_structure_floor=0.48,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "signal_fabrication_risk_caps_mispricing" in rules.activated
+    assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.36
+    assert rules.confidence_cap is not None and rules.confidence_cap <= 0.46
+
+
+def test_low_evidence_high_conviction_caps_total_score():
+    snapshot = _snapshot(
+        tao_in_pool=12_000.0,
+        emission_per_block_tao=0.05,
+        active_neurons_7d=7,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.34,
+        participation_breadth=0.22,
+        slippage_10_tao=0.03,
+        slippage_50_tao=0.08,
+        validator_dominance=0.72,
+        incentive_concentration=0.74,
+        data_coverage=0.42,
+        proxy_reliance_penalty=0.61,
+        confidence_thesis_coherence=0.49,
+        signal_fabrication_risk=0.55,
+        low_evidence_high_conviction=0.63,
+        underreaction_score=0.74,
+        market_structure_floor=0.57,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "low_evidence_high_conviction_caps_total" in rules.activated
+    assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.32
+    assert rules.total_cap is not None and rules.total_cap <= 0.40
+
+
 def test_severe_market_structure_breach_caps_microstructure_setups():
     snapshot = _snapshot(
         tao_in_pool=700.0,

@@ -1,7 +1,7 @@
 import PrimarySignalBoard from '@/components/PrimarySignalBoard'
 import SubnetTable from '@/components/SubnetTable'
 import { fetchLatestRun, fetchSubnets } from '@/lib/api'
-import { selectSignalLeaders } from '@/lib/signalSelection'
+import { buildSignalViews } from '@/lib/signalSelection'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,23 +30,11 @@ export default async function HomePage() {
       ((subnet.staking_apy ?? 0) <= 250 || subnet.staking_apy == null),
   )
 
-  const signalLeaders = [
-    {
-      title: 'Best Mispricing Setup',
-      subnet: selectSignalLeaders(investableWithSignals, 'mispricing_signal', false, 1)[0],
-      accent: 'text-sky-300',
-    },
-    {
-      title: 'Best Fundamental Quality',
-      subnet: selectSignalLeaders(investableWithSignals, 'fundamental_quality', false, 1)[0],
-      accent: 'text-emerald-300',
-    },
-    {
-      title: 'Lowest Fragility',
-      subnet: selectSignalLeaders(investableWithSignals, 'fragility_risk', true, 1)[0],
-      accent: 'text-amber-200',
-    },
-  ]
+  const signalLeaders = buildSignalViews(investableWithSignals, 1).slice(0, 3).map((view) => ({
+    title: view.title,
+    subnet: view.subnets[0],
+    accent: 'text-stone-200',
+  }))
 
   return (
     <div className="space-y-10">
@@ -96,10 +84,10 @@ export default async function HomePage() {
               <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
                 <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Screening Priority</div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-3 py-1 text-sky-100">Mispricing + Quality</span>
-                  <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-amber-100">Lower Fragility</span>
-                  <span className="rounded-full border border-fuchsia-300/20 bg-fuchsia-300/10 px-3 py-1 text-fuchsia-100">Higher Confidence</span>
-                  <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-emerald-100">Real Market Depth</span>
+                  <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-3 py-1 text-sky-100">Mispricing with confidence</span>
+                  <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-amber-100">Fundamentals vs fragility</span>
+                  <span className="rounded-full border border-fuchsia-300/20 bg-fuchsia-300/10 px-3 py-1 text-fuchsia-100">High upside, low trust</span>
+                  <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-emerald-100">Fragility traps</span>
                 </div>
               </div>
             </div>
@@ -110,7 +98,7 @@ export default async function HomePage() {
               <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Current Screens</div>
               <h2 className="mt-2 text-2xl font-semibold text-stone-50">Three entry points into the research flow</h2>
               <p className="mt-2 text-sm leading-6 text-stone-400">
-                These are not different versions of the same score. Each card highlights a different reason to open a subnet and inspect the full memo.
+                These are not different versions of the same score. Each card highlights a different research lens to open a subnet and inspect the full memo.
               </p>
             </div>
 
@@ -162,7 +150,7 @@ export default async function HomePage() {
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Signal Boards</h2>
           <p className="mt-2 max-w-3xl text-sm text-stone-500">
-            These boards mirror the same full ranked universe as the table below.
+            These boards are thematic research views built from the same underlying universe as the table below.
           </p>
         </div>
         <PrimarySignalBoard subnets={investableWithSignals} />

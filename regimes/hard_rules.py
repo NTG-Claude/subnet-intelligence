@@ -43,6 +43,11 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     market_relevance = bundle.raw.get("market_relevance_proxy") or 0.0
     market_structure_floor = bundle.raw.get("market_structure_floor") or 0.0
     confidence_inputs = bundle.raw.get("data_coverage") or 0.0
+    proxy_reliance = bundle.raw.get("proxy_reliance_penalty") or 0.0
+    thesis_coherence = bundle.raw.get("confidence_thesis_coherence") or 0.0
+    signal_fabrication_risk = bundle.raw.get("signal_fabrication_risk") or 0.0
+    low_evidence_high_conviction = bundle.raw.get("low_evidence_high_conviction") or 0.0
+    underreaction_score = bundle.raw.get("underreaction_score") or 0.0
     staking_apy = 0.0
     if pool_depth > 0:
         staking_apy = max(0.0, snapshot.emission_per_block_tao * 7200 * 365 / pool_depth * 100)
@@ -196,6 +201,26 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         activated.append("thin_evidence_caps_confidence")
         confidence_cap = 0.35 if confidence_cap is None else min(confidence_cap, 0.35)
         mispricing_cap = 0.20 if mispricing_cap is None else min(mispricing_cap, 0.20)
+
+    if signal_fabrication_risk > 0.58:
+        activated.append("signal_fabrication_risk_caps_mispricing")
+        mispricing_cap = 0.36 if mispricing_cap is None else min(mispricing_cap, 0.36)
+        confidence_cap = 0.46 if confidence_cap is None else min(confidence_cap, 0.46)
+        fragility_floor = 0.68 if fragility_floor is None else max(fragility_floor, 0.68)
+
+    if (
+        low_evidence_high_conviction > 0.52
+        or (
+            underreaction_score > 0.62
+            and confidence_inputs < 0.50
+            and proxy_reliance > 0.52
+            and thesis_coherence < 0.62
+        )
+    ):
+        activated.append("low_evidence_high_conviction_caps_total")
+        mispricing_cap = 0.32 if mispricing_cap is None else min(mispricing_cap, 0.32)
+        confidence_cap = 0.44 if confidence_cap is None else min(confidence_cap, 0.44)
+        legacy_score_cap = 0.40 if legacy_score_cap is None else min(legacy_score_cap, 0.40)
 
     return HardRuleResult(
         activated=activated,

@@ -215,16 +215,25 @@ def _legacy_axes_from_primary(signals: PrimarySignals, bundle: FeatureBundle, st
 
 def _ranking_priority_score(signals: PrimarySignals, bundle: FeatureBundle) -> float:
     market_relevance = bundle.raw.get("market_relevance_proxy") or bundle.raw.get("cohort_relevance_edge") or 0.0
+    thesis_strength = bundle.raw.get("confidence_adjusted_thesis_strength")
+    adjusted_mispricing = bundle.raw.get("confidence_adjusted_mispricing")
     fragility_headwind = max(0.0, (signals.fragility_risk - 0.55) / 0.45)
     resilience = max(0.0, 1.0 - fragility_headwind)
+    mispricing_component = adjusted_mispricing if adjusted_mispricing is not None else signals.mispricing_signal
+    thesis_component = thesis_strength if thesis_strength is not None else (
+        0.45 * signals.fundamental_quality
+        + 0.35 * mispricing_component
+        + 0.20 * signals.signal_confidence
+    )
     return max(
         0.0,
         min(
             1.0,
-            0.30 * signals.fundamental_quality
-            + 0.32 * signals.mispricing_signal
-            + 0.16 * signals.signal_confidence
-            + 0.14 * resilience
+            0.24 * signals.fundamental_quality
+            + 0.24 * mispricing_component
+            + 0.20 * thesis_component
+            + 0.14 * signals.signal_confidence
+            + 0.10 * resilience
             + 0.08 * market_relevance,
         ),
     )

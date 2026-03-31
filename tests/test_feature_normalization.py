@@ -147,3 +147,83 @@ def test_confidence_integrity_and_coherence_penalize_fragile_crowded_setups():
     assert robust.raw["confidence_market_integrity"] > fragile.raw["confidence_market_integrity"]
     assert robust.raw["confidence_thesis_coherence"] > fragile.raw["confidence_thesis_coherence"]
 
+
+def test_mispricing_surprise_block_rewards_underreaction_and_discounts_overreaction():
+    underreacting = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=7,
+            unique_coldkeys=8,
+            n_validators=6,
+            tao_in_pool=42_000.0,
+            alpha_in_pool=8_500.0,
+            alpha_price_tao=10.1,
+            history=[
+                HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=34_000.0, active_ratio=0.48, fundamental_quality=0.42),
+                HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=38_000.0, active_ratio=0.56, fundamental_quality=0.52),
+                HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=40_000.0, active_ratio=0.64, fundamental_quality=0.64),
+            ],
+        )
+    )
+    overreacting = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=3,
+            unique_coldkeys=3,
+            n_validators=2,
+            tao_in_pool=8_000.0,
+            alpha_in_pool=120.0,
+            alpha_price_tao=14.0,
+            top3_stake_fraction=0.82,
+            incentive_scores=[0.85, 0.15],
+            history=[
+                HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=8.0, tao_in_pool=7_900.0, active_ratio=0.30, fundamental_quality=0.41),
+                HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.5, tao_in_pool=8_000.0, active_ratio=0.29, fundamental_quality=0.40),
+                HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=12.5, tao_in_pool=8_050.0, active_ratio=0.28, fundamental_quality=0.39),
+            ],
+        )
+    )
+
+    assert underreacting.raw["underreaction_score"] > overreacting.raw["underreaction_score"]
+    assert overreacting.raw["overreaction_score"] > underreacting.raw["overreaction_score"]
+
+
+def test_confidence_adjusted_mispricing_discounted_by_signal_fabrication_risk():
+    robust_bundle, noisy_bundle = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=7,
+                    unique_coldkeys=8,
+                    n_validators=6,
+                    tao_in_pool=35_000.0,
+                    alpha_in_pool=9_000.0,
+                    alpha_price_tao=10.2,
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=30_000.0, active_ratio=0.45, fundamental_quality=0.46),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=32_000.0, active_ratio=0.52, fundamental_quality=0.54),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=34_000.0, active_ratio=0.60, fundamental_quality=0.61),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=2,
+                    unique_coldkeys=2,
+                    n_validators=2,
+                    tao_in_pool=5_200.0,
+                    alpha_in_pool=75.0,
+                    alpha_price_tao=12.4,
+                    top3_stake_fraction=0.86,
+                    incentive_scores=[0.94, 0.06],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=7.0, tao_in_pool=5_000.0, active_ratio=0.22, fundamental_quality=0.41),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=9.5, tao_in_pool=5_050.0, active_ratio=0.21, fundamental_quality=0.40),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=11.6, tao_in_pool=5_100.0, active_ratio=0.20, fundamental_quality=0.39),
+                    ],
+                )
+            ),
+        ]
+    )
+
+    assert robust_bundle.raw["signal_fabrication_risk"] < noisy_bundle.raw["signal_fabrication_risk"]
+    assert robust_bundle.primary_signals.mispricing_signal > noisy_bundle.primary_signals.mispricing_signal
+

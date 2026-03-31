@@ -245,9 +245,57 @@ def _confidence_thesis_coherence(
     return clamp01(1.0 - contradiction)
 
 
+def _expected_price_response(
+    quality_change: float | None,
+    reserve_change: float | None,
+    active_change: float | None,
+    validator_diversity_trend: float | None,
+) -> float:
+    return max(
+        0.0,
+        0.45 * max(quality_change or 0.0, 0.0)
+        + 0.25 * max(reserve_change or 0.0, 0.0)
+        + 0.20 * max(active_change or 0.0, 0.0)
+        + 0.10 * max(validator_diversity_trend or 0.0, 0.0),
+    )
+
+
+def _expected_reserve_response(
+    quality_change: float | None,
+    active_change: float | None,
+    emission_to_sticky_usage_conversion: float | None,
+    post_incentive_retention: float | None,
+) -> float:
+    return max(
+        0.0,
+        0.40 * max(quality_change or 0.0, 0.0)
+        + 0.30 * max(active_change or 0.0, 0.0)
+        + 0.20 * max(emission_to_sticky_usage_conversion or 0.0, 0.0)
+        + 0.10 * max(post_incentive_retention or 0.0, 0.0),
+    )
+
+
+def _signal_fabrication_risk(
+    proxy_reliance_penalty: float,
+    data_coverage: float,
+    confidence_thesis_coherence: float,
+    overreaction_score: float,
+    crowding_proxy: float,
+) -> float:
+    return clamp01(
+        0.35 * proxy_reliance_penalty
+        + 0.20 * (1.0 - data_coverage)
+        + 0.20 * (1.0 - confidence_thesis_coherence)
+        + 0.15 * overreaction_score
+        + 0.10 * crowding_proxy
+    )
+
+
 def _cohort_key(bundle: FeatureBundle) -> str:
     reserve_depth = bundle.raw.get("reserve_depth") or 0.0
     active_ratio = bundle.raw.get("active_ratio") or 0.0
+    emission_efficiency = bundle.raw.get("emission_efficiency") or 0.0
+    participation_breadth = bundle.raw.get("participation_breadth") or 0.0
     if reserve_depth >= 75_000:
         size = "deep"
     elif reserve_depth >= 10_000:
@@ -260,7 +308,9 @@ def _cohort_key(bundle: FeatureBundle) -> str:
         maturity = "forming"
     else:
         maturity = "nascent"
-    return f"{size}:{maturity}"
+    emission_profile = "efficient" if emission_efficiency >= 5_000 else "subsidized"
+    breadth = "broad" if participation_breadth >= 0.35 else "narrow"
+    return f"{size}:{maturity}:{emission_profile}:{breadth}"
 
 
 def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
@@ -378,6 +428,84 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         max(0.0, (emission_change or 0.0) - max(quality_change or 0.0, 0.0)),
         flow_to_price_elasticity,
     )
+    data_coverage = _coverage_ratio(
+        {
+            "validator_weight_entropy": validator_weight_entropy,
+            "cross_validator_disagreement": cross_validator_disagreement,
+            "meaningful_discrimination": meaningful_discrimination,
+            "bond_responsiveness": bond_responsiveness,
+            "slippage_10_tao": slippage_10,
+            "slippage_50_tao": slippage_50,
+            "emission_persistence": _persistence(emission_history),
+            "flow_stability": _persistence(flow_history),
+            "quality_acceleration": quality_acceleration,
+            "liquidity_improvement_rate": liquidity_improvement_rate,
+            "concentration_delta": concentration_change,
+        },
+        [
+            "validator_weight_entropy",
+            "cross_validator_disagreement",
+            "meaningful_discrimination",
+            "bond_responsiveness",
+            "slippage_10_tao",
+            "slippage_50_tao",
+            "emission_persistence",
+            "flow_stability",
+            "quality_acceleration",
+            "liquidity_improvement_rate",
+            "concentration_delta",
+        ],
+    )
+    expected_price_response = _expected_price_response(
+        quality_change,
+        reserve_change,
+        active_change,
+        validator_diversity_trend,
+    )
+    expected_reserve_response = _expected_reserve_response(
+        quality_change,
+        active_change,
+        emission_to_sticky_usage_conversion,
+        post_incentive_retention,
+    )
+    realized_price_response = max(price_change or 0.0, 0.0)
+    realized_reserve_response = max(reserve_change or 0.0, 0.0)
+    expected_price_response_gap = expected_price_response - realized_price_response
+    expected_reserve_response_gap = expected_reserve_response - realized_reserve_response
+    fair_value_anchor = clamp01(
+        0.40 * market_relevance
+        + 0.30 * market_structure_floor
+        + 0.20 * confidence_market_integrity
+        + 0.10 * clamp01(_history_anchor(quality_history))
+    )
+    realized_price_level = percentile_rank(snapshot.alpha_price_tao, price_history + [snapshot.alpha_price_tao])
+    cohort_implied_fair_value_gap = fair_value_anchor - realized_price_level
+    underreaction_score = clamp01(
+        0.45 * max(expected_price_response_gap, 0.0)
+        + 0.30 * max(expected_reserve_response_gap, 0.0)
+        + 0.25 * max(cohort_implied_fair_value_gap, 0.0)
+    )
+    overreaction_score = clamp01(
+        0.50 * max(realized_price_response - expected_price_response, 0.0)
+        + 0.30 * max(realized_price_level - fair_value_anchor, 0.0)
+        + 0.20 * reversal_risk
+    )
+    signal_fabrication_risk = _signal_fabrication_risk(
+        clamp01(
+            0.45 * (1.0 - _freshness(snapshot, lookback_blocks=7200))
+            + 0.35 * (1.0 - clamp01(len(history) / 6.0))
+            + 0.20 * (1.0 if snapshot.github else 0.0)
+        ),
+        data_coverage,
+        confidence_thesis_coherence,
+        overreaction_score,
+        crowding_proxy,
+    )
+    low_evidence_high_conviction = clamp01(
+        0.55 * signal_fabrication_risk
+        + 0.25 * max(underreaction_score - data_coverage, 0.0)
+        + 0.20 * max(underreaction_score - confidence_thesis_coherence, 0.0)
+    )
     raw = {
         "active_ratio": active_ratio,
         "participation_breadth": participation_breadth,
@@ -431,34 +559,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "post_incentive_retention": post_incentive_retention,
         "reserve_growth_without_price": reserve_growth_without_price,
         "participation_without_crowding": participation_without_crowding,
-        "data_coverage": _coverage_ratio(
-            {
-                "validator_weight_entropy": validator_weight_entropy,
-                "cross_validator_disagreement": cross_validator_disagreement,
-                "meaningful_discrimination": meaningful_discrimination,
-                "bond_responsiveness": bond_responsiveness,
-                "slippage_10_tao": slippage_10,
-                "slippage_50_tao": slippage_50,
-                "emission_persistence": _persistence(emission_history),
-                "flow_stability": _persistence(flow_history),
-                "quality_acceleration": quality_acceleration,
-                "liquidity_improvement_rate": liquidity_improvement_rate,
-                "concentration_delta": concentration_change,
-            },
-            [
-                "validator_weight_entropy",
-                "cross_validator_disagreement",
-                "meaningful_discrimination",
-                "bond_responsiveness",
-                "slippage_10_tao",
-                "slippage_50_tao",
-                "emission_persistence",
-                "flow_stability",
-                "quality_acceleration",
-                "liquidity_improvement_rate",
-                "concentration_delta",
-            ],
-        ),
+        "data_coverage": data_coverage,
         "history_depth_score": clamp01(len(history) / 6.0),
         "proxy_reliance_penalty": clamp01(
             0.45 * (1.0 - _freshness(snapshot, lookback_blocks=7200))
@@ -472,6 +573,17 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         ),
         "quality_history_anchor": _history_anchor(quality_history),
         "price_history_anchor": _history_anchor(price_history),
+        "expected_price_response": expected_price_response,
+        "realized_price_response": realized_price_response,
+        "expected_price_response_gap": expected_price_response_gap,
+        "expected_reserve_response": expected_reserve_response,
+        "realized_reserve_response": realized_reserve_response,
+        "expected_reserve_response_gap": expected_reserve_response_gap,
+        "cohort_implied_fair_value_gap": cohort_implied_fair_value_gap,
+        "underreaction_score": underreaction_score,
+        "overreaction_score": overreaction_score,
+        "signal_fabrication_risk": signal_fabrication_risk,
+        "low_evidence_high_conviction": low_evidence_high_conviction,
     }
     return FeatureBundle(raw=raw)
 
@@ -509,6 +621,11 @@ METRIC_MAP = {
     "liquidity_improvement_rate": ("needs_history", "mispricing_signal", 0.10, False),
     "concentration_delta": ("needs_history", "mispricing_signal", 0.08, True),
     "validator_diversity_trend": ("needs_history", "mispricing_signal", 0.07, False),
+    "expected_price_response_gap": ("needs_history", "mispricing_signal", 0.13, False),
+    "expected_reserve_response_gap": ("needs_history", "mispricing_signal", 0.10, False),
+    "cohort_implied_fair_value_gap": ("cohort_relative", "mispricing_signal", 0.11, False),
+    "underreaction_score": ("needs_history", "mispricing_signal", 0.14, False),
+    "overreaction_score": ("needs_history", "mispricing_signal", 0.09, True),
     "price_response_lag_to_quality_shift": ("needs_history", "mispricing_signal", 0.16, False),
     "emission_to_sticky_usage_conversion": ("needs_history", "mispricing_signal", 0.12, False),
     "post_incentive_retention": ("needs_history", "mispricing_signal", 0.10, False),
@@ -522,6 +639,8 @@ METRIC_MAP = {
     "confidence_market_structure_floor": ("derived_onchain", "signal_confidence", 0.10, False),
     "confidence_market_integrity": ("derived_onchain", "signal_confidence", 0.16, False),
     "confidence_thesis_coherence": ("needs_history", "signal_confidence", 0.18, False),
+    "signal_fabrication_risk": ("derived_onchain", "signal_confidence", 0.12, True),
+    "low_evidence_high_conviction": ("derived_onchain", "signal_confidence", 0.08, True),
     "repo_commits_30d": ("external_proxy", "signal_confidence", 0.04, False),
     "repo_contributors_30d": ("external_proxy", "signal_confidence", 0.04, False),
     "repo_recency": ("external_proxy", "signal_confidence", 0.02, False),
@@ -565,11 +684,13 @@ def _build_cohort_edges(raw_bundles: list[FeatureBundle]) -> None:
         reserve_population = [b.raw.get("reserve_depth") for b in group]
         change_population = [b.raw.get("price_response_lag_to_quality_shift") for b in group]
         relevance_population = [b.raw.get("market_relevance_proxy") for b in group]
+        fair_value_population = [b.raw.get("cohort_implied_fair_value_gap") for b in group]
         for bundle in group:
             bundle.raw["cohort_quality_edge"] = percentile_rank(bundle.raw.get("active_ratio"), quality_population)
             bundle.raw["cohort_liquidity_edge"] = percentile_rank(bundle.raw.get("reserve_depth"), reserve_population)
             bundle.raw["cohort_mispricing_edge"] = percentile_rank(bundle.raw.get("price_response_lag_to_quality_shift"), change_population)
             bundle.raw["cohort_relevance_edge"] = percentile_rank(bundle.raw.get("market_relevance_proxy"), relevance_population)
+            bundle.raw["cohort_fair_value_edge"] = percentile_rank(bundle.raw.get("cohort_implied_fair_value_gap"), fair_value_population)
 
 
 def _inject_cohort_metrics(bundle: FeatureBundle) -> None:
@@ -578,6 +699,7 @@ def _inject_cohort_metrics(bundle: FeatureBundle) -> None:
         ("cohort_liquidity_edge", "cohort_relative", "fundamental_quality", 0.02),
         ("cohort_relevance_edge", "cohort_relative", "fundamental_quality", 0.03),
         ("cohort_mispricing_edge", "cohort_relative", "mispricing_signal", 0.06),
+        ("cohort_fair_value_edge", "cohort_relative", "mispricing_signal", 0.05),
         ("cohort_relevance_edge", "cohort_relative", "signal_confidence", 0.04),
     ]:
         value = bundle.raw.get(name)
@@ -646,11 +768,27 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             )
         bundle.metrics = metrics
         _inject_cohort_metrics(bundle)
+        base_fundamental_quality = clamp01(_weighted_output(bundle, "fundamental_quality"))
+        base_mispricing_signal = clamp01(_weighted_output(bundle, "mispricing_signal"))
+        base_fragility_risk = clamp01(_weighted_output(bundle, "fragility_risk"))
+        base_signal_confidence = clamp01(_weighted_output(bundle, "signal_confidence"))
+        confidence_adjusted_mispricing = clamp01(
+            base_mispricing_signal * (0.55 + 0.45 * base_signal_confidence)
+            - 0.25 * clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
+        )
+        confidence_adjusted_thesis_strength = clamp01(
+            0.45 * base_fundamental_quality
+            + 0.35 * confidence_adjusted_mispricing
+            + 0.20 * base_signal_confidence
+        )
+        bundle.raw["base_mispricing_signal"] = base_mispricing_signal
+        bundle.raw["confidence_adjusted_mispricing"] = confidence_adjusted_mispricing
+        bundle.raw["confidence_adjusted_thesis_strength"] = confidence_adjusted_thesis_strength
         primary = PrimarySignals(
-            fundamental_quality=clamp01(_weighted_output(bundle, "fundamental_quality")),
-            mispricing_signal=clamp01(_weighted_output(bundle, "mispricing_signal")),
-            fragility_risk=clamp01(_weighted_output(bundle, "fragility_risk")),
-            signal_confidence=clamp01(_weighted_output(bundle, "signal_confidence")),
+            fundamental_quality=base_fundamental_quality,
+            mispricing_signal=confidence_adjusted_mispricing,
+            fragility_risk=base_fragility_risk,
+            signal_confidence=base_signal_confidence,
         )
         bundle.primary_signals = primary
         bundle.axes = _legacy_axes_from_primary(primary, bundle)
