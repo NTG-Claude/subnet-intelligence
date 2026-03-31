@@ -1,5 +1,6 @@
 import BacktestTable from '@/components/BacktestTable'
 import DistributionChart from '@/components/DistributionChart'
+import PrimarySignalBoard from '@/components/PrimarySignalBoard'
 import ScoreGauge from '@/components/ScoreGauge'
 import SubnetTable from '@/components/SubnetTable'
 import { fetchDistribution, fetchLabelBacktests, fetchLatestRun, fetchLeaderboard, fetchSubnets } from '@/lib/api'
@@ -26,6 +27,7 @@ export default async function HomePage() {
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
     fetchLabelBacktests(90).catch(() => ({ labels: [], observations: 0, examples: [], targets: [] })),
   ])
+  const investableWithSignals = allSubnets.filter((subnet) => subnet.primary_outputs)
 
   return (
     <div className="space-y-10">
@@ -43,7 +45,7 @@ export default async function HomePage() {
                 This view now centers fundamental quality, mispricing, fragility, and confidence instead of treating one aggregate score as the whole truth.
               </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-4">
               <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
                 <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Last run</div>
                 <div className="mt-2 text-lg font-semibold text-stone-100">{formatDate(latest.last_score_run)}</div>
@@ -55,6 +57,10 @@ export default async function HomePage() {
               <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
                 <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Backtest observations</div>
                 <div className="mt-2 text-lg font-semibold text-stone-100">{backtests.observations}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Signal-led names</div>
+                <div className="mt-2 text-lg font-semibold text-stone-100">{investableWithSignals.length}</div>
               </div>
             </div>
           </div>
@@ -73,12 +79,30 @@ export default async function HomePage() {
                   <div className="min-w-0 flex-1">
                     <div className="break-words text-lg font-semibold text-stone-100">{subnet.name ?? `Subnet ${subnet.netuid}`}</div>
                     <div className="mt-1 text-sm text-stone-400">{subnet.thesis ?? 'No thesis available yet.'}</div>
+                    {subnet.primary_outputs && (
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-stone-300">
+                        <span>FQ {subnet.primary_outputs.fundamental_quality.toFixed(0)}</span>
+                        <span>MP {subnet.primary_outputs.mispricing_signal.toFixed(0)}</span>
+                        <span>FR {subnet.primary_outputs.fragility_risk.toFixed(0)}</span>
+                        <span>CF {subnet.primary_outputs.signal_confidence.toFixed(0)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </a>
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Signal-Led Views</h2>
+          <p className="mt-2 max-w-3xl text-sm text-stone-500">
+            The same universe now looks different depending on whether we care about structural quality, valuation gap, fragility, or confidence.
+          </p>
+        </div>
+        <PrimarySignalBoard subnets={investableWithSignals} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

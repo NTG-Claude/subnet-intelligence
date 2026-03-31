@@ -32,6 +32,21 @@ export interface PrimaryOutputs {
   signal_confidence: number
 }
 
+export interface DriverItem {
+  metric: string
+  effect: number
+  value: number | null
+  normalized: number
+  category: string
+}
+
+export interface RationaleBucket {
+  supports?: DriverItem[]
+  headwinds?: DriverItem[]
+  fragility?: DriverItem[]
+  offsets?: DriverItem[]
+}
+
 export interface SubnetDetail {
   netuid: number
   name: string | null
@@ -63,8 +78,13 @@ export interface SubnetDetail {
     thesis?: string
     primary_outputs?: PrimaryOutputs
     component_scores?: Record<string, number>
-    top_positive_drivers?: { metric: string; effect: number; value: number | null; normalized: number; category: string }[]
-    top_negative_drivers?: { metric: string; effect: number; value: number | null; normalized: number; category: string }[]
+    top_positive_drivers?: DriverItem[]
+    top_negative_drivers?: DriverItem[]
+    why_mispriced?: RationaleBucket
+    risk_drivers?: RationaleBucket
+    confidence_rationale?: RationaleBucket
+    quality_rationale?: RationaleBucket
+    thesis_breakers?: string[]
     activated_hard_rules?: string[]
     stress_drawdown?: number
     fragility_class?: string
