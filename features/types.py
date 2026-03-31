@@ -27,7 +27,16 @@ class AxisScores:
 
 
 @dataclass
+class PrimarySignals:
+    fundamental_quality: float
+    mispricing_signal: float
+    fragility_risk: float
+    signal_confidence: float
+
+
+@dataclass
 class FeatureBundle:
     raw: dict[str, float | None]
     metrics: dict[str, FeatureMetric] = field(default_factory=dict)
     axes: AxisScores | None = None
+    primary_signals: PrimarySignals | None = None

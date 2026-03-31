@@ -14,10 +14,18 @@ class ScoreBreakdownResponse(BaseModel):
     dev_score: float
 
 
+class PrimaryOutputsResponse(BaseModel):
+    fundamental_quality: float
+    mispricing_signal: float
+    fragility_risk: float
+    signal_confidence: float
+
+
 class SubnetSummaryResponse(BaseModel):
     netuid: int
     name: Optional[str] = None
     score: float
+    primary_outputs: Optional[PrimaryOutputsResponse] = None
     rank: Optional[int] = None
     percentile: Optional[float] = None  # 0-100
     computed_at: Optional[str] = None
@@ -50,6 +58,7 @@ class SubnetDetailResponse(BaseModel):
     netuid: int
     name: Optional[str] = None
     score: float
+    primary_outputs: Optional[PrimaryOutputsResponse] = None
     rank: Optional[int] = None
     percentile: Optional[float] = None
     breakdown: ScoreBreakdownResponse
@@ -107,10 +116,11 @@ class ErrorResponse(BaseModel):
 class BacktestLabelSummary(BaseModel):
     label: str
     observations: int
-    avg_future_score_change: Optional[float] = None
-    avg_future_return_proxy: Optional[float] = None
-    avg_future_slippage_deterioration: Optional[float] = None
-    avg_future_concentration_increase: Optional[float] = None
+    avg_relative_forward_return_vs_tao_30d: Optional[float] = None
+    avg_relative_forward_return_vs_tao_90d: Optional[float] = None
+    avg_drawdown_risk: Optional[float] = None
+    avg_liquidity_deterioration_risk: Optional[float] = None
+    avg_concentration_deterioration_risk: Optional[float] = None
 
 
 class BacktestObservation(BaseModel):
@@ -119,15 +129,21 @@ class BacktestObservation(BaseModel):
     end_at: Optional[str] = None
     label: str
     score: Optional[float] = None
-    future_score_change: Optional[float] = None
-    future_return_proxy: Optional[float] = None
-    future_slippage_deterioration: Optional[float] = None
-    future_concentration_increase: Optional[float] = None
-    opportunity_gap: Optional[float] = None
-    stress_robustness: Optional[float] = None
+    fundamental_quality: Optional[float] = None
+    mispricing_signal: Optional[float] = None
+    fragility_risk: Optional[float] = None
+    signal_confidence: Optional[float] = None
+    relative_forward_return_vs_tao_30d: Optional[float] = None
+    relative_forward_return_vs_tao_90d: Optional[float] = None
+    drawdown_risk: Optional[float] = None
+    liquidity_deterioration_risk: Optional[float] = None
+    concentration_deterioration_risk: Optional[float] = None
+    legacy_opportunity_gap: Optional[float] = None
+    legacy_stress_robustness: Optional[float] = None
 
 
 class BacktestResponse(BaseModel):
     observations: int
+    targets: list[str]
     labels: list[BacktestLabelSummary]
     examples: list[BacktestObservation]

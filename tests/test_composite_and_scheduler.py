@@ -91,7 +91,12 @@ def test_build_scores_produces_analysis_and_label():
     artifacts = build_scores(snapshots)
     first = artifacts[1]
     assert 0.0 <= first.score <= 100.0
+    assert 0.0 <= first.primary.fundamental_quality <= 1.0
+    assert 0.0 <= first.primary.mispricing_signal <= 1.0
+    assert 0.0 <= first.primary.fragility_risk <= 1.0
+    assert 0.0 <= first.primary.signal_confidence <= 1.0
     assert "component_scores" in first.explanation
+    assert "primary_outputs" in first.explanation
     assert isinstance(first.label, str)
     breakdown = _legacy_breakdown(first)
     assert 0.0 <= breakdown.capital_score <= 30.0

@@ -1,10 +1,9 @@
 from dataclasses import dataclass
 
-from collectors.models import HistoricalFeaturePoint
-from collectors.models import RawSubnetSnapshot
+from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from explain.engine import build_explanation
 from features.metrics import compute_raw_features, normalize_features
-from features.types import AxisScores, FeatureBundle
+from features.types import AxisScores, FeatureBundle, PrimarySignals
 from labels.engine import assign_label
 from regimes.hard_rules import HardRuleResult, apply_rule_caps, evaluate_hard_rules
 from stress.scenarios import run_stress_tests
@@ -13,6 +12,7 @@ from stress.scenarios import run_stress_tests
 @dataclass
 class ScoreArtifacts:
     score: float
+    primary: PrimarySignals
     axes: AxisScores
     bundle: FeatureBundle
     label: str
@@ -25,6 +25,10 @@ def _latest_valid_history_point(snapshot: RawSubnetSnapshot) -> HistoricalFeatur
         if any(
             value is not None
             for value in (
+                point.fundamental_quality,
+                point.mispricing_signal,
+                point.fragility_risk,
+                point.signal_confidence,
                 point.intrinsic_quality,
                 point.economic_sustainability,
                 point.reflexivity,
@@ -55,6 +59,8 @@ def _is_incomplete_snapshot(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) 
     history_was_live = (history_point.tao_in_pool or 0.0) > 1000 or any(
         (value or 0.0) > 0.25
         for value in (
+            history_point.fundamental_quality,
+            history_point.signal_confidence,
             history_point.intrinsic_quality,
             history_point.economic_sustainability,
             history_point.stress_robustness,
@@ -73,92 +79,172 @@ def _is_incomplete_snapshot(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) 
     return history_was_live and (current_blank or (missing_live_market and missing_participation))
 
 
-def _history_fallback_axes(snapshot: RawSubnetSnapshot, current_axes: AxisScores) -> AxisScores:
-    history_point = _latest_valid_history_point(snapshot)
-    if history_point is None:
-        return current_axes
-
-    def _blend(history_value: float | None, current_value: float, history_weight: float = 0.9) -> float:
-        if history_value is None:
-            return current_value
-        return max(0.0, min(1.0, history_weight * history_value + (1.0 - history_weight) * current_value))
-
-    def _blend_gap(history_value: float | None, current_value: float, history_weight: float = 0.9) -> float:
-        if history_value is None:
-            return current_value
-        return max(-1.0, min(1.0, history_weight * history_value + (1.0 - history_weight) * current_value))
-
-    return AxisScores(
-        intrinsic_quality=_blend(history_point.intrinsic_quality, current_axes.intrinsic_quality),
-        economic_sustainability=_blend(history_point.economic_sustainability, current_axes.economic_sustainability),
-        reflexivity=_blend(history_point.reflexivity, current_axes.reflexivity),
-        stress_robustness=_blend(history_point.stress_robustness, current_axes.stress_robustness),
-        opportunity_gap=_blend_gap(history_point.opportunity_gap, current_axes.opportunity_gap),
+def _signals_from_legacy_history(point: HistoricalFeaturePoint) -> PrimarySignals:
+    fundamental = max(
+        0.0,
+        min(
+            1.0,
+            0.55 * (point.intrinsic_quality or 0.0)
+            + 0.25 * (point.economic_sustainability or 0.0)
+            + 0.20 * max(0.0, 1.0 - (point.reflexivity or 0.0)),
+        ),
+    )
+    mispricing = max(0.0, min(1.0, 0.5 + (point.opportunity_gap or 0.0) / 2.0))
+    fragility = max(
+        0.0,
+        min(
+            1.0,
+            0.55 * max(0.0, 1.0 - (point.stress_robustness or 0.0))
+            + 0.45 * (point.reflexivity or 0.0),
+        ),
+    )
+    confidence = max(0.0, min(1.0, 0.45 + 0.35 * (point.stress_robustness or 0.0)))
+    return PrimarySignals(
+        fundamental_quality=fundamental,
+        mispricing_signal=mispricing,
+        fragility_risk=fragility,
+        signal_confidence=confidence,
     )
 
 
-def _opportunity_gap(axes: AxisScores, bundle: FeatureBundle) -> float:
-    crowding = bundle.raw.get("crowding_proxy") or 0.0
-    return max(-1.0, min(1.0, axes.intrinsic_quality + axes.stress_robustness - axes.reflexivity - 0.5 * crowding))
+def _history_fallback_primary(snapshot: RawSubnetSnapshot, current_primary: PrimarySignals) -> PrimarySignals:
+    history_point = _latest_valid_history_point(snapshot)
+    if history_point is None:
+        return current_primary
+
+    history_primary = (
+        PrimarySignals(
+            fundamental_quality=history_point.fundamental_quality,
+            mispricing_signal=history_point.mispricing_signal,
+            fragility_risk=history_point.fragility_risk,
+            signal_confidence=history_point.signal_confidence,
+        )
+        if all(
+            value is not None
+            for value in (
+                history_point.fundamental_quality,
+                history_point.mispricing_signal,
+                history_point.fragility_risk,
+                history_point.signal_confidence,
+            )
+        )
+        else _signals_from_legacy_history(history_point)
+    )
+
+    def _blend(history_value: float, current_value: float, history_weight: float = 0.9) -> float:
+        return max(0.0, min(1.0, history_weight * history_value + (1.0 - history_weight) * current_value))
+
+    return PrimarySignals(
+        fundamental_quality=_blend(history_primary.fundamental_quality, current_primary.fundamental_quality),
+        mispricing_signal=_blend(history_primary.mispricing_signal, current_primary.mispricing_signal),
+        fragility_risk=_blend(history_primary.fragility_risk, current_primary.fragility_risk),
+        signal_confidence=_blend(history_primary.signal_confidence, current_primary.signal_confidence),
+    )
 
 
-def _total_score(axes: AxisScores) -> float:
-    opportunity_norm = max(0.0, min(1.0, 0.5 + axes.opportunity_gap / 2.0))
+def _legacy_axes_from_primary(signals: PrimarySignals, bundle: FeatureBundle, stress_robustness: float | None = None) -> AxisScores:
+    intrinsic = max(0.0, min(1.0, 0.82 * signals.fundamental_quality + 0.18 * (bundle.raw.get("cohort_quality_edge") or 0.0)))
+    economic = max(
+        0.0,
+        min(
+            1.0,
+            0.45 * signals.fundamental_quality
+            + 0.35 * (1.0 - signals.fragility_risk)
+            + 0.20 * max(0.0, signals.signal_confidence - 0.10),
+        ),
+    )
+    reflexivity = max(
+        0.0,
+        min(
+            1.0,
+            0.55 * signals.fragility_risk
+            + 0.30 * (bundle.raw.get("crowding_proxy") or 0.0)
+            + 0.15 * max(0.0, 1.0 - signals.mispricing_signal),
+        ),
+    )
+    stress_component = 1.0 - signals.fragility_risk if stress_robustness is None else stress_robustness
+    opportunity_gap = max(-1.0, min(1.0, (signals.mispricing_signal - 0.5) * 2.0))
+    return AxisScores(
+        intrinsic_quality=intrinsic,
+        economic_sustainability=economic,
+        reflexivity=reflexivity,
+        stress_robustness=max(0.0, min(1.0, stress_component)),
+        opportunity_gap=opportunity_gap,
+    )
+
+
+def _legacy_total_score(signals: PrimarySignals) -> float:
     return max(
         0.0,
         min(
             1.0,
-            0.30 * axes.intrinsic_quality
-            + 0.25 * axes.economic_sustainability
-            + 0.20 * (1.0 - axes.reflexivity)
-            + 0.15 * axes.stress_robustness
-            + 0.10 * opportunity_norm,
+            0.40 * signals.fundamental_quality
+            + 0.25 * signals.mispricing_signal
+            + 0.20 * (1.0 - signals.fragility_risk)
+            + 0.15 * signals.signal_confidence,
         ),
     )
 
 
-def _apply_total_cap(score: float, axes: AxisScores, rules) -> float:
-    if rules.total_cap is None:
+def _apply_total_cap(score: float, signals: PrimarySignals | AxisScores, rules: HardRuleResult) -> float:
+    if isinstance(signals, AxisScores):
+        signals = _signals_from_legacy_history(
+            HistoricalFeaturePoint(
+                timestamp="",
+                intrinsic_quality=signals.intrinsic_quality,
+                economic_sustainability=signals.economic_sustainability,
+                reflexivity=signals.reflexivity,
+                stress_robustness=signals.stress_robustness,
+                opportunity_gap=signals.opportunity_gap,
+            )
+        )
+    if rules.legacy_score_cap is None:
         return score
     if not rules.force_negative_label:
-        return min(score, rules.total_cap)
+        return min(score, rules.legacy_score_cap)
 
-    # Preserve some differentiation among capped negative regimes instead of
-    # flattening most of the universe onto the exact same ceiling.
     regime_quality = max(
         0.0,
         min(
             1.0,
-            0.45 * axes.intrinsic_quality
-            + 0.35 * axes.stress_robustness
-            + 0.20 * (1.0 - axes.reflexivity),
+            0.45 * signals.fundamental_quality
+            + 0.35 * (1.0 - signals.fragility_risk)
+            + 0.20 * signals.signal_confidence,
         ),
     )
-    shaped_cap = rules.total_cap * (0.55 + 0.45 * regime_quality)
+    shaped_cap = rules.legacy_score_cap * (0.55 + 0.45 * regime_quality)
     return min(score, shaped_cap)
 
 
 def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts]:
     bundles = normalize_features([compute_raw_features(snapshot) for snapshot in snapshots])
     results: dict[int, ScoreArtifacts] = {}
+
     for snapshot, bundle in zip(snapshots, bundles):
+        provisional_primary = bundle.primary_signals or PrimarySignals(0.0, 0.0, 1.0, 0.0)
         if _is_incomplete_snapshot(snapshot, bundle):
-            fallback_axes = _history_fallback_axes(
-                snapshot,
-                bundle.axes or AxisScores(0.0, 0.0, 1.0, 0.0, 0.0),
+            fallback_primary = _history_fallback_primary(snapshot, provisional_primary)
+            fallback_axes = _legacy_axes_from_primary(fallback_primary, bundle)
+            stress = run_stress_tests(snapshot, bundle, fallback_axes)
+            fallback_primary = PrimarySignals(
+                fundamental_quality=fallback_primary.fundamental_quality,
+                mispricing_signal=fallback_primary.mispricing_signal,
+                fragility_risk=max(fallback_primary.fragility_risk, 1.0 - stress.robustness),
+                signal_confidence=max(0.35, fallback_primary.signal_confidence),
             )
-            score = _total_score(fallback_axes)
+            axes = _legacy_axes_from_primary(fallback_primary, bundle, stress.robustness)
+            score = _legacy_total_score(fallback_primary)
             label = "Under Review"
             thesis = (
-                "Latest telemetry for this subnet is incomplete, so the score falls back to its recent validated state "
-                "instead of treating the gap as real structural weakness."
+                "Latest telemetry is incomplete, so the framework falls back to the subnet's recently validated "
+                "investment state instead of mistaking the data gap for structural deterioration."
             )
-            stress = run_stress_tests(snapshot, bundle, fallback_axes)
             rules = HardRuleResult(activated=["telemetry_gap_uses_recent_history"])
-            explanation = build_explanation(bundle, fallback_axes, stress, rules, label, thesis)
+            explanation = build_explanation(bundle, fallback_primary, axes, stress, rules, label, thesis)
             results[snapshot.netuid] = ScoreArtifacts(
                 score=round(score * 100, 2),
-                axes=fallback_axes,
+                primary=fallback_primary,
+                axes=axes,
                 bundle=bundle,
                 label=label,
                 thesis=thesis,
@@ -167,23 +253,22 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
             continue
 
         rules = evaluate_hard_rules(snapshot, bundle)
-        provisional = bundle.axes or AxisScores(0.0, 0.0, 1.0, 0.0, 0.0)
-        capped = apply_rule_caps(provisional, rules)
-        stress = run_stress_tests(snapshot, bundle, capped)
-        axes = AxisScores(
-            intrinsic_quality=capped.intrinsic_quality,
-            economic_sustainability=capped.economic_sustainability,
-            reflexivity=capped.reflexivity,
-            stress_robustness=stress.robustness,
-            opportunity_gap=0.0,
+        primary = apply_rule_caps(provisional_primary, rules)
+        provisional_axes = _legacy_axes_from_primary(primary, bundle)
+        stress = run_stress_tests(snapshot, bundle, provisional_axes)
+        primary = PrimarySignals(
+            fundamental_quality=primary.fundamental_quality,
+            mispricing_signal=primary.mispricing_signal,
+            fragility_risk=max(primary.fragility_risk, 0.65 * primary.fragility_risk + 0.35 * (1.0 - stress.robustness)),
+            signal_confidence=primary.signal_confidence,
         )
-        axes.opportunity_gap = _opportunity_gap(axes, bundle)
-        score = _total_score(axes)
-        score = _apply_total_cap(score, axes, rules)
-        label, thesis = assign_label(axes, bundle, stress, rules)
-        explanation = build_explanation(bundle, axes, stress, rules, label, thesis)
+        axes = _legacy_axes_from_primary(primary, bundle, stress.robustness)
+        score = _apply_total_cap(_legacy_total_score(primary), primary, rules)
+        label, thesis = assign_label(primary, bundle, stress, rules)
+        explanation = build_explanation(bundle, primary, axes, stress, rules, label, thesis)
         results[snapshot.netuid] = ScoreArtifacts(
             score=round(score * 100, 2),
+            primary=primary,
             axes=axes,
             bundle=bundle,
             label=label,

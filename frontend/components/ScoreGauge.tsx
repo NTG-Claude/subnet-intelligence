@@ -2,7 +2,6 @@
 
 interface Props {
   score: number
-  /** How many of the 5 signals had real data (0–5). null = unknown */
   signalsWithData?: number | null
 }
 
@@ -39,11 +38,13 @@ export default function ScoreGauge({ score, signalsWithData }: Props) {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="relative w-36 h-36">
-        <svg className="w-36 h-36 -rotate-90" viewBox="0 0 120 120">
+      <div className="relative h-36 w-36">
+        <svg className="h-36 w-36 -rotate-90" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r="54" fill="none" stroke="#1e293b" strokeWidth="10" />
           <circle
-            cx="60" cy="60" r="54"
+            cx="60"
+            cy="60"
+            r="54"
             fill="none"
             stroke={score >= 70 ? '#4ade80' : score >= 40 ? '#facc15' : '#f87171'}
             strokeWidth="10"
@@ -52,21 +53,17 @@ export default function ScoreGauge({ score, signalsWithData }: Props) {
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`text-4xl font-bold tabular-nums ${scoreColor(score)}`}>
-            {Math.round(score)}
-          </span>
-          <span className="text-xs text-slate-500 mt-0.5">/ 100</span>
+          <span className={`text-4xl font-bold tabular-nums ${scoreColor(score)}`}>{Math.round(score)}</span>
+          <span className="mt-0.5 text-xs text-slate-500">/ 100</span>
         </div>
       </div>
 
-      <span className={`text-sm font-semibold ${scoreColor(score)}`}>
-        {scoreLabel(score)}
-      </span>
+      <span className={`text-sm font-semibold ${scoreColor(score)}`}>{scoreLabel(score)}</span>
 
       {signalsWithData !== undefined && (
         <span className={`text-xs ${confidenceColor(signalsWithData)}`}>
           Confidence: {confidenceLabel(signalsWithData)}
-          {signalsWithData != null && ` (${signalsWithData}/5 signals)`}
+          {signalsWithData != null && ` (${signalsWithData}/4 primary signals)`}
         </span>
       )}
     </div>

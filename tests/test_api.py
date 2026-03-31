@@ -27,6 +27,12 @@ SCORES = [
             "label": "Hidden Compounder" if i == 1 else "Under Review",
             "thesis": "test thesis",
             "analysis": {
+                "primary_outputs": {
+                    "fundamental_quality": 70.0 - i,
+                    "mispricing_signal": 60.0 - i,
+                    "fragility_risk": 20.0 + i,
+                    "signal_confidence": 80.0 - i,
+                },
                 "component_scores": {
                     "opportunity_gap": 12.0,
                     "stress_robustness": 66.0,
@@ -238,6 +244,7 @@ def test_get_subnet_detail():
     assert data["netuid"] == 1
     assert data["score"] == 75.0
     assert data["rank"] == 1
+    assert data["primary_outputs"]["fundamental_quality"] == 69.0
     assert "breakdown" in data
     assert "history" in data
     assert data["metadata"]["name"] == "subnet-1"
@@ -410,7 +417,15 @@ def test_backtest_labels():
             "alpha_price_tao": 1.0,
             "raw_data": {
                 "label": "Hidden Compounder",
-                "analysis": {"component_scores": {"opportunity_gap": 15.0, "stress_robustness": 70.0}},
+                "analysis": {
+                    "primary_outputs": {
+                        "fundamental_quality": 71.0,
+                        "mispricing_signal": 62.0,
+                        "fragility_risk": 28.0,
+                        "signal_confidence": 76.0,
+                    },
+                    "component_scores": {"opportunity_gap": 15.0, "stress_robustness": 70.0},
+                },
                 "raw_metrics": {"slippage_10_tao": 0.10, "performance_driven_by_few_actors": 0.20},
             },
         },
@@ -429,7 +444,15 @@ def test_backtest_labels():
             "alpha_price_tao": 1.2,
             "raw_data": {
                 "label": "Hidden Compounder",
-                "analysis": {"component_scores": {"opportunity_gap": 17.0, "stress_robustness": 72.0}},
+                "analysis": {
+                    "primary_outputs": {
+                        "fundamental_quality": 74.0,
+                        "mispricing_signal": 65.0,
+                        "fragility_risk": 30.0,
+                        "signal_confidence": 79.0,
+                    },
+                    "component_scores": {"opportunity_gap": 17.0, "stress_robustness": 72.0},
+                },
                 "raw_metrics": {"slippage_10_tao": 0.12, "performance_driven_by_few_actors": 0.25},
             },
         },
@@ -441,6 +464,7 @@ def test_backtest_labels():
     assert resp.status_code == 200
     data = resp.json()
     assert data["observations"] == 1
+    assert "relative_forward_return_vs_tao_30d" in data["targets"]
     assert data["labels"][0]["label"] == "Hidden Compounder"
 
 

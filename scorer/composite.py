@@ -23,7 +23,7 @@ from storage.history import load_recent_analysis_history
 
 logger = logging.getLogger(__name__)
 
-SCORE_VERSION = "v4_signal_separation"
+SCORE_VERSION = "v5_investment_framework"
 
 
 class ScoreBreakdown(BaseModel):
@@ -136,6 +136,12 @@ def _analysis_payload(snapshot: RawSubnetSnapshot, artifacts) -> dict:
         "investable": not is_root,
         "special_case": "root_subnet" if is_root else None,
         "analysis": artifacts.explanation,
+        "primary_outputs": {
+            "fundamental_quality": round(artifacts.primary.fundamental_quality * 100, 2),
+            "mispricing_signal": round(artifacts.primary.mispricing_signal * 100, 2),
+            "fragility_risk": round(artifacts.primary.fragility_risk * 100, 2),
+            "signal_confidence": round(artifacts.primary.signal_confidence * 100, 2),
+        },
         "raw_metrics": {
             **artifacts.bundle.raw,
             "emission_per_block_tao": snapshot.emission_per_block_tao,
@@ -150,13 +156,12 @@ def _analysis_payload(snapshot: RawSubnetSnapshot, artifacts) -> dict:
 
 
 def _legacy_breakdown(artifacts) -> ScoreBreakdown:
-    opportunity_norm = max(0.0, min(1.0, 0.5 + artifacts.axes.opportunity_gap / 2.0))
     return ScoreBreakdown(
-        capital_score=round(artifacts.axes.intrinsic_quality * 30, 2),
-        activity_score=round(artifacts.axes.economic_sustainability * 25, 2),
-        efficiency_score=round((1.0 - artifacts.axes.reflexivity) * 20, 2),
-        health_score=round(artifacts.axes.stress_robustness * 15, 2),
-        dev_score=round(opportunity_norm * 10, 2),
+        capital_score=round(artifacts.primary.fundamental_quality * 30, 2),
+        activity_score=round(artifacts.primary.mispricing_signal * 25, 2),
+        efficiency_score=round((1.0 - artifacts.primary.fragility_risk) * 20, 2),
+        health_score=round(artifacts.primary.signal_confidence * 15, 2),
+        dev_score=round(max(0.0, min(1.0, 1.0 - artifacts.primary.fragility_risk + artifacts.primary.mispricing_signal - 0.5)) * 10, 2),
     )
 
 
