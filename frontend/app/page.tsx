@@ -3,7 +3,7 @@ import DistributionChart from '@/components/DistributionChart'
 import PrimarySignalBoard from '@/components/PrimarySignalBoard'
 import ScoreGauge from '@/components/ScoreGauge'
 import SubnetTable from '@/components/SubnetTable'
-import { fetchDistribution, fetchLabelBacktests, fetchLatestRun, fetchLeaderboard, fetchSubnets } from '@/lib/api'
+import { fetchDistribution, fetchLabelBacktests, fetchLatestRun, fetchSubnets } from '@/lib/api'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,14 +20,31 @@ function formatDate(iso: string | null): string {
 }
 
 export default async function HomePage() {
-  const [{ subnets: allSubnets }, leaderboard, dist, latest, backtests] = await Promise.all([
+  const [{ subnets: allSubnets }, dist, latest, backtests] = await Promise.all([
     fetchSubnets(200).catch(() => ({ subnets: [], total: 0 })),
-    fetchLeaderboard().catch(() => ({ top: [], bottom: [] })),
     fetchDistribution().catch(() => ({ buckets: [], total_subnets: 0 })),
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
     fetchLabelBacktests(90).catch(() => ({ labels: [], observations: 0, examples: [], targets: [] })),
   ])
+
   const investableWithSignals = allSubnets.filter((subnet) => subnet.primary_outputs)
+  const signalLeaders = [
+    {
+      title: 'Best Mispricing Setup',
+      subnet: [...investableWithSignals].sort((a, b) => (b.primary_outputs?.mispricing_signal ?? -1) - (a.primary_outputs?.mispricing_signal ?? -1))[0],
+      accent: 'text-sky-300',
+    },
+    {
+      title: 'Best Fundamental Quality',
+      subnet: [...investableWithSignals].sort((a, b) => (b.primary_outputs?.fundamental_quality ?? -1) - (a.primary_outputs?.fundamental_quality ?? -1))[0],
+      accent: 'text-emerald-300',
+    },
+    {
+      title: 'Lowest Fragility',
+      subnet: [...investableWithSignals].sort((a, b) => (a.primary_outputs?.fragility_risk ?? 999) - (b.primary_outputs?.fragility_risk ?? 999))[0],
+      accent: 'text-amber-200',
+    },
+  ]
 
   return (
     <div className="space-y-10">
@@ -42,7 +59,7 @@ export default async function HomePage() {
                 From heuristic ranking to investment-grade subnet research.
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-stone-300">
-                This view now centers fundamental quality, mispricing, fragility, and confidence instead of treating one aggregate score as the whole truth.
+                The live product now separates structural quality, valuation gap, fragility, and confidence instead of collapsing everything into one score.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-4">
@@ -66,31 +83,30 @@ export default async function HomePage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-            {leaderboard.top.slice(0, 3).map((subnet) => (
-              <a key={subnet.netuid} href={`/subnets/${subnet.netuid}`} className="rounded-3xl border border-white/10 bg-black/25 p-5 transition-transform hover:-translate-y-1">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-[0.24em] text-stone-500">SN{subnet.netuid}</span>
-                  <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-2.5 py-1 text-xs text-amber-100">
-                    {subnet.label ?? 'Under Review'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <ScoreGauge score={subnet.score} />
-                  <div className="min-w-0 flex-1">
-                    <div className="break-words text-lg font-semibold text-stone-100">{subnet.name ?? `Subnet ${subnet.netuid}`}</div>
-                    <div className="mt-1 text-sm text-stone-400">{subnet.thesis ?? 'No thesis available yet.'}</div>
-                    {subnet.primary_outputs && (
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-stone-300">
-                        <span>FQ {subnet.primary_outputs.fundamental_quality.toFixed(0)}</span>
-                        <span>MP {subnet.primary_outputs.mispricing_signal.toFixed(0)}</span>
-                        <span>FR {subnet.primary_outputs.fragility_risk.toFixed(0)}</span>
-                        <span>CF {subnet.primary_outputs.signal_confidence.toFixed(0)}</span>
-                      </div>
-                    )}
+            {signalLeaders.map(({ title, subnet, accent }) =>
+              subnet ? (
+                <a key={`${title}-${subnet.netuid}`} href={`/subnets/${subnet.netuid}`} className="rounded-3xl border border-white/10 bg-black/25 p-5 transition-transform hover:-translate-y-1">
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.24em] text-stone-500">{title}</span>
+                    <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-2.5 py-1 text-xs text-amber-100">
+                      {subnet.label ?? 'Under Review'}
+                    </span>
                   </div>
-                </div>
-              </a>
-            ))}
+                  <div className="flex items-center gap-4">
+                    <ScoreGauge score={subnet.score} signalsWithData={subnet.primary_outputs ? 4 : 0} />
+                    <div className="min-w-0 flex-1">
+                      <div className="break-words text-lg font-semibold text-stone-100">{subnet.name ?? `Subnet ${subnet.netuid}`}</div>
+                      <div className="mt-1 text-sm text-stone-400">{subnet.thesis ?? 'No thesis available yet.'}</div>
+                      {subnet.primary_outputs && (
+                        <div className={`mt-3 text-xs ${accent}`}>
+                          FQ {subnet.primary_outputs.fundamental_quality.toFixed(0)} · MP {subnet.primary_outputs.mispricing_signal.toFixed(0)} · FR {subnet.primary_outputs.fragility_risk.toFixed(0)} · CF {subnet.primary_outputs.signal_confidence.toFixed(0)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </a>
+              ) : null,
+            )}
           </div>
         </div>
       </section>
@@ -99,7 +115,7 @@ export default async function HomePage() {
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Signal-Led Views</h2>
           <p className="mt-2 max-w-3xl text-sm text-stone-500">
-            The same universe now looks different depending on whether we care about structural quality, valuation gap, fragility, or confidence.
+            The same universe should look different depending on whether we care about quality, mispricing, fragility, or confidence.
           </p>
         </div>
         <PrimarySignalBoard subnets={investableWithSignals} />
@@ -117,7 +133,7 @@ export default async function HomePage() {
         </div>
 
         <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Score Distribution</h2>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Legacy Distribution</h2>
           <DistributionChart buckets={dist.buckets} />
         </div>
       </section>
@@ -125,7 +141,7 @@ export default async function HomePage() {
       <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
         <div className="mb-4">
           <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">All Subnets</h2>
-          <p className="mt-2 text-sm text-stone-500">Search across labels, theses, and market structure instead of scanning a flat leaderboard.</p>
+          <p className="mt-2 text-sm text-stone-500">Sort the live universe by mispricing, quality, fragility, confidence, or the legacy composite instead of relying on one dominant score.</p>
         </div>
         <SubnetTable subnets={allSubnets} />
       </section>

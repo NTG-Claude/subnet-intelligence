@@ -26,7 +26,7 @@ function formatDate(iso: string | null): string {
 
 function countSignals(outputs: PrimaryOutputs | null): number {
   if (!outputs) return 0
-  return Object.values(outputs).filter((value) => value > 0).length
+  return Object.values(outputs).filter((value) => Number.isFinite(value)).length
 }
 
 export default async function SubnetPage({ params }: Props) {
@@ -67,8 +67,15 @@ export default async function SubnetPage({ params }: Props) {
       <section className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.18),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(52,211,153,0.16),_transparent_28%),linear-gradient(135deg,_rgba(28,25,23,0.96),_rgba(12,10,9,0.92))] p-8">
         <div className="grid gap-8 lg:grid-cols-[0.7fr_1.3fr]">
           <div className="flex justify-center">
-            <ScoreGauge score={subnet.score} signalsWithData={signalCount} />
+            <div className="space-y-3 text-center">
+              <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Legacy Composite</div>
+              <ScoreGauge score={subnet.score} signalsWithData={signalCount} />
+              <p className="max-w-xs text-xs leading-relaxed text-stone-500">
+                Kept for compatibility only. The investment thesis should be driven by the four primary outputs below.
+              </p>
+            </div>
           </div>
+
           <div className="space-y-4">
             <div className="flex flex-wrap items-start gap-3">
               <h1 className="min-w-0 flex-[1_1_20rem] break-words text-3xl font-semibold text-stone-50">{subnet.name ?? `Subnet ${netuid}`}</h1>
@@ -81,13 +88,21 @@ export default async function SubnetPage({ params }: Props) {
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-stone-400">
               {subnet.rank && <span>Rank <strong className="text-stone-100">#{subnet.rank}</strong></span>}
               {subnet.percentile != null && <span>Percentile <strong className="text-stone-100">{subnet.percentile.toFixed(1)}</strong></span>}
-              {subnet.score_delta_7d != null && <span>7d <strong className={subnet.score_delta_7d >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{subnet.score_delta_7d >= 0 ? '+' : ''}{subnet.score_delta_7d.toFixed(1)}</strong></span>}
+              {subnet.score_delta_7d != null && (
+                <span>
+                  Legacy 7d{' '}
+                  <strong className={subnet.score_delta_7d >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
+                    {subnet.score_delta_7d >= 0 ? '+' : ''}
+                    {subnet.score_delta_7d.toFixed(1)}
+                  </strong>
+                </span>
+              )}
               {subnet.computed_at && <span>Updated <strong className="text-stone-100">{formatDate(subnet.computed_at)}</strong></span>}
             </div>
 
-            {primary && (
-              <div className="grid gap-3 sm:grid-cols-4">
-                {[
+            <div className="grid gap-3 sm:grid-cols-4">
+              {primary ? (
+                [
                   { label: 'Fundamental Quality', value: primary.fundamental_quality },
                   { label: 'Mispricing Signal', value: primary.mispricing_signal },
                   { label: 'Fragility Risk', value: primary.fragility_risk },
@@ -97,19 +112,24 @@ export default async function SubnetPage({ params }: Props) {
                     <div className="text-xs uppercase tracking-[0.24em] text-stone-500">{item.label}</div>
                     <div className="mt-2 text-2xl font-semibold text-stone-100">{item.value.toFixed(1)}</div>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              ) : (
+                <div className="sm:col-span-4 rounded-3xl border border-amber-300/15 bg-amber-300/5 p-4 text-sm text-amber-100">
+                  This live row has not been rescored into the new investment framework yet. A fresh production score run will populate the four primary outputs.
+                </div>
+              )}
+            </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { label: 'Earned Strength', value: decomposition.earned_strength },
-                { label: 'Reflexive Strength', value: decomposition.reflexive_strength },
-                { label: 'Fragile Strength', value: decomposition.fragile_strength },
+                { label: 'Earned Strength', value: decomposition.earned_strength, note: 'Quality-led base strength' },
+                { label: 'Reflexive Strength', value: decomposition.reflexive_strength, note: 'Momentum and crowding sensitivity' },
+                { label: 'Fragile Strength', value: decomposition.fragile_strength, note: 'Stress-exposed upside' },
               ].map((item) => (
                 <div key={item.label} className="rounded-3xl border border-white/10 bg-black/20 p-4">
                   <div className="text-xs uppercase tracking-[0.24em] text-stone-500">{item.label}</div>
                   <div className="mt-2 text-2xl font-semibold text-stone-100">{item.value?.toFixed(1) ?? '—'}</div>
+                  <div className="mt-2 text-xs text-stone-500">{item.note}</div>
                 </div>
               ))}
             </div>
@@ -214,7 +234,7 @@ export default async function SubnetPage({ params }: Props) {
 
       {chartData.length > 1 && (
         <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Score History</h2>
+          <h2 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Legacy Score History</h2>
           <HistoryChart data={chartData} />
         </section>
       )}
