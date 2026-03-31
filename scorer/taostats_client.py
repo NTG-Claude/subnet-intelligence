@@ -24,6 +24,7 @@ PUBLIC_BASE_URL = "https://taostats.io"
 _API_KEY = os.getenv("TAOSTATS_API_KEY", "")
 _PUBLIC_REQUEST_DELAY_SECONDS = 0.35
 _TITLE_RE = re.compile(r"<title>\s*(?P<title>.*?)\s*</title>", re.IGNORECASE | re.DOTALL)
+_PUBLIC_NAME_RE_TEMPLATE = r"SN\s*{netuid}\s*(?:·|Â·)\s*(?P<name>.+?)\s*(?:·|Â·)\s*taostats"
 
 # ---------------------------------------------------------------------------
 # Pydantic response models
@@ -404,12 +405,24 @@ class TaostatsClient:
 
 
 def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
+    html_text = html.unescape(page_html)
+
+    pattern = re.compile(
+        _PUBLIC_NAME_RE_TEMPLATE.format(netuid=netuid),
+        re.IGNORECASE,
+    )
+    html_match = pattern.search(html_text)
+    if html_match:
+        candidate = html_match.group("name").strip()
+        if candidate:
+            return candidate
+
     match = _TITLE_RE.search(page_html)
     if not match:
         return None
 
     title = html.unescape(match.group("title"))
-    parts = [part.strip() for part in title.split("·") if part.strip()]
+    parts = [part.strip() for part in re.split(r"(?:·|Â·)", title) if part.strip()]
     sn_tokens = {f"SN{netuid}".lower(), f"SN {netuid}".lower()}
 
     for index, part in enumerate(parts):
