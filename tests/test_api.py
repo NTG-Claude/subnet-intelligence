@@ -243,6 +243,29 @@ def test_get_subnet_detail():
     assert data["metadata"]["name"] == "subnet-1"
 
 
+def test_list_subnets_uses_seed_name_fallback():
+    rows = [
+        {
+            **SCORES[0],
+            "netuid": 64,
+            "raw_data": {"label": "Under Review", "thesis": "test thesis", "analysis": {}},
+        }
+    ]
+    with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=rows), \
+          patch("api.main._get_metadata", return_value=None), \
+         patch("api.main._seed_name_map", return_value={64: "Chutes"}), \
+         patch("api.main._cache_get", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets")
+    assert resp.status_code == 200
+    assert resp.json()["subnets"][0]["name"] == "Chutes"
+
+
 def test_get_root_subnet_detail_still_available():
     rows = [ROOT_ROW, *SCORES]
     with patch("api.main.get_latest_scores", return_value=rows), \
