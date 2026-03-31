@@ -27,6 +27,8 @@ class SubnetSummaryResponse(BaseModel):
     tao_in_pool: Optional[float] = None
     market_cap_tao: Optional[float] = None
     staking_apy: Optional[float] = None
+    label: Optional[str] = None
+    thesis: Optional[str] = None
 
 
 class SubnetMetadataResponse(BaseModel):
@@ -61,6 +63,9 @@ class SubnetDetailResponse(BaseModel):
     market_cap_tao: Optional[float] = None
     staking_apy: Optional[float] = None
     score_delta_7d: Optional[float] = None
+    label: Optional[str] = None
+    thesis: Optional[str] = None
+    analysis: Optional[dict] = None
 
 
 class SubnetListResponse(BaseModel):

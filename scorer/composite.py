@@ -1,102 +1,59 @@
 """
-Composite scorer — orchestrates all signals into a single SubnetScore.
-Data source: bittensor on-chain SDK (dTAO pools) + GitHub (dev activity).
+Composite scorer - signal separation engine for Bittensor subnets.
 
-Score v3 — Investment Intelligence Model
-=========================================
-score = undervalue(30) + yield_quality(25) + health(25) + dev(20)
-
-undervalue:   Quality / log10(MarketCap) — the P/E ratio for subnets.
-              Answers: "Am I buying quality cheap?"
-              Degrades gracefully: uses stake as market proxy when no dTAO pool.
-
-yield_quality: APY(capped) + pool_depth + emission_efficiency.
-              Answers: "Is the yield real, sustainable, and deep?"
-              Only counts APY from pools with >50 TAO (prevents tiny-pool outliers).
-
-health:       Active neurons + validator count + incentive distribution.
-              Answers: "Is the network actually working and decentralized?"
-
-dev:          GitHub commits + unique contributors (30d).
-              Answers: "Is anyone building this long-term?"
+The old implementation was a percentile dashboard. This version keeps the
+existing entrypoints but routes scoring through a 5-axis model:
+intrinsic quality, economic sustainability, reflexivity, stress robustness,
+and opportunity gap.
 """
 
 import asyncio
 import logging
-import math
 from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from scorer.bittensor_client import BLOCKS_PER_DAY, SubnetMetrics, get_all_netuids, get_current_block, get_subnet_metrics
+from collectors.models import RawSubnetSnapshot, RepoActivitySnapshot
+from scorer.bittensor_client import SubnetMetrics, get_all_netuids, get_current_block, get_subnet_metrics
 from scorer.github_client import get_commits_last_30d, get_repo_stats
-from scorer.normalizer import percentile_rank
-from scorer.signals import (
-    development_activity_score,
-    distribution_health_score,
-)
 from scorer.subnet_github_mapper import get_github_coords
+from scoring.engine import build_scores
+from storage.history import load_recent_analysis_history
 
 logger = logging.getLogger(__name__)
 
-SCORE_VERSION = "v3"
+SCORE_VERSION = "v4_signal_separation"
 
-# Signal weights (must sum to 100)
-_WEIGHTS = {
-    "undervalue": 30,   # quality per unit of market cap
-    "yield":      25,   # risk-adjusted, deep-pool yield
-    "health":     25,   # network activity + decentralisation
-    "dev":        20,   # open-source development activity
-}
-
-# Minimum pool depth for APY to be considered meaningful
-_MIN_POOL_DEPTH_TAO = 50.0
-# Cap APY at 500% to prevent tiny-pool outliers from dominating the signal
-_MAX_APY_PCT = 500.0
-
-
-# ---------------------------------------------------------------------------
-# Output models
-# ---------------------------------------------------------------------------
 
 class ScoreBreakdown(BaseModel):
-    # v3 field mapping (DB columns kept for backward compat):
-    capital_score: float    # = undervalue signal   (max 30)
-    activity_score: float   # = yield_quality signal (max 25)
-    efficiency_score: float # = health signal        (max 25)
-    health_score: float     # = 0 in v3 (collapsed into efficiency_score)
-    dev_score: float        # = dev signal           (max 20)
+    capital_score: float
+    activity_score: float
+    efficiency_score: float
+    health_score: float
+    dev_score: float
 
 
 class SubnetScore(BaseModel):
     netuid: int
-    score: float                   # 0–100 composite
+    score: float
     breakdown: ScoreBreakdown
     rank: Optional[int] = None
     timestamp: str
     version: str = SCORE_VERSION
-    # dTAO market data
     alpha_price_tao: float = 0.0
     tao_in_pool: float = 0.0
     market_cap_tao: float = 0.0
-    staking_apy: float = 0.0       # capped at 500%, 0 if pool < 50 TAO
+    staking_apy: float = 0.0
+    analysis: dict = Field(default_factory=dict)
 
-
-# ---------------------------------------------------------------------------
-# Per-subnet data container
-# ---------------------------------------------------------------------------
 
 class _SubnetData:
     def __init__(self, netuid: int) -> None:
         self.netuid = netuid
         self.metrics: Optional[SubnetMetrics] = None
-        self.commits = None
+        self.repo_activity: Optional[RepoActivitySnapshot] = None
 
-
-# ---------------------------------------------------------------------------
-# Data fetcher
-# ---------------------------------------------------------------------------
 
 async def _fetch_data(netuid: int, current_block: int, progress: list) -> _SubnetData:
     d = _SubnetData(netuid)
@@ -106,176 +63,90 @@ async def _fetch_data(netuid: int, current_block: int, progress: list) -> _Subne
     m = d.metrics
     if m and m.n_total > 0:
         logger.info(
-            "[%d/%d] SN%d OK — %d neurons, %.0f TAO staked, pool=%.2f TAO, "
-            "emission=%.6f TAO/blk, alpha_price=%.4f",
-            progress[0], progress[1], netuid, m.n_total, m.total_stake_tao,
-            m.tao_in_pool, m.emission_per_block_tao, m.alpha_price_tao,
+            "[%d/%d] SN%d OK - neurons=%d yuma=%d stake=%.0f TAO pool=%.2f emission=%.6f",
+            progress[0], progress[1], netuid, m.n_total, m.yuma_n_total,
+            m.total_stake_tao, m.tao_in_pool, m.emission_per_block_tao,
         )
     else:
-        logger.warning("[%d/%d] SN%d — no on-chain data", progress[0], progress[1], netuid)
+        logger.warning("[%d/%d] SN%d - no on-chain data", progress[0], progress[1], netuid)
 
     coords = await get_github_coords(netuid, live_fetch=True)
     if coords:
         try:
-            d.commits, _ = await asyncio.gather(
+            commits, repo = await asyncio.gather(
                 get_commits_last_30d(coords.owner, coords.repo),
                 get_repo_stats(coords.owner, coords.repo),
             )
+            d.repo_activity = RepoActivitySnapshot(
+                commits_30d=commits.commits_30d if commits else 0,
+                contributors_30d=commits.unique_contributors_30d if commits else 0,
+                stars=repo.stars if repo else 0,
+                forks=repo.forks if repo else 0,
+                open_issues=repo.open_issues if repo else 0,
+                last_push=repo.last_push if repo else None,
+            )
         except Exception as exc:
             logger.warning("GitHub fetch failed for SN%d: %s", netuid, exc)
-
     return d
 
 
-# ---------------------------------------------------------------------------
-# Cross-subnet context (for percentile normalisation)
-# ---------------------------------------------------------------------------
-
-class _CrossSubnetContext:
-    def __init__(self, all_data: list[_SubnetData]) -> None:
-        # Signal 1: Undervalue
-        self.value_ratios: list[Optional[float]] = []
-
-        # Signal 2: Yield Quality
-        self.apys: list[Optional[float]] = []          # capped, min pool enforced
-        self.pool_depths: list[Optional[float]] = []
-        self.stake_per_emission: list[Optional[float]] = []
-
-        # Signal 3: Health
-        self.active_ratios: list[Optional[float]] = []
-        self.n_validators: list[Optional[int]] = []
-
-        # Signal 4: Dev
-        self.commits_30d: list[Optional[int]] = []
-        self.contributors_30d: list[Optional[int]] = []
-
-        for d in all_data:
-            m = d.metrics
-
-            # --- Undervalue inputs ---
-            activity_raw = m.n_active_7d / m.n_total if (m and m.n_total > 0) else None
-            decentral_raw = (1.0 - m.top3_stake_fraction) if m else None
-
-            # Market proxy: prefer deep dTAO pool; fall back to total stake
-            if m and m.tao_in_pool >= _MIN_POOL_DEPTH_TAO:
-                market_proxy = m.tao_in_pool
-            elif m and m.total_stake_tao > 0:
-                market_proxy = m.total_stake_tao
-            else:
-                market_proxy = None
-
-            if activity_raw is not None and decentral_raw is not None and market_proxy:
-                quality_raw = 0.6 * activity_raw + 0.4 * decentral_raw
-                self.value_ratios.append(quality_raw / max(0.1, math.log10(1 + market_proxy)))
-            else:
-                self.value_ratios.append(None)
-
-            # --- Yield inputs ---
-            # APY only meaningful above pool depth threshold
-            if m and m.tao_in_pool >= _MIN_POOL_DEPTH_TAO and m.emission_per_block_tao > 0:
-                raw_apy = (m.emission_per_block_tao * BLOCKS_PER_DAY * 365 / m.tao_in_pool) * 100
-                self.apys.append(min(raw_apy, _MAX_APY_PCT))
-            else:
-                self.apys.append(None)
-
-            self.pool_depths.append(m.tao_in_pool if (m and m.tao_in_pool > 0) else None)
-
-            if m and m.emission_per_block_tao > 0:
-                self.stake_per_emission.append(m.total_stake_tao / m.emission_per_block_tao)
-            else:
-                self.stake_per_emission.append(None)
-
-            # --- Health inputs ---
-            if m and m.n_total > 0:
-                self.active_ratios.append(m.n_active_7d / m.n_total)
-            else:
-                self.active_ratios.append(None)
-            self.n_validators.append(m.n_validators if m else None)
-
-            # --- Dev inputs ---
-            self.commits_30d.append(d.commits.commits_30d if d.commits else None)
-            self.contributors_30d.append(d.commits.unique_contributors_30d if d.commits else None)
-
-
-# ---------------------------------------------------------------------------
-# Single-subnet scorer
-# ---------------------------------------------------------------------------
-
-def _score_one(d: _SubnetData, ctx: _CrossSubnetContext, idx: int) -> SubnetScore:
-    m = d.metrics
-
-    # Signal 1: Undervalue (30pts)
-    # "How much network quality per unit of market cap?"
-    underval = percentile_rank(ctx.value_ratios[idx], ctx.value_ratios)
-
-    # Signal 2: Yield Quality (25pts)
-    # "Is the yield real, deep, and efficient?"
-    apy_pct   = percentile_rank(ctx.apys[idx], ctx.apys)
-    depth_pct = percentile_rank(ctx.pool_depths[idx], ctx.pool_depths)
-    eff_pct   = percentile_rank(ctx.stake_per_emission[idx], ctx.stake_per_emission)
-
-    if ctx.apys[idx] is not None:
-        # Full signal: APY + pool depth + emission efficiency
-        yield_q = 0.40 * apy_pct + 0.35 * depth_pct + 0.25 * eff_pct
-    else:
-        # No dTAO pool: pool depth proxy + emission efficiency
-        yield_q = 0.60 * depth_pct + 0.40 * eff_pct
-
-    # Signal 3: Health (25pts)
-    # "Is the network active and decentralised?"
-    active_pct = percentile_rank(ctx.active_ratios[idx], ctx.active_ratios)
-    val_pct = percentile_rank(
-        float(ctx.n_validators[idx]) if ctx.n_validators[idx] is not None else None,
-        [float(x) if x is not None else None for x in ctx.n_validators],
-    )
-    dist_health = distribution_health_score(
-        m.incentive_scores if m else [],
-        m.top3_stake_fraction if m else None,
-    )
-    health = 0.40 * active_pct + 0.25 * val_pct + 0.35 * dist_health
-
-    # Signal 4: Development (20pts)
-    dev = development_activity_score(
-        d.commits.commits_30d if d.commits else None,
-        d.commits.unique_contributors_30d if d.commits else None,
-        ctx.commits_30d,
-        ctx.contributors_30d,
-    )
-
-    composite = (
-        underval * _WEIGHTS["undervalue"]
-        + yield_q * _WEIGHTS["yield"]
-        + health  * _WEIGHTS["health"]
-        + dev     * _WEIGHTS["dev"]
-    )
-
-    # Display values for frontend
-    tao_pool    = m.tao_in_pool if m else 0.0
-    alpha_price = m.alpha_price_tao if m else 0.0
-    market_cap  = tao_pool * 2  # AMM TVL proxy
-    display_apy = ctx.apys[idx] or 0.0  # already capped
-
-    return SubnetScore(
+def _to_snapshot(d: _SubnetData, current_block: int, history: list) -> RawSubnetSnapshot:
+    m = d.metrics or SubnetMetrics(netuid=d.netuid)
+    return RawSubnetSnapshot(
         netuid=d.netuid,
-        score=round(composite, 2),
-        breakdown=ScoreBreakdown(
-            capital_score=round(underval * _WEIGHTS["undervalue"], 2),
-            activity_score=round(yield_q * _WEIGHTS["yield"], 2),
-            efficiency_score=round(health * _WEIGHTS["health"], 2),
-            health_score=0.0,
-            dev_score=round(dev * _WEIGHTS["dev"], 2),
-        ),
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        alpha_price_tao=round(alpha_price, 6),
-        tao_in_pool=round(tao_pool, 2),
-        market_cap_tao=round(market_cap, 2),
-        staking_apy=display_apy,
+        current_block=current_block,
+        n_total=m.n_total,
+        yuma_neurons=m.yuma_n_total or m.n_total,
+        active_neurons_7d=m.n_active_7d,
+        total_stake_tao=m.total_stake_tao,
+        unique_coldkeys=m.unique_coldkeys,
+        top3_stake_fraction=m.top3_stake_fraction,
+        emission_per_block_tao=m.emission_per_block_tao,
+        incentive_scores=m.incentive_scores,
+        n_validators=m.n_validators,
+        tao_in_pool=m.tao_in_pool,
+        alpha_in_pool=m.alpha_in_pool,
+        alpha_price_tao=m.alpha_price_tao,
+        coldkey_stakes=m.coldkey_stakes,
+        validator_stakes=m.validator_stakes,
+        validator_weight_matrix=m.validator_weight_matrix,
+        validator_bond_matrix=m.validator_bond_matrix,
+        last_update_blocks=m.last_update_blocks,
+        yuma_mask=m.yuma_mask,
+        mechanism_ids=m.mechanism_ids,
+        github=d.repo_activity,
+        history=history,
     )
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+def _analysis_payload(snapshot: RawSubnetSnapshot, artifacts) -> dict:
+    return {
+        "label": artifacts.label,
+        "thesis": artifacts.thesis,
+        "analysis": artifacts.explanation,
+        "raw_metrics": {
+            **artifacts.bundle.raw,
+            "emission_per_block_tao": snapshot.emission_per_block_tao,
+            "active_ratio": artifacts.bundle.raw.get("active_ratio"),
+            "tao_in_pool": snapshot.tao_in_pool,
+            "alpha_price_tao": snapshot.alpha_price_tao,
+        },
+        "categories": {
+            name: metric.category for name, metric in artifacts.bundle.metrics.items()
+        },
+    }
+
+
+def _legacy_breakdown(artifacts) -> ScoreBreakdown:
+    opportunity_norm = max(0.0, min(1.0, 0.5 + artifacts.axes.opportunity_gap / 2.0))
+    return ScoreBreakdown(
+        capital_score=round(artifacts.axes.intrinsic_quality * 30, 2),
+        activity_score=round(artifacts.axes.economic_sustainability * 25, 2),
+        efficiency_score=round((1.0 - artifacts.axes.reflexivity) * 20, 2),
+        health_score=round(artifacts.axes.stress_robustness * 15, 2),
+        dev_score=round(opportunity_norm * 10, 2),
+    )
+
 
 async def compute_score(netuid: int) -> SubnetScore:
     scores = await compute_all_subnets(netuids=[netuid])
@@ -283,31 +154,20 @@ async def compute_score(netuid: int) -> SubnetScore:
 
 
 async def compute_all_subnets(netuids: Optional[list[int]] = None) -> list[SubnetScore]:
-    """
-    Compute scores for all (or a subset of) subnets.
-
-    1. Fetch current block.
-    2. Fetch per-subnet on-chain metrics + GitHub data in parallel.
-    3. Build cross-subnet context for percentile normalisation.
-    4. Score each subnet.
-    5. Assign ranks (1 = best).
-    """
     current_block = await get_current_block()
-
     if netuids is None:
         netuids = await get_all_netuids()
-
     if not netuids:
         logger.error("Could not fetch subnet list from chain")
         return []
 
     logger.info("Fetching data for %d subnets (block=%d)", len(netuids), current_block)
     progress = [0, len(netuids)]
-
     results = await asyncio.gather(
         *[_fetch_data(netuid, current_block, progress) for netuid in netuids],
         return_exceptions=True,
     )
+
     all_data: list[_SubnetData] = []
     for netuid, res in zip(netuids, results):
         if isinstance(res, BaseException):
@@ -316,11 +176,35 @@ async def compute_all_subnets(netuids: Optional[list[int]] = None) -> list[Subne
         else:
             all_data.append(res)
 
-    ctx = _CrossSubnetContext(all_data)
-    scores = [_score_one(d, ctx, i) for i, d in enumerate(all_data)]
+    try:
+        history_by_netuid = load_recent_analysis_history(netuids)
+    except Exception as exc:
+        logger.warning("Could not load analysis history: %s", exc)
+        history_by_netuid = {}
+
+    snapshots = [_to_snapshot(d, current_block, history_by_netuid.get(d.netuid, [])) for d in all_data]
+    artifacts_by_netuid = build_scores(snapshots)
+
+    scores: list[SubnetScore] = []
+    for snapshot in snapshots:
+        artifacts = artifacts_by_netuid[snapshot.netuid]
+        pool = snapshot.tao_in_pool
+        market_proxy = pool * 2.0
+        scores.append(
+            SubnetScore(
+                netuid=snapshot.netuid,
+                score=artifacts.score,
+                breakdown=_legacy_breakdown(artifacts),
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                alpha_price_tao=round(snapshot.alpha_price_tao, 6),
+                tao_in_pool=round(pool, 2),
+                market_cap_tao=round(market_proxy, 2),
+                staking_apy=round(max(0.0, snapshot.emission_per_block_tao * 7200 * 365 / max(pool, 1e-9) * 100) if pool > 0 else 0.0, 2),
+                analysis=_analysis_payload(snapshot, artifacts),
+            )
+        )
 
     scores.sort(key=lambda s: s.score, reverse=True)
-    for i, s in enumerate(scores, start=1):
-        s.rank = i
-
+    for index, score in enumerate(scores, start=1):
+        score.rank = index
     return scores

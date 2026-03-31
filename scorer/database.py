@@ -139,7 +139,7 @@ def save_scores(scores: list, raw_data_by_netuid: Optional[dict] = None) -> None
             rank=s.rank,
             computed_at=now,
             score_version=s.version,
-            raw_data=raw_data_by_netuid.get(s.netuid),
+            raw_data=raw_data_by_netuid.get(s.netuid) or getattr(s, "analysis", None),
             alpha_price_tao=getattr(s, "alpha_price_tao", None) or None,
             tao_in_pool=getattr(s, "tao_in_pool", None) or None,
             market_cap_tao=getattr(s, "market_cap_tao", None) or None,
@@ -294,4 +294,5 @@ def _row_to_dict(row: SubnetScoreRow) -> dict:
         "tao_in_pool": row.tao_in_pool,
         "market_cap_tao": row.market_cap_tao,
         "staking_apy": row.staking_apy,
+        "raw_data": row.raw_data,
     }

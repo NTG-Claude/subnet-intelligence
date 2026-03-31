@@ -127,6 +127,7 @@ def _compute_percentile(rank: Optional[int], total: int) -> Optional[float]:
 
 
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
+    raw_data = row.get("raw_data") or {}
     return SubnetSummaryResponse(
         netuid=row["netuid"],
         name=meta.name if meta else None,
@@ -139,6 +140,8 @@ def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse
         tao_in_pool=row.get("tao_in_pool"),
         market_cap_tao=row.get("market_cap_tao"),
         staking_apy=row.get("staking_apy"),
+        label=raw_data.get("label"),
+        thesis=raw_data.get("thesis"),
     )
 
 
@@ -260,6 +263,9 @@ async def get_subnet(
         market_cap_tao=row.get("market_cap_tao"),
         staking_apy=row.get("staking_apy"),
         score_delta_7d=score_delta_7d,
+        label=(row.get("raw_data") or {}).get("label"),
+        thesis=(row.get("raw_data") or {}).get("thesis"),
+        analysis=(row.get("raw_data") or {}).get("analysis"),
     )
     _cache_set(cache_key, result)
     return result

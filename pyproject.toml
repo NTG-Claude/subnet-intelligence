@@ -16,7 +16,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["scorer*", "api*"]
+include = ["scorer*", "api*", "collectors*", "features*", "regimes*", "stress*", "labels*", "explain*", "storage*", "backtests*", "scoring*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
