@@ -175,7 +175,16 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
       />
 
       <div className="overflow-x-auto rounded-3xl border border-white/10 bg-black/20 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[1080px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-20" />
+            <col />
+            <col className="w-56" />
+            <col className="w-28" />
+            <col className="w-28" />
+            <col className="w-28" />
+            <col className="w-28" />
+          </colgroup>
           <thead className="bg-white/5 text-xs uppercase tracking-[0.24em] text-stone-400">
             <tr>
               <th className="px-4 py-3 text-left">
@@ -206,10 +215,13 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
               <tr key={s.netuid} className="transition-colors hover:bg-white/5">
                 <td className="px-4 py-3 font-mono text-xs text-stone-400">{s.netuid}</td>
                 <td className="px-4 py-3">
-                  <Link href={`/subnets/${s.netuid}`} className="font-medium text-stone-100 transition-colors hover:text-lime-300">
+                  <Link
+                    href={`/subnets/${s.netuid}`}
+                    className="block whitespace-normal break-words text-base font-medium leading-6 text-stone-100 transition-colors hover:text-lime-300"
+                  >
                     {s.name ?? `Subnet ${s.netuid}`}
                   </Link>
-                  {s.thesis && <div className="mt-1 max-w-md text-xs leading-5 text-stone-500">{s.thesis}</div>}
+                  {s.thesis && <div className="mt-1 pr-4 text-xs leading-5 text-stone-500">{s.thesis}</div>}
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-400">
                     <span>Pool {(s.tao_in_pool ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                     <span>
@@ -221,7 +233,7 @@ export default function SubnetTable({ subnets, pageSize = 20 }: Props) {
                   </div>
                 </td>
                 <td className="hidden px-4 py-3 lg:table-cell">
-                  <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-2.5 py-1 text-xs text-amber-100">
+                  <span className="inline-flex max-w-full whitespace-normal rounded-full border border-amber-300/20 bg-amber-200/10 px-2.5 py-1 text-xs text-amber-100">
                     {s.label ?? 'Under Review'}
                   </span>
                 </td>
