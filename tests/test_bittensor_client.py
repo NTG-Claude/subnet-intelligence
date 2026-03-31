@@ -4,6 +4,7 @@ Uses mocks — does not require a real chain connection.
 """
 
 import pytest
+import numpy as np
 from unittest.mock import MagicMock, patch
 
 from scorer.bittensor_client import (
@@ -13,6 +14,7 @@ from scorer.bittensor_client import (
     _decode_identity_val,
     _fetch_current_block,
     _fetch_netuids,
+    _first_non_empty_sequence,
     BLOCKS_PER_DAY,
     BLOCKS_PER_TEMPO,
 )
@@ -226,3 +228,9 @@ def test_clear_caches_resets_identity_state():
 
     assert bt_client._identity_cache == {}
     assert bt_client._all_identities_fetched is False
+
+
+def test_first_non_empty_sequence_handles_numpy_arrays():
+    arr = np.array([1, 2, 3])
+    result = _first_non_empty_sequence(None, arr, [])
+    assert result == [1, 2, 3]

@@ -74,6 +74,23 @@ def clear_caches() -> None:
         _all_identities_fetched = False
 
 
+def _coerce_sequence(value) -> list:
+    if value is None:
+        return []
+    try:
+        return list(value)
+    except TypeError:
+        return []
+
+
+def _first_non_empty_sequence(*values) -> list:
+    for value in values:
+        seq = _coerce_sequence(value)
+        if len(seq) > 0:
+            return seq
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -189,8 +206,10 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         # We restrict activity/validator metrics to yuma neurons so multi-mechanism
         # subnets aren't penalised for "inactive" non-yuma neurons.
         # If mechids are absent (single-mechanism subnet), include all neurons.
-        raw_mechids = list(getattr(meta, "mechanism_ids", None) or
-                           getattr(meta, "mechids", None) or [])
+        raw_mechids = _first_non_empty_sequence(
+            getattr(meta, "mechanism_ids", None),
+            getattr(meta, "mechids", None),
+        )
         if raw_mechids and len(raw_mechids) == n:
             yuma_mask = [int(mid) == 0 for mid in raw_mechids]
             m.mechanism_ids = [int(mid) for mid in raw_mechids]
@@ -223,7 +242,10 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
                 validator_stakes.append(float(stake_arr[idx]) if idx < len(stake_arr) else 0.0)
         m.validator_stakes = validator_stakes
 
-        weight_rows = getattr(meta, "W", None) or getattr(meta, "weights", None) or []
+        weight_rows = _first_non_empty_sequence(
+            getattr(meta, "W", None),
+            getattr(meta, "weights", None),
+        )
         for idx, row in enumerate(weight_rows):
             if idx >= n or not yuma_mask[idx]:
                 continue
@@ -234,7 +256,10 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
             if any(values):
                 m.validator_weight_matrix.append(values)
 
-        bond_rows = getattr(meta, "B", None) or getattr(meta, "bonds", None) or []
+        bond_rows = _first_non_empty_sequence(
+            getattr(meta, "B", None),
+            getattr(meta, "bonds", None),
+        )
         for idx, row in enumerate(bond_rows):
             if idx >= n or not yuma_mask[idx]:
                 continue

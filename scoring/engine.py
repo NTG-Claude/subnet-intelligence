@@ -39,6 +39,27 @@ def _total_score(axes: AxisScores) -> float:
     )
 
 
+def _apply_total_cap(score: float, axes: AxisScores, rules) -> float:
+    if rules.total_cap is None:
+        return score
+    if not rules.force_negative_label:
+        return min(score, rules.total_cap)
+
+    # Preserve some differentiation among capped negative regimes instead of
+    # flattening most of the universe onto the exact same ceiling.
+    regime_quality = max(
+        0.0,
+        min(
+            1.0,
+            0.45 * axes.intrinsic_quality
+            + 0.35 * axes.stress_robustness
+            + 0.20 * (1.0 - axes.reflexivity),
+        ),
+    )
+    shaped_cap = rules.total_cap * (0.55 + 0.45 * regime_quality)
+    return min(score, shaped_cap)
+
+
 def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts]:
     bundles = normalize_features([compute_raw_features(snapshot) for snapshot in snapshots])
     results: dict[int, ScoreArtifacts] = {}
@@ -56,8 +77,7 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
         )
         axes.opportunity_gap = _opportunity_gap(axes, bundle)
         score = _total_score(axes)
-        if rules.total_cap is not None:
-            score = min(score, rules.total_cap)
+        score = _apply_total_cap(score, axes, rules)
         label, thesis = assign_label(axes, bundle, stress, rules)
         explanation = build_explanation(bundle, axes, stress, rules, label, thesis)
         results[snapshot.netuid] = ScoreArtifacts(
