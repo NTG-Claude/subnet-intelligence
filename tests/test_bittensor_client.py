@@ -5,6 +5,7 @@ Uses mocks — does not require a real chain connection.
 
 import pytest
 from unittest.mock import MagicMock, patch
+import numpy as np
 
 from scorer.bittensor_client import (
     SubnetIdentity,
@@ -13,6 +14,7 @@ from scorer.bittensor_client import (
     _decode_identity_val,
     _fetch_current_block,
     _fetch_netuids,
+    _first_non_empty_sequence,
     BLOCKS_PER_DAY,
     BLOCKS_PER_TEMPO,
 )
@@ -127,6 +129,11 @@ def test_blocks_per_day_value():
 def test_blocks_per_tempo_value():
     # one epoch = 360 blocks
     assert BLOCKS_PER_TEMPO == 360
+
+
+def test_first_non_empty_sequence_handles_numpy_arrays():
+    arr = np.array([1, 2, 3])
+    assert _first_non_empty_sequence(None, arr) == [1, 2, 3]
 
 
 # ---------------------------------------------------------------------------
