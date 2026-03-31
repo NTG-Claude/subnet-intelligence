@@ -151,13 +151,26 @@ async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, s
     except Exception as exc:
         logger.warning("Could not read names cache: %s", exc)
 
-    # Cache stale or missing — fetch from Taostats (1 API call)
+    target_netuids = sorted(set(netuids or []))
+
+    # Cache stale or missing — fetch from Taostats API first, then reconcile
+    # with public-page scraping because the API occasionally serves truncated
+    # display names while the public subnet pages expose the fuller label.
     names: dict[int, str] = {}
     try:
         async with TaostatsClient() as tc:
             subnets = await tc.get_all_subnets()
-        if subnets:
-            names = {s.netuid: _normalize_public_subnet_name(s.name) for s in subnets if s.name}
+            if subnets:
+                names = {s.netuid: _normalize_public_subnet_name(s.name) for s in subnets if s.name}
+                scrape_targets = target_netuids or sorted(names.keys())
+                if scrape_targets:
+                    scraped_names = await tc.scrape_public_subnet_names(scrape_targets)
+                    for netuid, scraped_name in scraped_names.items():
+                        names[netuid] = _choose_preferred_subnet_name(
+                            names.get(netuid),
+                            _normalize_public_subnet_name(scraped_name),
+                            None,
+                        ) or names.get(netuid) or _normalize_public_subnet_name(scraped_name)
         logger.info("Taostats: fetched names for %d subnets", len(names))
         if names:
             out = {str(k): v for k, v in names.items()}

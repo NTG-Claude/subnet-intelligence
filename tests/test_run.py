@@ -262,6 +262,40 @@ async def test_load_subnet_names_negative_caches_failed_taostats_fetch():
 
 
 @pytest.mark.asyncio
+async def test_load_subnet_names_reconciles_api_names_with_richer_public_names():
+    from scorer.run import _load_subnet_names
+
+    cache_file = Path("data/test_subnet_names_cache.json")
+    seed_file = Path("data/test_subnet_names_seed.json")
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        seed_file.write_text('{"20":"GroundLayer"}', encoding="utf-8")
+        cache_file.write_text(
+            '{\n'
+            '  "_fetched_at": "2020-01-01T00:00:00+00:00"\n'
+            '}',
+            encoding="utf-8",
+        )
+
+        api_subnets = [type("Subnet", (), {"netuid": 20, "name": "GroundLa"})()]
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get_all_subnets = AsyncMock(return_value=api_subnets)
+        mock_client.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={20: "GroundLayer"})
+
+        with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
+             patch("scorer.run._SEED_NAMES_FILE", seed_file), \
+             patch("scorer.run.TaostatsClient", return_value=mock_client):
+            names = await _load_subnet_names([20])
+
+        assert names[20] == "GroundLayer"
+    finally:
+        if cache_file.exists():
+            cache_file.unlink()
+        if seed_file.exists():
+            seed_file.unlink()
+
+
+@pytest.mark.asyncio
 async def test_load_subnet_names_uses_fetched_at_not_file_mtime():
     from scorer.run import _load_subnet_names
 
