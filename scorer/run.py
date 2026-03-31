@@ -50,16 +50,43 @@ def _setup_logging(verbose: bool) -> None:
 
 logger = logging.getLogger(__name__)
 
-_NAMES_CACHE_FILE = Path(__file__).parent.parent / "data" / "subnet_names.json"
+_SEED_NAMES_FILE = Path(__file__).parent.parent / "data" / "subnet_names.json"
+_NAMES_CACHE_FILE = Path(__file__).parent.parent / "data" / "subnet_names_cache.json"
 _NAMES_MAX_AGE_SECONDS = 86_400  # refresh at most once per day
 
 
-def _read_seed_names() -> dict[int, str]:
+def _read_names_file(path: Path) -> tuple[dict[int, str], Optional[datetime]]:
     try:
-        data = json.loads(_NAMES_CACHE_FILE.read_text())
-        return {int(k): v for k, v in data.items() if str(k).isdigit()}
+        data = json.loads(path.read_text())
+        names = {int(k): v for k, v in data.items() if str(k).isdigit()}
+        fetched_at_raw = data.get("_fetched_at")
+        fetched_at = None
+        if isinstance(fetched_at_raw, str):
+            try:
+                fetched_at = datetime.fromisoformat(fetched_at_raw)
+            except ValueError:
+                fetched_at = None
+        return names, fetched_at
     except Exception:
-        return {}
+        return {}, None
+
+
+def _read_seed_names() -> dict[int, str]:
+    names, _ = _read_names_file(_SEED_NAMES_FILE)
+    return names
+
+
+def _read_cached_names() -> tuple[dict[int, str], Optional[datetime]]:
+    return _read_names_file(_NAMES_CACHE_FILE)
+
+
+def _cache_is_fresh(fetched_at: Optional[datetime]) -> bool:
+    if fetched_at is None:
+        return False
+    if fetched_at.tzinfo is None:
+        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+    age_seconds = (datetime.now(timezone.utc) - fetched_at).total_seconds()
+    return age_seconds < _NAMES_MAX_AGE_SECONDS
 
 
 async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, str]:
@@ -68,14 +95,13 @@ async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, s
     The cache file (data/subnet_names.json) is refreshed at most once per day,
     keeping API usage minimal regardless of how many score runs happen.
     """
-    # Use disk cache if it's fresh enough
     try:
         if _NAMES_CACHE_FILE.exists():
-            age = time.time() - _NAMES_CACHE_FILE.stat().st_mtime
-            if age < _NAMES_MAX_AGE_SECONDS:
-                names = _read_seed_names()
+            names, fetched_at = _read_cached_names()
+            if _cache_is_fresh(fetched_at):
+                age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600 if fetched_at else 0.0
                 logger.info("Subnet names loaded from disk cache (%d subnets, %.0fh old)",
-                            len(names), age / 3600)
+                            len(names), age_hours)
                 return names
     except Exception as exc:
         logger.warning("Could not read names cache: %s", exc)
