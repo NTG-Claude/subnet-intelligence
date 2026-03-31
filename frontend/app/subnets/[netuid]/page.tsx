@@ -60,8 +60,8 @@ export default async function SubnetPage({ params }: Props) {
             <ScoreGauge score={subnet.score} signalsWithData={signalCount} />
           </div>
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold text-stone-50">{subnet.name ?? `Subnet ${netuid}`}</h1>
+            <div className="flex flex-wrap items-start gap-3">
+              <h1 className="min-w-0 flex-[1_1_20rem] break-words text-3xl font-semibold text-stone-50">{subnet.name ?? `Subnet ${netuid}`}</h1>
               <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-mono text-stone-300">SN{netuid}</span>
               <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-3 py-1 text-xs text-amber-100">{subnet.label ?? 'Under Review'}</span>
             </div>

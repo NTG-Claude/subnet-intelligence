@@ -28,3 +28,11 @@ def test_extract_public_subnet_name_from_clean_middle_dot_title():
 def test_extract_public_subnet_name_from_body_when_title_missing():
     html = "<html><body><div>0.0283 · SN9 · iota · taostats</div></body></html>"
     assert _extract_public_subnet_name(html, 9) == "iota"
+
+
+def test_extract_public_subnet_name_prefers_full_json_name_over_truncated_title():
+    html = (
+        '<html><head><title>0.0086 · SN13 · Data Uni... · taostats</title></head>'
+        '<body>{"netuid":13,"name":"Data Universe","subnet_name":"Data Universe"}</body></html>'
+    )
+    assert _extract_public_subnet_name(html, 13) == "Data Universe"

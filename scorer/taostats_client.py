@@ -25,6 +25,7 @@ _API_KEY = os.getenv("TAOSTATS_API_KEY", "")
 _PUBLIC_REQUEST_DELAY_SECONDS = 0.35
 _TITLE_RE = re.compile(r"<title>\s*(?P<title>.*?)\s*</title>", re.IGNORECASE | re.DOTALL)
 _PUBLIC_NAME_RE_TEMPLATE = r"SN\s*{netuid}\s*(?:·|Â·)\s*(?P<name>.+?)\s*(?:·|Â·)\s*taostats"
+_PUBLIC_JSON_NAME_RE_TEMPLATE = r'"netuid"\s*:\s*{netuid}\b(?P<body>.{{0,2500}}?)"(?:name|subnet_name)"\s*:\s*"(?P<name>[^"]+)"'
 
 # ---------------------------------------------------------------------------
 # Pydantic response models
@@ -407,6 +408,16 @@ class TaostatsClient:
 def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
     html_text = html.unescape(page_html)
 
+    json_pattern = re.compile(
+        _PUBLIC_JSON_NAME_RE_TEMPLATE.format(netuid=netuid),
+        re.IGNORECASE | re.DOTALL,
+    )
+    json_match = json_pattern.search(html_text)
+    if json_match:
+        candidate = html.unescape(json_match.group("name")).strip()
+        if candidate and "..." not in candidate and "\u2026" not in candidate:
+            return candidate
+
     pattern = re.compile(
         _PUBLIC_NAME_RE_TEMPLATE.format(netuid=netuid),
         re.IGNORECASE,
@@ -414,7 +425,7 @@ def _extract_public_subnet_name(page_html: str, netuid: int) -> Optional[str]:
     html_match = pattern.search(html_text)
     if html_match:
         candidate = html_match.group("name").strip()
-        if candidate:
+        if candidate and "..." not in candidate and "\u2026" not in candidate:
             return candidate
 
     match = _TITLE_RE.search(page_html)

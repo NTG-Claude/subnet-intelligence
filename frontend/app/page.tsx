@@ -70,8 +70,8 @@ export default async function HomePage() {
                 </div>
                 <div className="flex items-center gap-4">
                   <ScoreGauge score={subnet.score} />
-                  <div>
-                    <div className="text-lg font-semibold text-stone-100">{subnet.name ?? `Subnet ${subnet.netuid}`}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="break-words text-lg font-semibold text-stone-100">{subnet.name ?? `Subnet ${subnet.netuid}`}</div>
                     <div className="mt-1 text-sm text-stone-400">{subnet.thesis ?? 'No thesis available yet.'}</div>
                   </div>
                 </div>
