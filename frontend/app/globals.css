@@ -1,13 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --foreground: 226 232 240;
-  --background: 15 23 42;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: 'Space Grotesk', sans-serif;
 }
 
 body {
-  color: rgb(var(--foreground));
-  background: rgb(var(--background));
+  min-height: 100vh;
+  color: rgb(245 245 244);
+}
+
+a {
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(190, 242, 100, 0.28);
+  color: rgb(250 250 249);
 }

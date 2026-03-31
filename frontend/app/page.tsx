@@ -1,112 +1,110 @@
-import { fetchSubnets, fetchLeaderboard, fetchDistribution, fetchLatestRun } from '@/lib/api'
-import SubnetTable from '@/components/SubnetTable'
-import ScoreGauge from '@/components/ScoreGauge'
+import BacktestTable from '@/components/BacktestTable'
 import DistributionChart from '@/components/DistributionChart'
+import ScoreGauge from '@/components/ScoreGauge'
+import SubnetTable from '@/components/SubnetTable'
+import { fetchDistribution, fetchLabelBacktests, fetchLatestRun, fetchLeaderboard, fetchSubnets } from '@/lib/api'
 
 export const dynamic = 'force-dynamic'
 
 function formatDate(iso: string | null): string {
   if (!iso) return 'Never'
   return new Date(iso).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    timeZone: 'UTC', timeZoneName: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
   })
 }
 
 export default async function HomePage() {
-  const [{ subnets: allSubnets }, leaderboard, dist, latest] = await Promise.all([
+  const [{ subnets: allSubnets }, leaderboard, dist, latest, backtests] = await Promise.all([
     fetchSubnets(200).catch(() => ({ subnets: [], total: 0 })),
     fetchLeaderboard().catch(() => ({ top: [], bottom: [] })),
     fetchDistribution().catch(() => ({ buckets: [], total_subnets: 0 })),
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
+    fetchLabelBacktests(90).catch(() => ({ labels: [], observations: 0, examples: [] })),
   ])
-
-  const { top, bottom } = leaderboard
 
   return (
     <div className="space-y-10">
-      {/* Hero */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Subnet Leaderboard</h1>
-          <p className="text-slate-400 mt-1 text-sm">
-            Composite score (0–100) from 5 on-chain signals · Updated daily at 06:00 UTC
-          </p>
-        </div>
-        <div className="text-right text-xs text-slate-500 shrink-0">
-          <div>Last run: <span className="text-slate-400">{formatDate(latest.last_score_run)}</span></div>
-          <div>Subnets tracked: <span className="text-slate-400">{latest.subnet_count}</span></div>
-        </div>
-      </div>
+      <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(196,181,253,0.24),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(163,230,53,0.18),_transparent_35%),linear-gradient(135deg,_rgba(28,25,23,0.95),_rgba(12,10,9,0.92))] p-8 shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
+        <div className="grid gap-8 lg:grid-cols-[1.4fr_0.9fr]">
+          <div className="space-y-5">
+            <div className="inline-flex rounded-full border border-lime-200/20 bg-lime-200/10 px-3 py-1 text-xs uppercase tracking-[0.3em] text-lime-100">
+              Signal Separation
+            </div>
+            <div>
+              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-stone-50 sm:text-5xl">
+                From subnet leaderboard to subnet intelligence.
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-stone-300">
+                This view now separates earned strength, reflexive strength, and fragility instead of only ranking surface-level winners.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Last run</div>
+                <div className="mt-2 text-lg font-semibold text-stone-100">{formatDate(latest.last_score_run)}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Tracked</div>
+                <div className="mt-2 text-lg font-semibold text-stone-100">{latest.subnet_count}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Backtest observations</div>
+                <div className="mt-2 text-lg font-semibold text-stone-100">{backtests.observations}</div>
+              </div>
+            </div>
+          </div>
 
-      {/* Top 3 Gauges */}
-      {top.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Top 3</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {top.slice(0, 3).map((s) => (
-              <a
-                key={s.netuid}
-                href={`/subnets/${s.netuid}`}
-                className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col items-center gap-3 hover:border-green-500/40 transition-colors"
-              >
-                <span className="text-xs text-slate-500 font-mono">SN{s.netuid}</span>
-                <ScoreGauge score={s.score} />
-                <span className="text-sm font-semibold text-slate-300">
-                  {s.name ?? `Subnet ${s.netuid}`}
-                </span>
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+            {leaderboard.top.slice(0, 3).map((subnet) => (
+              <a key={subnet.netuid} href={`/subnets/${subnet.netuid}`} className="rounded-3xl border border-white/10 bg-black/25 p-5 transition-transform hover:-translate-y-1">
+                <div className="mb-4 flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-[0.24em] text-stone-500">SN{subnet.netuid}</span>
+                  <span className="rounded-full border border-amber-300/20 bg-amber-200/10 px-2.5 py-1 text-xs text-amber-100">
+                    {subnet.label ?? 'Under Review'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <ScoreGauge score={subnet.score} />
+                  <div>
+                    <div className="text-lg font-semibold text-stone-100">{subnet.name ?? `Subnet ${subnet.netuid}`}</div>
+                    <div className="mt-1 text-sm text-stone-400">{subnet.thesis ?? 'No thesis available yet.'}</div>
+                  </div>
+                </div>
               </a>
             ))}
           </div>
-        </section>
-      )}
-
-      {/* Distribution Chart */}
-      {dist.buckets.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-            Score Distribution
-          </h2>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <DistributionChart buckets={dist.buckets} />
-          </div>
-        </section>
-      )}
-
-      {/* Full table */}
-      <section>
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-          All Subnets
-        </h2>
-        <SubnetTable subnets={allSubnets} />
+        </div>
       </section>
 
-      {/* Zombie warning */}
-      {bottom.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-red-400 uppercase tracking-wider mb-4">
-            ⚠ Zombie Warning · Bottom 5
-          </h2>
-          <div className="bg-red-950/30 border border-red-900/50 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <tbody className="divide-y divide-red-900/30">
-                {bottom.map((s) => (
-                  <tr key={s.netuid} className="flex items-center px-4 py-3 gap-4">
-                    <span className="text-red-400 font-mono text-xs w-10">SN{s.netuid}</span>
-                    <span className="flex-1 text-slate-300">{s.name ?? `Subnet ${s.netuid}`}</span>
-                    <a
-                      href={`/subnets/${s.netuid}`}
-                      className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                    >
-                      Score: {s.score.toFixed(1)} →
-                    </a>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Backtest Readout</h2>
+              <p className="mt-2 text-sm text-stone-500">First forward-proxy check of whether labels lead or lag future deterioration.</p>
+            </div>
           </div>
-        </section>
-      )}
+          <BacktestTable labels={backtests.labels.slice(0, 8)} />
+        </div>
+
+        <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Score Distribution</h2>
+          <DistributionChart buckets={dist.buckets} />
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">All Subnets</h2>
+          <p className="mt-2 text-sm text-stone-500">Search across labels, theses, and market structure instead of scanning a flat leaderboard.</p>
+        </div>
+        <SubnetTable subnets={allSubnets} />
+      </section>
     </div>
   )
 }
