@@ -18,6 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.models import (
+    BacktestLabelSummary,
+    BacktestObservation,
+    BacktestResponse,
     DistributionBucket,
     DistributionResponse,
     ErrorResponse,
@@ -37,10 +40,12 @@ from scorer.database import (
     SubnetScoreRow,
     get_all_metadata,
     get_latest_scores,
+    get_scores_since,
     get_score_distribution,
     get_score_history,
     get_top_subnets,
 )
+from backtests.engine import build_backtest_summary
 
 logger = logging.getLogger(__name__)
 
@@ -376,6 +381,33 @@ async def score_distribution(
     result = DistributionResponse(
         buckets=[DistributionBucket(**b) for b in dist],
         total_subnets=_total_subnet_count(),
+    )
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.get(
+    "/api/v1/backtests/labels",
+    response_model=BacktestResponse,
+    summary="Backtest summary by label and forward proxies",
+    tags=["Backtests"],
+)
+async def backtest_labels(
+    request: Request,
+    days: int = Query(90, ge=7, le=365),
+    _: None = Depends(_check_rate_limit),
+) -> BacktestResponse:
+    cache_key = f"backtests:{days}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    rows = get_scores_since(days=days)
+    summary = build_backtest_summary(rows)
+    result = BacktestResponse(
+        observations=summary["observations"],
+        labels=[BacktestLabelSummary(**row) for row in summary["labels"]],
+        examples=[BacktestObservation(**row) for row in summary["examples"]],
     )
     _cache_set(cache_key, result)
     return result

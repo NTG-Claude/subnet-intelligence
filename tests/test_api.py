@@ -22,6 +22,21 @@ SCORES = [
         "health_score": float((6 - i) * 15 * 0.15),
         "dev_score": float((6 - i) * 15 * 0.15),
         "rank": i, "computed_at": NOW, "score_version": "v1",
+        "alpha_price_tao": float(i),
+        "raw_data": {
+            "label": "Hidden Compounder" if i == 1 else "Under Review",
+            "thesis": "test thesis",
+            "analysis": {
+                "component_scores": {
+                    "opportunity_gap": 12.0,
+                    "stress_robustness": 66.0,
+                }
+            },
+            "raw_metrics": {
+                "slippage_10_tao": 0.1 * i,
+                "performance_driven_by_few_actors": 0.2 * i,
+            },
+        },
     }
     for i in range(1, 6)
 ]  # scores: 75, 60, 45, 30, 15
@@ -65,6 +80,7 @@ def _with_db_mocks(meta_netuid=1):
                                "last_updated": meta.last_updated}}
     return patch.multiple(
         "api.main",
+        get_scores_since=MagicMock(return_value=SCORES),
         get_latest_scores=MagicMock(return_value=SCORES),
         get_score_history=MagicMock(return_value=HISTORY),
         get_score_distribution=MagicMock(return_value=[
@@ -255,6 +271,57 @@ def test_score_distribution():
     data = resp.json()
     assert len(data["buckets"]) == 5
     assert data["total_subnets"] == 5
+
+
+def test_backtest_labels():
+    rows = [
+        {
+            "id": 1,
+            "netuid": 1,
+            "score": 70.0,
+            "capital_score": 0.0,
+            "activity_score": 0.0,
+            "efficiency_score": 0.0,
+            "health_score": 0.0,
+            "dev_score": 0.0,
+            "rank": 1,
+            "computed_at": "2025-06-01T00:00:00+00:00",
+            "score_version": "v1",
+            "alpha_price_tao": 1.0,
+            "raw_data": {
+                "label": "Hidden Compounder",
+                "analysis": {"component_scores": {"opportunity_gap": 15.0, "stress_robustness": 70.0}},
+                "raw_metrics": {"slippage_10_tao": 0.10, "performance_driven_by_few_actors": 0.20},
+            },
+        },
+        {
+            "id": 2,
+            "netuid": 1,
+            "score": 75.0,
+            "capital_score": 0.0,
+            "activity_score": 0.0,
+            "efficiency_score": 0.0,
+            "health_score": 0.0,
+            "dev_score": 0.0,
+            "rank": 1,
+            "computed_at": "2025-06-02T00:00:00+00:00",
+            "score_version": "v1",
+            "alpha_price_tao": 1.2,
+            "raw_data": {
+                "label": "Hidden Compounder",
+                "analysis": {"component_scores": {"opportunity_gap": 17.0, "stress_robustness": 72.0}},
+                "raw_metrics": {"slippage_10_tao": 0.12, "performance_driven_by_few_actors": 0.25},
+            },
+        },
+    ]
+    with patch("api.main.get_scores_since", return_value=rows):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/backtests/labels?days=90")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["observations"] == 1
+    assert data["labels"][0]["label"] == "Hidden Compounder"
 
 
 # ---------------------------------------------------------------------------

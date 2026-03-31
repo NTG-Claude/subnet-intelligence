@@ -250,6 +250,18 @@ def get_top_subnets(n: int = 10) -> list[dict]:
     return get_latest_scores()[:n]
 
 
+def get_scores_since(days: int = 90) -> list[dict]:
+    """Return all score rows across subnets over the past `days` days."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(SubnetScoreRow)
+            .where(SubnetScoreRow.computed_at >= since)
+            .order_by(SubnetScoreRow.netuid, SubnetScoreRow.computed_at)
+        ).scalars().all()
+    return [_row_to_dict(r) for r in rows]
+
+
 def get_score_distribution(buckets: int = 10) -> list[dict]:
     """
     Return a histogram of the latest score distribution.
