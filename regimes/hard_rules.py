@@ -90,6 +90,12 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         force_negative_label = True
         force_label = force_label or "Overrewarded Structure"
 
+    if pool_depth < 7_500 and staking_apy > 150:
+        activated.append("small_pool_yield_intensity_caps_confidence")
+        confidence_cap = 0.46 if confidence_cap is None else min(confidence_cap, 0.46)
+        mispricing_cap = 0.42 if mispricing_cap is None else min(mispricing_cap, 0.42)
+        fragility_floor = 0.68 if fragility_floor is None else max(fragility_floor, 0.68)
+
     severe_market_structure_breach = (
         pool_depth < 1_500
         and staking_apy > 250

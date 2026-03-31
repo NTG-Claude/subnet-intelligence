@@ -162,7 +162,7 @@ export default async function HomePage() {
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Signal Boards</h2>
           <p className="mt-2 max-w-3xl text-sm text-stone-500">
-            These boards highlight eligible candidates only, not raw maxima from thin or low-trust setups.
+            These boards mirror the same full ranked universe as the table below.
           </p>
         </div>
         <PrimarySignalBoard subnets={investableWithSignals} />

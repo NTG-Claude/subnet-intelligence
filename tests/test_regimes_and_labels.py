@@ -89,6 +89,33 @@ def test_micro_pool_apy_forces_overrewarded_structure_rule():
     assert rules.total_cap is not None and rules.total_cap <= 0.12
 
 
+def test_small_pool_high_yield_caps_confidence_even_when_not_micro():
+    snapshot = _snapshot(
+        active_neurons_7d=8,
+        tao_in_pool=5_400.0,
+        emission_per_block_tao=0.14,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.32,
+        participation_breadth=0.22,
+        slippage_10_tao=0.03,
+        slippage_50_tao=0.09,
+        validator_dominance=0.86,
+        incentive_concentration=1.0,
+        market_structure_floor=0.53,
+        validator_weight_entropy=0.42,
+        cross_validator_disagreement=0.24,
+        meaningful_discrimination=0.38,
+        dereg_risk_proxy=0.18,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "small_pool_yield_intensity_caps_confidence" in rules.activated
+    assert rules.confidence_cap is not None and rules.confidence_cap <= 0.46
+
+
 def test_inactive_subnet_forces_dereg_candidate():
     snapshot = _snapshot(
         tao_in_pool=5000.0,
