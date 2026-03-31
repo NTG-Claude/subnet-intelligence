@@ -1,7 +1,7 @@
 'use client'
 
 interface Props {
-  componentScores: Record<string, number>
+  componentScores: Record<string, number | undefined>
 }
 
 const AXES = [
