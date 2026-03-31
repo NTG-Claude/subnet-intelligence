@@ -66,7 +66,7 @@ async def _load_subnet_names() -> dict[int, str]:
             age = time.time() - _NAMES_CACHE_FILE.stat().st_mtime
             if age < _NAMES_MAX_AGE_SECONDS:
                 data = json.loads(_NAMES_CACHE_FILE.read_text())
-                names = {int(k): v for k, v in data.items() if k != "_fetched_at"}
+                names = {int(k): v for k, v in data.items() if str(k).isdigit()}
                 logger.info("Subnet names loaded from disk cache (%d subnets, %.0fh old)",
                             len(names), age / 3600)
                 return names
@@ -136,7 +136,7 @@ async def run(
     logger.info("Computed %d scores in %.1fs", len(scores), elapsed_fetch)
 
     # 3. Summary log: Top 3
-    top3 = scores[:3]
+    top3 = [score for score in scores if score.analysis.get("investable", True)][:3]
     top3_str = ", ".join(f"SN{s.netuid}({s.score:.0f})" for s in top3)
     logger.info("Top 3: %s", top3_str)
 

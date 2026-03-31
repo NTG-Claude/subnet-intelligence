@@ -143,6 +143,10 @@ async def _get(
     params: Optional[dict] = None,
     cache_key: Optional[str] = None,
 ) -> Optional[dict]:
+    if not _API_KEY:
+        logger.info("Taostats API key missing; skipping %s", path)
+        return None
+
     if cache_key:
         cached = _cache_get(cache_key)
         if cached is not None:
@@ -183,6 +187,9 @@ async def _get(
             return data
 
         except httpx.HTTPStatusError as exc:
+            if exc.response is not None and exc.response.status_code == 401:
+                logger.warning("Taostats unauthorized on %s; skipping live Taostats fetches", path)
+                return None
             logger.error("HTTP error on %s: %s", path, exc)
         except httpx.RequestError as exc:
             logger.error("Request error on %s: %s", path, exc)

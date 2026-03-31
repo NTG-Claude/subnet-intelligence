@@ -96,12 +96,12 @@ async def _fetch_and_cache(netuid: int, cache: dict) -> Optional[RepoCoords]:
     identity = await get_subnet_identity(netuid)
 
     if identity is None:
-        logger.info("No identity found for netuid %s", netuid)
+        logger.debug("No identity found for netuid %s", netuid)
         return None
 
     github_url = identity.github_url
     if not github_url:
-        logger.info("No GitHub URL in identity for netuid %s", netuid)
+        logger.debug("No GitHub URL in identity for netuid %s", netuid)
         cache[key] = {"owner": None, "repo": None}
         _save_json(_MAP_PATH, cache)
         return None

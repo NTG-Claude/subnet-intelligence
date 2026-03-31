@@ -219,6 +219,24 @@ def test_fetch_all_identities_sync_handles_query_map_failure():
         bt_client._all_identities_fetched = False
 
 
+def test_fetch_all_identities_sync_logs_runtime_storage_missing_as_info():
+    import scorer.bittensor_client as bt_client
+    from scorer.bittensor_client import _fetch_all_identities_sync
+
+    bt_client._all_identities_fetched = False
+
+    mock_st = MagicMock()
+    mock_st.substrate.query_map.side_effect = RuntimeError('Storage function "SubtensorModule.SubnetIdentitiesV2" not found')
+
+    try:
+        with patch("scorer.bittensor_client._subtensor", return_value=mock_st), \
+             patch("scorer.bittensor_client.logger") as mock_logger:
+            _fetch_all_identities_sync()
+        assert mock_logger.info.called
+    finally:
+        bt_client._all_identities_fetched = False
+
+
 def test_clear_caches_resets_identity_state():
     import scorer.bittensor_client as bt_client
 
