@@ -5,7 +5,7 @@ import DriverList from '@/components/DriverList'
 import HistoryChart from '@/components/HistoryChart'
 import ScoreGauge from '@/components/ScoreGauge'
 import SignalBreakdown from '@/components/SignalBreakdown'
-import { fetchSubnet } from '@/lib/api'
+import { fetchSubnet, PrimaryOutputs } from '@/lib/api'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +23,8 @@ function formatDate(iso: string | null): string {
   })
 }
 
-function countSignals(outputs: Record<string, number>): number {
+function countSignals(outputs: PrimaryOutputs | null): number {
+  if (!outputs) return 0
   return Object.values(outputs).filter((value) => value > 0).length
 }
 
@@ -45,8 +46,15 @@ export default async function SubnetPage({ params }: Props) {
     date: new Date(point.computed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     score: point.score,
   }))
-  const signalCount = countSignals(primary ?? {})
-  const componentScores = primary ?? {}
+  const signalCount = countSignals(primary)
+  const componentScores = primary
+    ? {
+        fundamental_quality: primary.fundamental_quality,
+        mispricing_signal: primary.mispricing_signal,
+        fragility_risk: primary.fragility_risk,
+        signal_confidence: primary.signal_confidence,
+      }
+    : {}
   const decomposition = analysis?.earned_reflexive_fragile ?? {}
 
   return (
