@@ -118,6 +118,7 @@ async def test_load_subnet_names_ignores_metadata_keys():
     from scorer.run import _load_subnet_names
 
     cache_file = Path("data/test_subnet_names_cache.json")
+    seed_file = Path("data/test_subnet_names_seed.json")
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         cache_file.write_text(
@@ -130,13 +131,16 @@ async def test_load_subnet_names_ignores_metadata_keys():
             encoding="utf-8",
         )
 
-        with patch("scorer.run._NAMES_CACHE_FILE", cache_file):
+        with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
+             patch("scorer.run._SEED_NAMES_FILE", seed_file):
             names = await _load_subnet_names()
 
         assert names == {4: "Targon", 64: "Chutes"}
     finally:
         if cache_file.exists():
             cache_file.unlink()
+        if seed_file.exists():
+            seed_file.unlink()
 
 
 @pytest.mark.asyncio
@@ -164,9 +168,10 @@ async def test_load_subnet_names_negative_caches_failed_taostats_fetch():
     from scorer.run import _load_subnet_names
 
     cache_file = Path("data/test_subnet_names_cache.json")
+    seed_file = Path("data/test_subnet_names_seed.json")
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     try:
-        cache_file.write_text(
+        seed_file.write_text(
             '{\n'
             '  "_fetched_at": "2020-01-01T00:00:00+00:00",\n'
             '  "_note": "seed names",\n'
@@ -174,13 +179,19 @@ async def test_load_subnet_names_negative_caches_failed_taostats_fetch():
             '}',
             encoding="utf-8",
         )
-        os.utime(cache_file, (1, 1))
+        cache_file.write_text(
+            '{\n'
+            '  "_fetched_at": "2020-01-01T00:00:00+00:00"\n'
+            '}',
+            encoding="utf-8",
+        )
 
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value.get_all_subnets = AsyncMock(return_value=None)
         mock_client.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={4: "Targon", 64: "Chutes"})
 
         with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
+             patch("scorer.run._SEED_NAMES_FILE", seed_file), \
              patch("scorer.run.TaostatsClient", return_value=mock_client):
             names = await _load_subnet_names([4, 64])
 
@@ -191,3 +202,40 @@ async def test_load_subnet_names_negative_caches_failed_taostats_fetch():
     finally:
         if cache_file.exists():
             cache_file.unlink()
+        if seed_file.exists():
+            seed_file.unlink()
+
+
+@pytest.mark.asyncio
+async def test_load_subnet_names_uses_fetched_at_not_file_mtime():
+    from scorer.run import _load_subnet_names
+
+    cache_file = Path("data/test_subnet_names_cache.json")
+    seed_file = Path("data/test_subnet_names_seed.json")
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        seed_file.write_text('{"3":"MyShell"}', encoding="utf-8")
+        cache_file.write_text(
+            '{\n'
+            '  "_fetched_at": "2020-01-01T00:00:00+00:00",\n'
+            '  "3": "MyShell"\n'
+            '}',
+            encoding="utf-8",
+        )
+        os.utime(cache_file, None)
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get_all_subnets = AsyncMock(return_value=None)
+        mock_client.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={3: "τemplar"})
+
+        with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
+             patch("scorer.run._SEED_NAMES_FILE", seed_file), \
+             patch("scorer.run.TaostatsClient", return_value=mock_client):
+            names = await _load_subnet_names([3])
+
+        assert names[3] == "τemplar"
+    finally:
+        if cache_file.exists():
+            cache_file.unlink()
+        if seed_file.exists():
+            seed_file.unlink()
