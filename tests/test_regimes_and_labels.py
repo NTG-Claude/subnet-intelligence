@@ -116,6 +116,33 @@ def test_small_pool_high_yield_caps_confidence_even_when_not_micro():
     assert rules.confidence_cap is not None and rules.confidence_cap <= 0.46
 
 
+def test_elevated_yield_small_pool_caps_confidence_before_extreme_apy():
+    snapshot = _snapshot(
+        active_neurons_7d=7,
+        tao_in_pool=2_850.0,
+        emission_per_block_tao=0.11,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.14,
+        participation_breadth=0.14,
+        slippage_10_tao=0.03,
+        slippage_50_tao=0.08,
+        validator_dominance=0.835,
+        incentive_concentration=0.84,
+        market_structure_floor=0.56,
+        validator_weight_entropy=0.48,
+        cross_validator_disagreement=0.21,
+        meaningful_discrimination=0.31,
+        dereg_risk_proxy=0.16,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "elevated_yield_small_pool_caps_confidence" in rules.activated
+    assert rules.confidence_cap is not None and rules.confidence_cap <= 0.52
+
+
 def test_inactive_subnet_forces_dereg_candidate():
     snapshot = _snapshot(
         tao_in_pool=5000.0,
