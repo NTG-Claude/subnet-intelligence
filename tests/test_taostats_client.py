@@ -16,5 +16,15 @@ async def test_get_skips_when_api_key_missing():
 
 
 def test_extract_public_subnet_name_from_title():
-    html = "<html><head><title>0.0448 · SN4 · Targon · taostats</title></head></html>"
+    html = "<html><head><title>0.0448 Â· SN4 Â· Targon Â· taostats</title></head></html>"
     assert _extract_public_subnet_name(html, 4) == "Targon"
+
+
+def test_extract_public_subnet_name_from_clean_middle_dot_title():
+    html = "<html><head><title>0.0283 · SN9 · iota · taostats</title></head></html>"
+    assert _extract_public_subnet_name(html, 9) == "iota"
+
+
+def test_extract_public_subnet_name_from_body_when_title_missing():
+    html = "<html><body><div>0.0283 · SN9 · iota · taostats</div></body></html>"
+    assert _extract_public_subnet_name(html, 9) == "iota"
