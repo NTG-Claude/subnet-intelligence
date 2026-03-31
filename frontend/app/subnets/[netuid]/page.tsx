@@ -5,6 +5,7 @@ import DriverList from '@/components/DriverList'
 import HistoryChart from '@/components/HistoryChart'
 import ScoreGauge from '@/components/ScoreGauge'
 import SignalBreakdown from '@/components/SignalBreakdown'
+import ThesisPanel from '@/components/ThesisPanel'
 import { fetchSubnet, PrimaryOutputs } from '@/lib/api'
 
 export const dynamic = 'force-dynamic'
@@ -47,7 +48,7 @@ export default async function SubnetPage({ params }: Props) {
     score: point.score,
   }))
   const signalCount = countSignals(primary)
-  const componentScores = primary
+  const componentScores: Record<string, number> = primary
     ? {
         fundamental_quality: primary.fundamental_quality,
         mispricing_signal: primary.mispricing_signal,
@@ -94,7 +95,7 @@ export default async function SubnetPage({ params }: Props) {
                 ].map((item) => (
                   <div key={item.label} className="rounded-3xl border border-white/10 bg-black/20 p-4">
                     <div className="text-xs uppercase tracking-[0.24em] text-stone-500">{item.label}</div>
-                    <div className="mt-2 text-2xl font-semibold text-stone-100">{item.value?.toFixed(1) ?? '—'}</div>
+                    <div className="mt-2 text-2xl font-semibold text-stone-100">{item.value.toFixed(1)}</div>
                   </div>
                 ))}
               </div>
@@ -165,6 +166,37 @@ export default async function SubnetPage({ params }: Props) {
       <section className="grid gap-6 xl:grid-cols-2">
         <DriverList title="Top Positive Drivers" tone="positive" items={analysis?.top_positive_drivers ?? []} />
         <DriverList title="Top Negative Drivers" tone="negative" items={analysis?.top_negative_drivers ?? []} />
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <ThesisPanel
+          title="Why The Market May Be Missing It"
+          subtitle="Signals that point to structural improvement ahead of price recognition."
+          supports={analysis?.why_mispriced?.supports}
+          headwinds={analysis?.why_mispriced?.headwinds}
+        />
+        <ThesisPanel
+          title="What Makes The Setup Fragile"
+          subtitle="The main drivers that can break the thesis under pressure."
+          supports={analysis?.risk_drivers?.offsets}
+          headwinds={analysis?.risk_drivers?.fragility}
+          bullets={analysis?.thesis_breakers}
+        />
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <ThesisPanel
+          title="Why Confidence Is High Or Low"
+          subtitle="Freshness, coverage, and proxy reliance behind the current trust level."
+          supports={analysis?.confidence_rationale?.supports}
+          headwinds={analysis?.confidence_rationale?.headwinds}
+        />
+        <ThesisPanel
+          title="Quality Evidence"
+          subtitle="The metrics most responsible for the structural-quality view."
+          supports={analysis?.quality_rationale?.supports}
+          headwinds={analysis?.quality_rationale?.headwinds}
+        />
       </section>
 
       {(analysis?.activated_hard_rules ?? []).length > 0 && (
