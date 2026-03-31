@@ -1,9 +1,7 @@
-import BacktestTable from '@/components/BacktestTable'
-import DistributionChart from '@/components/DistributionChart'
 import PrimarySignalBoard from '@/components/PrimarySignalBoard'
 import ScoreGauge from '@/components/ScoreGauge'
 import SubnetTable from '@/components/SubnetTable'
-import { fetchDistribution, fetchLabelBacktests, fetchLatestRun, fetchSubnets } from '@/lib/api'
+import { fetchLatestRun, fetchSubnets } from '@/lib/api'
 import { selectSignalLeaders } from '@/lib/signalSelection'
 
 export const dynamic = 'force-dynamic'
@@ -21,11 +19,9 @@ function formatDate(iso: string | null): string {
 }
 
 export default async function HomePage() {
-  const [{ subnets: allSubnets }, dist, latest, backtests] = await Promise.all([
+  const [{ subnets: allSubnets }, latest] = await Promise.all([
     fetchSubnets(200).catch(() => ({ subnets: [], total: 0 })),
-    fetchDistribution().catch(() => ({ buckets: [], total_subnets: 0 })),
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
-    fetchLabelBacktests(90).catch(() => ({ labels: [], observations: 0, examples: [], targets: [] })),
   ])
 
   const investableWithSignals = allSubnets.filter((subnet) => subnet.primary_outputs)
@@ -76,8 +72,8 @@ export default async function HomePage() {
                 <div className="mt-2 text-lg font-semibold text-stone-100">{latest.subnet_count}</div>
               </div>
               <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Backtest observations</div>
-                <div className="mt-2 text-lg font-semibold text-stone-100">{backtests.observations}</div>
+                <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Primary Framework</div>
+                <div className="mt-2 text-lg font-semibold text-stone-100">4 outputs</div>
               </div>
               <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
                 <div className="text-xs uppercase tracking-[0.24em] text-stone-500">Signal-led names</div>
@@ -119,33 +115,16 @@ export default async function HomePage() {
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Signal-Led Views</h2>
           <p className="mt-2 max-w-3xl text-sm text-stone-500">
-            The same universe should look different depending on whether we care about quality, mispricing, fragility, or confidence.
+            These boards highlight eligible research candidates only, not raw maxima from thin or low-trust setups.
           </p>
         </div>
         <PrimarySignalBoard subnets={investableWithSignals} />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Backtest Readout</h2>
-              <p className="mt-2 text-sm text-stone-500">Forward proxies for relative returns, drawdown, and market-structure deterioration.</p>
-            </div>
-          </div>
-          <BacktestTable labels={backtests.labels.slice(0, 8)} />
-        </div>
-
-        <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Legacy Distribution</h2>
-          <DistributionChart buckets={dist.buckets} />
-        </div>
-      </section>
-
       <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
         <div className="mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">All Subnets</h2>
-          <p className="mt-2 text-sm text-stone-500">Sort the live universe by mispricing, quality, fragility, confidence, or the legacy composite instead of relying on one dominant score.</p>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Research Universe</h2>
+          <p className="mt-2 text-sm text-stone-500">Sort by quality, mispricing, fragility, confidence, or the legacy composite, then open the detail page to inspect the thesis and break risks.</p>
         </div>
         <SubnetTable subnets={allSubnets} />
       </section>
