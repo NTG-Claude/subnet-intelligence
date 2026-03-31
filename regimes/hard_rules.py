@@ -41,6 +41,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     concentration_delta = bundle.raw.get("concentration_delta")
     pool_depth = snapshot.tao_in_pool or 0.0
     market_relevance = bundle.raw.get("market_relevance_proxy") or 0.0
+    market_structure_floor = bundle.raw.get("market_structure_floor") or 0.0
     confidence_inputs = bundle.raw.get("data_coverage") or 0.0
     staking_apy = 0.0
     if pool_depth > 0:
@@ -88,6 +89,37 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         legacy_score_cap = 0.12 if legacy_score_cap is None else min(legacy_score_cap, 0.12)
         force_negative_label = True
         force_label = force_label or "Overrewarded Structure"
+
+    severe_market_structure_breach = (
+        pool_depth < 1_500
+        and staking_apy > 250
+        and market_structure_floor < 0.45
+    )
+    moderate_market_structure_breach = (
+        pool_depth < 7_500
+        and (
+            market_structure_floor < 0.42
+            or max_slippage > 0.12
+            or staking_apy > 220
+        )
+    )
+
+    if severe_market_structure_breach:
+        activated.append("market_structure_floor_blocks_top_rank")
+        quality_cap = 0.34 if quality_cap is None else min(quality_cap, 0.34)
+        mispricing_cap = 0.24 if mispricing_cap is None else min(mispricing_cap, 0.24)
+        confidence_cap = 0.48 if confidence_cap is None else min(confidence_cap, 0.48)
+        fragility_floor = 0.78 if fragility_floor is None else max(fragility_floor, 0.78)
+        legacy_score_cap = 0.34 if legacy_score_cap is None else min(legacy_score_cap, 0.34)
+        force_negative_label = True
+        force_label = force_label or "Overrewarded Structure"
+    elif moderate_market_structure_breach:
+        activated.append("market_structure_floor_watchlist")
+        quality_cap = 0.42 if quality_cap is None else min(quality_cap, 0.42)
+        mispricing_cap = 0.34 if mispricing_cap is None else min(mispricing_cap, 0.34)
+        confidence_cap = 0.55 if confidence_cap is None else min(confidence_cap, 0.55)
+        fragility_floor = 0.70 if fragility_floor is None else max(fragility_floor, 0.70)
+        legacy_score_cap = 0.42 if legacy_score_cap is None else min(legacy_score_cap, 0.42)
 
     if not snapshot.registration_allowed and snapshot.min_burn <= 0 and snapshot.max_burn <= 0 and snapshot.difficulty <= 0:
         activated.append("registration_closed_without_burn_or_pow_penalty")

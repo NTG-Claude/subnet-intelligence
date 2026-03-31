@@ -59,6 +59,8 @@ def build_explanation(
         thesis_breakers.append("Evidence quality is too weak or stale to rely on the current signal mix.")
     if (bundle.raw.get("post_incentive_retention") or 0.0) <= 0.0:
         thesis_breakers.append("Usage is not retaining once incentives normalize, which weakens the structural thesis.")
+    if (bundle.raw.get("market_structure_floor") or 0.0) < 0.45:
+        thesis_breakers.append("Market structure is still too thin for larger capital to enter or exit without dominating the thesis.")
 
     return {
         "label": label,

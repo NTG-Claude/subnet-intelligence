@@ -194,6 +194,28 @@ def _market_relevance_proxy(
     )
 
 
+def _market_structure_floor(
+    reserve_depth: float,
+    liquidity_thinness: float | None,
+    active_ratio: float,
+    participation_breadth: float,
+    validator_participation: float,
+) -> float:
+    reserve_score = clamp01(math.log1p(max(reserve_depth, 0.0)) / math.log(50_000))
+    liquidity_score = clamp01(1.0 - min(1.0, liquidity_thinness or 0.0))
+    return clamp01(
+        fmean(
+            [
+                reserve_score,
+                liquidity_score,
+                active_ratio,
+                participation_breadth,
+                validator_participation,
+            ]
+        )
+    )
+
+
 def _cohort_key(bundle: FeatureBundle) -> str:
     reserve_depth = bundle.raw.get("reserve_depth") or 0.0
     active_ratio = bundle.raw.get("active_ratio") or 0.0
@@ -301,6 +323,13 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         participation_breadth,
         validator_participation,
     )
+    market_structure_floor = _market_structure_floor(
+        snapshot.tao_in_pool,
+        avg_slippage,
+        active_ratio,
+        participation_breadth,
+        validator_participation,
+    )
     raw = {
         "active_ratio": active_ratio,
         "participation_breadth": participation_breadth,
@@ -333,6 +362,8 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "performance_driven_by_few_actors": concentration_now,
         "market_relevance_proxy": market_relevance,
         "confidence_market_relevance": market_relevance,
+        "market_structure_floor": market_structure_floor,
+        "confidence_market_structure_floor": market_structure_floor,
         "registration_openness": 1.0 if snapshot.registration_allowed else 0.0,
         "pow_registration_enabled": 1.0 if snapshot.difficulty > 0 else 0.0,
         "burn_registration_enabled": 1.0 if snapshot.min_burn > 0 or snapshot.max_burn > 0 else 0.0,
@@ -406,6 +437,7 @@ METRIC_MAP = {
     "validator_participation": ("direct_onchain", "fundamental_quality", 0.08, False),
     "incentive_distribution_quality": ("derived_onchain", "fundamental_quality", 0.10, False),
     "market_relevance_proxy": ("derived_onchain", "fundamental_quality", 0.06, False),
+    "market_structure_floor": ("derived_onchain", "fundamental_quality", 0.10, False),
     "update_freshness": ("direct_onchain", "signal_confidence", 0.18, False),
     "validator_weight_entropy": ("derived_onchain", "fundamental_quality", 0.05, False),
     "cross_validator_disagreement": ("derived_onchain", "fundamental_quality", 0.10, False),
@@ -442,6 +474,7 @@ METRIC_MAP = {
     "proxy_reliance_penalty": ("derived_onchain", "signal_confidence", 0.20, True),
     "low_manipulation_signal_share": ("derived_onchain", "signal_confidence", 0.16, False),
     "confidence_market_relevance": ("derived_onchain", "signal_confidence", 0.06, False),
+    "confidence_market_structure_floor": ("derived_onchain", "signal_confidence", 0.10, False),
     "repo_commits_30d": ("external_proxy", "signal_confidence", 0.04, False),
     "repo_contributors_30d": ("external_proxy", "signal_confidence", 0.04, False),
     "repo_recency": ("external_proxy", "signal_confidence", 0.02, False),

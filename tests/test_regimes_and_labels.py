@@ -274,6 +274,77 @@ def test_market_relevant_concentration_uses_watchlist_caps():
     assert rules.fragility_floor == 0.60
 
 
+def test_severe_market_structure_breach_caps_microstructure_setups():
+    snapshot = _snapshot(
+        tao_in_pool=700.0,
+        alpha_in_pool=5.0,
+        emission_per_block_tao=0.03,
+        active_neurons_7d=2,
+        unique_coldkeys=2,
+        n_validators=2,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.2,
+        participation_breadth=0.2,
+        market_structure_floor=0.30,
+        market_relevance_proxy=0.22,
+        data_coverage=0.85,
+        update_freshness=0.85,
+        slippage_10_tao=0.09,
+        slippage_50_tao=0.18,
+        validator_dominance=0.35,
+        incentive_concentration=0.35,
+        validator_weight_entropy=0.45,
+        cross_validator_disagreement=0.18,
+        meaningful_discrimination=0.3,
+        dereg_risk_proxy=0.15,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "market_structure_floor_blocks_top_rank" in rules.activated
+    assert rules.quality_cap == 0.34
+    assert rules.mispricing_cap == 0.24
+    assert rules.fragility_floor == 0.78
+    assert rules.total_cap is not None and rules.total_cap <= 0.34
+
+
+def test_moderate_market_structure_breach_uses_watchlist_caps():
+    snapshot = _snapshot(
+        tao_in_pool=5_000.0,
+        alpha_in_pool=100.0,
+        emission_per_block_tao=0.03,
+        active_neurons_7d=4,
+        unique_coldkeys=3,
+        n_validators=3,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.28,
+        participation_breadth=0.26,
+        market_structure_floor=0.39,
+        market_relevance_proxy=0.34,
+        data_coverage=0.85,
+        update_freshness=0.85,
+        slippage_10_tao=0.08,
+        slippage_50_tao=0.13,
+        validator_dominance=0.42,
+        incentive_concentration=0.38,
+        validator_weight_entropy=0.45,
+        cross_validator_disagreement=0.18,
+        meaningful_discrimination=0.3,
+        dereg_risk_proxy=0.15,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "market_structure_floor_watchlist" in rules.activated
+    assert rules.quality_cap == 0.42
+    assert rules.mispricing_cap == 0.34
+    assert rules.fragility_floor == 0.70
+
+
 def test_liquid_hyped_subnet_can_be_reflexive_crowded_trade():
     snapshot = _snapshot(
         tao_in_pool=100000.0,

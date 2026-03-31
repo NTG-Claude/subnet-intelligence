@@ -88,3 +88,26 @@ def test_market_relevance_proxy_rewards_scaled_participating_subnets():
 
     assert flagship.raw["market_relevance_proxy"] > micro.raw["market_relevance_proxy"]
 
+
+def test_market_structure_floor_penalizes_thin_microstructure():
+    robust = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=8,
+            unique_coldkeys=8,
+            n_validators=7,
+            tao_in_pool=40_000.0,
+            alpha_in_pool=12_000.0,
+        )
+    )
+    thin = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=2,
+            unique_coldkeys=2,
+            n_validators=2,
+            tao_in_pool=600.0,
+            alpha_in_pool=4.0,
+        )
+    )
+
+    assert robust.raw["market_structure_floor"] > thin.raw["market_structure_floor"]
+
