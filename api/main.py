@@ -7,10 +7,12 @@ Run with:
 """
 
 import logging
+import json
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from functools import wraps
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -55,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 _cache: dict[str, tuple[Any, float]] = {}
 _CACHE_TTL = 3600  # 1 hour
+_SEED_NAMES_PATH = Path(__file__).resolve().parent.parent / "data" / "subnet_names.json"
 
 
 def _cache_get(key: str) -> Any:
@@ -66,6 +69,19 @@ def _cache_get(key: str) -> Any:
 
 def _cache_set(key: str, value: Any) -> None:
     _cache[key] = (value, time.time() + _CACHE_TTL)
+
+
+def _seed_name_map() -> dict[int, str]:
+    cached = _cache_get("seed_names")
+    if cached is not None:
+        return cached
+    try:
+        raw = json.loads(_SEED_NAMES_PATH.read_text(encoding="utf-8"))
+        result = {int(k): v for k, v in raw.items() if k.isdigit() and isinstance(v, str)}
+    except Exception:
+        result = {}
+    _cache_set("seed_names", result)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +154,10 @@ def _is_investable_row(row: dict) -> bool:
 
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
+    fallback_name = _seed_name_map().get(row["netuid"])
     return SubnetSummaryResponse(
         netuid=row["netuid"],
-        name=meta.name if meta else None,
+        name=(meta.name if meta else None) or fallback_name,
         score=row["score"],
         rank=row["rank"],
         percentile=_compute_percentile(row.get("rank"), total),
@@ -162,7 +179,7 @@ def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
             return None
         return SubnetMetadataResponse(
             netuid=row.netuid,
-            name=row.name,
+            name=row.name or _seed_name_map().get(netuid),
             github_url=row.github_url,
             website=row.website,
             first_seen=row.first_seen.isoformat() if row.first_seen else None,
@@ -268,7 +285,7 @@ async def get_subnet(
 
     result = SubnetDetailResponse(
         netuid=netuid,
-        name=meta.name if meta else None,
+        name=(meta.name if meta else None) or _seed_name_map().get(netuid),
         score=row["score"],
         rank=row.get("rank"),
         percentile=_compute_percentile(row.get("rank"), total),
