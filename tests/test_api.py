@@ -475,11 +475,14 @@ def test_live_cache_key_changes_when_new_run_arrives():
     earlier_rows = [{"netuid": 1, "computed_at": "2026-03-31T14:00:00+00:00"}]
     later_rows = [{"netuid": 1, "computed_at": "2026-03-31T15:00:00+00:00"}]
 
-    first_key = _live_cache_key("list", 50, 0, 0.0, 100.0, rows=earlier_rows)
-    second_key = _live_cache_key("list", 50, 0, 0.0, 100.0, rows=later_rows)
+    with patch("api.main.get_all_metadata", return_value={1: {"last_updated": "2026-03-31T14:01:00+00:00"}}):
+        first_key = _live_cache_key("list", 50, 0, 0.0, 100.0, rows=earlier_rows)
+    with patch("api.main.get_all_metadata", return_value={1: {"last_updated": "2026-03-31T15:01:00+00:00"}}):
+        second_key = _live_cache_key("list", 50, 0, 0.0, 100.0, rows=later_rows)
 
     assert first_key != second_key
     assert "run=2026-03-31T15:00:00+00:00:1" in second_key
+    assert "meta=2026-03-31T15:01:00+00:00:1" in second_key
 
 
 # ---------------------------------------------------------------------------

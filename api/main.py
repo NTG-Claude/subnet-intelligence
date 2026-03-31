@@ -73,10 +73,22 @@ def _cache_set(key: str, value: Any) -> None:
     _cache[key] = (value, time.time() + _CACHE_TTL)
 
 
+def _metadata_fingerprint() -> str:
+    try:
+        metadata = get_all_metadata()
+    except Exception:
+        metadata = {}
+    last_ts = max(
+        (row.get("last_updated") for row in metadata.values() if row.get("last_updated")),
+        default="none",
+    )
+    return f"{last_ts}:{len(metadata)}"
+
+
 def _run_fingerprint(rows: Optional[list[dict]] = None) -> str:
     live_rows = rows if rows is not None else get_latest_scores()
     last_ts = max((row["computed_at"] for row in live_rows if row.get("computed_at")), default="none")
-    return f"{last_ts}:{len(live_rows)}"
+    return f"{last_ts}:{len(live_rows)}:meta={_metadata_fingerprint()}"
 
 
 def _live_cache_key(prefix: str, *parts: Any, rows: Optional[list[dict]] = None) -> str:
