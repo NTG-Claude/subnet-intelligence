@@ -7,11 +7,11 @@ interface Props {
 }
 
 const SIGNALS = [
-  { key: 'capital_score', label: 'Intrinsic Quality', maxWeight: 30, description: 'Earned quality from participation, breadth, informativeness, freshness, and structural distribution.' },
-  { key: 'activity_score', label: 'Economic Sustainability', maxWeight: 25, description: 'Reserve depth, slippage resilience, emission efficiency, persistence, and liquidity structure.' },
-  { key: 'efficiency_score', label: 'Anti-Reflexivity', maxWeight: 20, description: 'How much of today’s strength survives after removing crowding, flow elasticity, and distortion proxies.' },
-  { key: 'health_score', label: 'Stress Robustness', maxWeight: 15, description: 'Scenario resilience under outflows, liquidity shock, validator removal, and concentration stress.' },
-  { key: 'dev_score', label: 'Opportunity Gap', maxWeight: 10, description: 'Where internal quality and robustness exceed current market recognition.' },
+  { key: 'capital_score', label: 'Legacy Quality Sleeve', maxWeight: 30, description: 'Compatibility sleeve derived from the new fundamental-quality output.' },
+  { key: 'activity_score', label: 'Legacy Mispricing Sleeve', maxWeight: 25, description: 'Compatibility sleeve derived from the new mispricing output instead of the old opportunity algebra.' },
+  { key: 'efficiency_score', label: 'Legacy Durability Sleeve', maxWeight: 20, description: 'Compatibility sleeve that rewards lower fragility rather than the former anti-reflexivity shortcut.' },
+  { key: 'health_score', label: 'Legacy Confidence Sleeve', maxWeight: 15, description: 'Compatibility sleeve derived from evidence quality, freshness, and lower proxy reliance.' },
+  { key: 'dev_score', label: 'Legacy Upside Balance', maxWeight: 10, description: 'Compatibility sleeve blending upside with fragility discipline for older consumers.' },
 ]
 
 function barColor(pct: number): string {

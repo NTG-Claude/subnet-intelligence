@@ -5,16 +5,15 @@ interface Props {
 }
 
 const AXES = [
-  { key: 'intrinsic_quality', label: 'Intrinsic Quality', tint: 'from-emerald-400 to-lime-300' },
-  { key: 'economic_sustainability', label: 'Economic Sustainability', tint: 'from-sky-400 to-cyan-300' },
-  { key: 'reflexivity', label: 'Reflexivity / Distortion', tint: 'from-amber-300 to-orange-400' },
-  { key: 'stress_robustness', label: 'Stress Robustness', tint: 'from-fuchsia-400 to-rose-300' },
-  { key: 'opportunity_gap', label: 'Opportunity Gap', tint: 'from-violet-400 to-indigo-300' },
+  { key: 'fundamental_quality', label: 'Fundamental Quality', tint: 'from-emerald-400 to-lime-300' },
+  { key: 'mispricing_signal', label: 'Mispricing Signal', tint: 'from-sky-400 to-cyan-300' },
+  { key: 'fragility_risk', label: 'Fragility Risk', tint: 'from-amber-300 to-orange-400' },
+  { key: 'signal_confidence', label: 'Signal Confidence', tint: 'from-fuchsia-400 to-rose-300' },
 ]
 
 export default function AxisBreakdown({ componentScores }: Props) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {AXES.map((axis) => {
         const value = componentScores[axis.key] ?? 0
         const width = Math.max(0, Math.min(100, value))

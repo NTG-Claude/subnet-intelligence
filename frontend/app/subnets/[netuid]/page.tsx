@@ -23,8 +23,8 @@ function formatDate(iso: string | null): string {
   })
 }
 
-function countSignals(breakdown: Record<string, number>): number {
-  return Object.values(breakdown).filter((value) => value > 0).length
+function countSignals(outputs: Record<string, number>): number {
+  return Object.values(outputs).filter((value) => value > 0).length
 }
 
 export default async function SubnetPage({ params }: Props) {
@@ -39,13 +39,14 @@ export default async function SubnetPage({ params }: Props) {
     notFound()
   }
 
-  const { breakdown, history, metadata, analysis } = subnet
+  const { breakdown, history, metadata, analysis, primary_outputs } = subnet
+  const primary = primary_outputs ?? analysis?.primary_outputs ?? null
   const chartData = history.map((point) => ({
     date: new Date(point.computed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     score: point.score,
   }))
-  const signalCount = countSignals(breakdown as unknown as Record<string, number>)
-  const componentScores = analysis?.component_scores ?? {}
+  const signalCount = countSignals(primary ?? {})
+  const componentScores = primary ?? {}
   const decomposition = analysis?.earned_reflexive_fragile ?? {}
 
   return (
@@ -75,6 +76,22 @@ export default async function SubnetPage({ params }: Props) {
               {subnet.computed_at && <span>Updated <strong className="text-stone-100">{formatDate(subnet.computed_at)}</strong></span>}
             </div>
 
+            {primary && (
+              <div className="grid gap-3 sm:grid-cols-4">
+                {[
+                  { label: 'Fundamental Quality', value: primary.fundamental_quality },
+                  { label: 'Mispricing Signal', value: primary.mispricing_signal },
+                  { label: 'Fragility Risk', value: primary.fragility_risk },
+                  { label: 'Signal Confidence', value: primary.signal_confidence },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                    <div className="text-xs uppercase tracking-[0.24em] text-stone-500">{item.label}</div>
+                    <div className="mt-2 text-2xl font-semibold text-stone-100">{item.value?.toFixed(1) ?? '—'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-3">
               {[
                 { label: 'Earned Strength', value: decomposition.earned_strength },
@@ -100,13 +117,13 @@ export default async function SubnetPage({ params }: Props) {
       </section>
 
       <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Axis Breakdown</h2>
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Primary Outputs</h2>
         <AxisBreakdown componentScores={componentScores} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Composite Mapping</h2>
+          <h2 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Legacy Compatibility Mapping</h2>
           <SignalBreakdown breakdown={breakdown} />
         </div>
         <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">

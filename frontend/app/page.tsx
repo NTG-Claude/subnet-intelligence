@@ -24,7 +24,7 @@ export default async function HomePage() {
     fetchLeaderboard().catch(() => ({ top: [], bottom: [] })),
     fetchDistribution().catch(() => ({ buckets: [], total_subnets: 0 })),
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
-    fetchLabelBacktests(90).catch(() => ({ labels: [], observations: 0, examples: [] })),
+    fetchLabelBacktests(90).catch(() => ({ labels: [], observations: 0, examples: [], targets: [] })),
   ])
 
   return (
@@ -33,14 +33,14 @@ export default async function HomePage() {
         <div className="grid gap-8 lg:grid-cols-[1.4fr_0.9fr]">
           <div className="space-y-5">
             <div className="inline-flex rounded-full border border-lime-200/20 bg-lime-200/10 px-3 py-1 text-xs uppercase tracking-[0.3em] text-lime-100">
-              Signal Separation
+              Investment Framework
             </div>
             <div>
               <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-stone-50 sm:text-5xl">
-                From subnet leaderboard to subnet intelligence.
+                From heuristic ranking to investment-grade subnet research.
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-stone-300">
-                This view now separates earned strength, reflexive strength, and fragility instead of only ranking surface-level winners.
+                This view now centers fundamental quality, mispricing, fragility, and confidence instead of treating one aggregate score as the whole truth.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -86,7 +86,7 @@ export default async function HomePage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Backtest Readout</h2>
-              <p className="mt-2 text-sm text-stone-500">First forward-proxy check of whether labels lead or lag future deterioration.</p>
+              <p className="mt-2 text-sm text-stone-500">Forward proxies for relative returns, drawdown, and market-structure deterioration.</p>
             </div>
           </div>
           <BacktestTable labels={backtests.labels.slice(0, 8)} />

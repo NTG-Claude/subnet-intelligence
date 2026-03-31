@@ -20,10 +20,11 @@ export default function BacktestTable({ labels }: Props) {
           <tr>
             <th className="px-4 py-3 text-left">Label</th>
             <th className="px-4 py-3 text-right">Obs</th>
-            <th className="px-4 py-3 text-right">Future Score</th>
-            <th className="px-4 py-3 text-right">Return Proxy</th>
-            <th className="px-4 py-3 text-right">Slippage Drift</th>
-            <th className="px-4 py-3 text-right">Concentration Drift</th>
+            <th className="px-4 py-3 text-right">Rel 30d</th>
+            <th className="px-4 py-3 text-right">Rel 90d</th>
+            <th className="px-4 py-3 text-right">Drawdown</th>
+            <th className="px-4 py-3 text-right">Liq Risk</th>
+            <th className="px-4 py-3 text-right">Conc Risk</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/10">
@@ -31,10 +32,11 @@ export default function BacktestTable({ labels }: Props) {
             <tr key={row.label} className="text-stone-200">
               <td className="px-4 py-3">{row.label}</td>
               <td className="px-4 py-3 text-right font-mono">{row.observations}</td>
-              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_future_score_change)}</td>
-              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_future_return_proxy, true)}</td>
-              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_future_slippage_deterioration)}</td>
-              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_future_concentration_increase)}</td>
+              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_relative_forward_return_vs_tao_30d, true)}</td>
+              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_relative_forward_return_vs_tao_90d, true)}</td>
+              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_drawdown_risk)}</td>
+              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_liquidity_deterioration_risk)}</td>
+              <td className="px-4 py-3 text-right font-mono">{fmt(row.avg_concentration_deterioration_risk)}</td>
             </tr>
           ))}
         </tbody>

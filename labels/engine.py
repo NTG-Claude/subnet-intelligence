@@ -1,66 +1,77 @@
-from features.types import AxisScores, FeatureBundle
+from features.types import AxisScores, FeatureBundle, PrimarySignals
 from regimes.hard_rules import HardRuleResult
 from stress.scenarios import StressTestResult
 
 
 def assign_label(
-    axes: AxisScores,
+    signals: PrimarySignals | AxisScores,
     bundle: FeatureBundle,
     stress: StressTestResult,
     rules: HardRuleResult,
 ) -> tuple[str, str]:
-    intrinsic = axes.intrinsic_quality
-    economic = axes.economic_sustainability
-    reflexivity = axes.reflexivity
-    opportunity = axes.opportunity_gap
+    if isinstance(signals, AxisScores):
+        signals = PrimarySignals(
+            fundamental_quality=max(
+                0.0,
+                min(
+                    1.0,
+                    0.55 * signals.intrinsic_quality
+                    + 0.25 * signals.economic_sustainability
+                    + 0.20 * max(0.0, 1.0 - signals.reflexivity),
+                ),
+            ),
+            mispricing_signal=max(0.0, min(1.0, 0.5 + signals.opportunity_gap / 2.0)),
+            fragility_risk=max(
+                0.0,
+                min(
+                    1.0,
+                    0.55 * max(0.0, 1.0 - signals.stress_robustness)
+                    + 0.45 * signals.reflexivity,
+                ),
+            ),
+            signal_confidence=max(0.0, min(1.0, 0.45 + 0.35 * signals.stress_robustness)),
+        )
+
+    fundamental = signals.fundamental_quality
+    mispricing = signals.mispricing_signal
+    fragility = signals.fragility_risk
+    confidence = signals.signal_confidence
     concentration = max(bundle.raw.get("validator_dominance") or 0.0, bundle.raw.get("incentive_concentration") or 0.0)
-    informativeness = bundle.raw.get("meaningful_discrimination") or 0.0
-    consensus_entropy = bundle.raw.get("validator_weight_entropy") or 0.0
+    price_lag = bundle.raw.get("price_response_lag_to_quality_shift") or 0.0
+    sticky_usage = bundle.raw.get("emission_to_sticky_usage_conversion") or 0.0
+    retention = bundle.raw.get("post_incentive_retention") or 0.0
+    crowding = bundle.raw.get("crowding_proxy") or 0.0
     dereg_risk = bundle.raw.get("dereg_risk_proxy") or 0.0
-    thin_liquidity = "thin_liquidity_caps_economic_sustainability" in rules.activated
+    thin_liquidity = "thin_liquidity_caps_fragility" in rules.activated
     micro_pool = "micro_pool_apy_caps_total_score" in rules.activated
     inactive = "inactive_subnet_blocks_positive_label" in rules.activated
-    concentration_capped = "concentration_caps_intrinsic_quality" in rules.activated
+    confidence_capped = "thin_evidence_caps_confidence" in rules.activated
 
     if rules.force_label == "Consensus Hollow":
-        return "Consensus Hollow", "Validators appear aligned, but the consensus is not meaningfully discriminating."
+        return "Consensus Hollow", "Validator alignment exists, but the underlying signal is too uninformative to trust as investment evidence."
     if rules.force_label == "Dereg Candidate":
-        return "Dereg Candidate", "Weak resilience and poor market-quality alignment suggest elevated downside and replacement risk."
+        return "Dereg Candidate", "Participation, liquidity, and survivability remain too weak, leaving elevated replacement risk for any investment thesis."
     if rules.force_label == "Overrewarded Structure":
-        return "Overrewarded Structure", "Market pricing is outrunning structural resilience, especially once liquidity and concentration are stress-tested."
+        return "Overrewarded Structure", "Liquidity and ownership structure are too fragile for the current reward and pricing profile."
 
-    if micro_pool or (thin_liquidity and opportunity < 0.05 and reflexivity > 0.40):
-        return "Overrewarded Structure", "Market pricing is outrunning structural resilience, especially once liquidity and concentration are stress-tested."
-    if rules.force_negative_label and not inactive and not thin_liquidity and not micro_pool:
-        return "Fragile Yield Trap", "Yield optics dominate, but concentration and stress sensitivity make the structure brittle."
-    if economic > 0.55 and reflexivity > 0.65 and stress.max_drawdown > 0.25:
-        return "Fragile Yield Trap", "Yield optics dominate, but concentration and stress sensitivity make the structure brittle."
-    if intrinsic > 0.70 and economic > 0.62 and reflexivity < 0.35 and stress.robustness > 0.65:
-        return "Hidden Compounder", "Quality and sustainability are strong while reflexive distortion remains low."
-    if intrinsic > 0.62 and opportunity > 0.22 and reflexivity < 0.45:
-        return "Underappreciated Infrastructure", "Internal quality is ahead of visible market recognition."
-    if intrinsic > 0.55 and economic < 0.45 and reflexivity < 0.45:
-        return "Early Quality Build", "Quality signals are forming before liquidity and emissions fully validate the subnet."
-    if consensus_entropy > 0.85 and informativeness < 0.15:
-        return "Consensus Hollow", "Validators appear aligned, but the consensus is not meaningfully discriminating."
+    if inactive or dereg_risk > 0.60:
+        return "Dereg Candidate", "The structure is still too vulnerable to participation loss or replacement, leaving clear replacement risk in the thesis."
+    if micro_pool or (thin_liquidity and crowding > 0.40):
+        return "Overrewarded Structure", "Capital is paying for yield optics before the market structure is deep enough to support them."
+    if fragility > 0.72 and concentration > 0.55:
+        return "Fragile Yield Trap", "Economics may look attractive, but concentration, thin liquidity, and reversal risk make the setup brittle."
+    if fundamental > 0.72 and mispricing > 0.64 and fragility < 0.38 and confidence > 0.58:
+        return "Hidden Compounder", "Quality is compounding faster than price, with enough durability and evidence quality to matter."
+    if fundamental > 0.60 and mispricing > 0.58 and price_lag > 0.10 and confidence > 0.48:
+        return "Underappreciated Infrastructure", "Structural improvement is visible in participation and liquidity, but market recognition is still lagging."
+    if fundamental > 0.56 and sticky_usage > 0.05 and retention > 0.05 and fragility < 0.55:
+        return "Early Quality Build", "Usage and retention are improving in a way that looks earned rather than purely incentive-driven."
     if (
-        reflexivity > 0.62
-        and concentration > 0.50
-        and economic > 0.50
-        and stress.max_drawdown <= 0.30
-        and not thin_liquidity
-        and not micro_pool
-        and not inactive
+        (crowding > 0.55 and fragility > 0.50 and mispricing < 0.50)
+        or (crowding > 0.50 and concentration > 0.58 and stress.max_drawdown > 0.20)
+        or (concentration > 0.58 and fragility > 0.55 and mispricing < 0.50 and stress.max_drawdown > 0.20)
     ):
-        return "Reflexive Crowded Trade", "Attention and flows are real, but the trade is crowded and increasingly driven by reflexive market mechanics."
-    if reflexivity > 0.68 and concentration > 0.55:
-        return "Reflexive Crowded Trade", "Price and participation optics depend too heavily on flows and concentration."
-    if concentration_capped and reflexivity > 0.45 and stress.max_drawdown > 0.24 and opportunity < 0.0:
-        return "Overrewarded Structure", "The market is rewarding a structure that remains too concentrated and stress-sensitive."
-    if concentration_capped and economic > 0.55 and stress.max_drawdown > 0.18:
-        return "Fragile Yield Trap", "Economics look strong on the surface, but concentration leaves the yield profile exposed under stress."
-    if concentration_capped and intrinsic < 0.40 and opportunity <= 0.10:
-        return "Under Review", "Concentration is elevated, but the structure lacks enough distortion evidence for a stronger regime call."
-    if inactive or dereg_risk > 0.55 or (stress.max_drawdown > 0.18 and opportunity < 0.05):
-        return "Dereg Candidate", "Weak resilience and poor market-quality alignment suggest elevated downside and replacement risk."
-    return "Under Review", "Signal mix is mixed; no single structural regime dominates yet."
+        return "Reflexive Crowded Trade", "The trade is increasingly crowded, reflexive, and vulnerable to reversals rather than driven by fresh underpricing."
+    if confidence < 0.40 or confidence_capped:
+        return "Under Review", "The signal is directionally interesting, but current evidence quality is too thin to treat it as investment-grade."
+    return "Under Review", "Quality, valuation gap, fragility, and confidence are mixed, so the thesis remains provisional."
