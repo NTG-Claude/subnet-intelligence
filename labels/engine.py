@@ -43,6 +43,16 @@ def assign_label(
         return "Early Quality Build", "Quality signals are forming before liquidity and emissions fully validate the subnet."
     if consensus_entropy > 0.85 and informativeness < 0.15:
         return "Consensus Hollow", "Validators appear aligned, but the consensus is not meaningfully discriminating."
+    if (
+        reflexivity > 0.62
+        and concentration > 0.50
+        and economic > 0.50
+        and stress.max_drawdown <= 0.30
+        and not thin_liquidity
+        and not micro_pool
+        and not inactive
+    ):
+        return "Reflexive Crowded Trade", "Attention and flows are real, but the trade is crowded and increasingly driven by reflexive market mechanics."
     if reflexivity > 0.68 and concentration > 0.55:
         return "Reflexive Crowded Trade", "Price and participation optics depend too heavily on flows and concentration."
     if concentration_capped and reflexivity > 0.45 and stress.max_drawdown > 0.24 and opportunity < 0.0:
