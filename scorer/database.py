@@ -61,7 +61,7 @@ class SubnetScoreRow(Base):
     dev_score = Column(Float, nullable=False)
     rank = Column(Integer, nullable=True)
     computed_at = Column(DateTime(timezone=True), nullable=False, index=True)
-    score_version = Column(String(16), nullable=False, default="v1")
+    score_version = Column(String(64), nullable=False, default="v1")
     raw_data = Column(JSON, nullable=True)
     # dTAO market data (added v3.0)
     alpha_price_tao = Column(Float, nullable=True)
@@ -89,6 +89,7 @@ def create_tables() -> None:
     """Create all tables and run additive migrations (idempotent)."""
     Base.metadata.create_all(bind=engine)
     _migrate_add_dtao_columns()
+    _migrate_score_version_length()
 
 
 def _migrate_add_dtao_columns() -> None:
@@ -107,6 +108,17 @@ def _migrate_add_dtao_columns() -> None:
                 logger.info("Migration: added column subnet_scores.%s", col)
             except Exception:
                 pass  # column already exists — safe to ignore
+
+
+def _migrate_score_version_length() -> None:
+    """Ensure score_version can store longer model identifiers."""
+    with engine.connect() as conn:
+        try:
+            if engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE subnet_scores ALTER COLUMN score_version TYPE VARCHAR(64)"))
+                conn.commit()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
