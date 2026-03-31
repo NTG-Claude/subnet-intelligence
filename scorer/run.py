@@ -134,24 +134,52 @@ def _choose_preferred_subnet_name(
     return best
 
 
+async def _refresh_names_from_public_sources(
+    base_names: dict[int, str],
+    target_netuids: list[int],
+) -> dict[int, str]:
+    if not target_netuids:
+        return base_names
+
+    refreshed = dict(base_names)
+    try:
+        async with TaostatsClient() as tc:
+            scraped_names = await tc.scrape_public_subnet_names(target_netuids)
+        for netuid, scraped_name in scraped_names.items():
+            refreshed[netuid] = _choose_preferred_subnet_name(
+                refreshed.get(netuid),
+                _normalize_public_subnet_name(scraped_name),
+                None,
+            ) or refreshed.get(netuid) or _normalize_public_subnet_name(scraped_name)
+    except Exception as exc:
+        logger.warning("Public subnet name refresh failed: %s", exc)
+
+    return refreshed
+
+
 async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, str]:
     """
     Return {netuid: name} dict from Taostats, using a disk cache.
     The cache file (data/subnet_names.json) is refreshed at most once per day,
     keeping API usage minimal regardless of how many score runs happen.
     """
+    target_netuids = sorted(set(netuids or []))
+
     try:
         if _NAMES_CACHE_FILE.exists():
             names, fetched_at = _read_cached_names()
             if _cache_is_fresh(fetched_at):
+                names = await _refresh_names_from_public_sources(names, target_netuids)
                 age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600 if fetched_at else 0.0
                 logger.info("Subnet names loaded from disk cache (%d subnets, %.0fh old)",
                             len(names), age_hours)
+                out = {str(k): v for k, v in names.items()}
+                out["_fetched_at"] = datetime.now(timezone.utc).isoformat()
+                _NAMES_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                _NAMES_CACHE_FILE.write_text(json.dumps(out, indent=2))
                 return names
     except Exception as exc:
         logger.warning("Could not read names cache: %s", exc)
-
-    target_netuids = sorted(set(netuids or []))
 
     # Cache stale or missing — fetch from Taostats API first, then reconcile
     # with public-page scraping because the API occasionally serves truncated
