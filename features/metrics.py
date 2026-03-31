@@ -192,6 +192,16 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
             "crowding_proxy": fmean([validator_dominance, incentive_concentration, clamp01(avg_slippage or 0.0)]),
             "sharp_short_term_reversal_risk": max(0.0, (price_change or 0.0) - max(_acceleration(quality_history) or 0.0, 0.0)),
             "performance_driven_by_few_actors": max(validator_dominance, incentive_concentration),
+            "registration_openness": 1.0 if snapshot.registration_allowed else 0.0,
+            "pow_registration_enabled": 1.0 if snapshot.difficulty > 0 else 0.0,
+            "burn_registration_enabled": 1.0 if snapshot.min_burn > 0 or snapshot.max_burn > 0 else 0.0,
+            "immunity_period": float(snapshot.immunity_period),
+            "dereg_risk_proxy": clamp01(
+                0.45 * max(0.0, 0.35 - active_ratio)
+                + 0.25 * max(0.0, 0.20 - participation_breadth)
+                + 0.20 * max(validator_dominance, incentive_concentration)
+                + 0.10 * (1.0 if snapshot.registration_allowed else 0.0)
+            ),
             "repo_commits_30d": float(snapshot.github.commits_30d) if snapshot.github else None,
             "repo_contributors_30d": float(snapshot.github.contributors_30d) if snapshot.github else None,
             "repo_recency": None if not snapshot.github or not snapshot.github.last_push else 1.0,

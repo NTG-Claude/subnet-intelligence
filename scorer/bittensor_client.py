@@ -67,6 +67,13 @@ def _subtensor():
     return _local.st
 
 
+def clear_caches() -> None:
+    global _all_identities_fetched
+    with _identity_cache_lock:
+        _identity_cache.clear()
+        _all_identities_fetched = False
+
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -102,6 +109,12 @@ class SubnetMetrics:
     last_update_blocks: list[int] = field(default_factory=list)
     yuma_mask: list[bool] = field(default_factory=list)
     mechanism_ids: list[int] = field(default_factory=list)
+    immunity_period: int = 0
+    registration_allowed: bool = False
+    target_regs_per_interval: int = 0
+    min_burn: float = 0.0
+    max_burn: float = 0.0
+    difficulty: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +124,8 @@ class SubnetMetrics:
 def _fetch_netuids() -> list[int]:
     try:
         st = _subtensor()
-        logger.info("Subtensor connected — bt v%s", bt.__version__)
+        version = getattr(bt, "__version__", "unknown")
+        logger.info("Subtensor connected — bt v%s", version)
         result = st.get_all_subnets_netuid()  # bittensor 10.x API (was get_subnets() in 8.x)
         if not result:
             logger.error("get_all_subnets_netuid() returned empty list")
@@ -230,6 +244,18 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
                 values = []
             if any(values):
                 m.validator_bond_matrix.append(values)
+
+        try:
+            hyper = st.get_subnet_hyperparameters(netuid)
+            if hyper is not None:
+                m.immunity_period = int(getattr(hyper, "immunity_period", 0) or 0)
+                m.registration_allowed = bool(getattr(hyper, "registration_allowed", False))
+                m.target_regs_per_interval = int(getattr(hyper, "target_regs_per_interval", 0) or 0)
+                m.min_burn = float(getattr(hyper, "min_burn", 0) or 0) / 1e9
+                m.max_burn = float(getattr(hyper, "max_burn", 0) or 0) / 1e9
+                m.difficulty = float(getattr(hyper, "difficulty", 0) or 0)
+        except Exception as exc:
+            logger.warning("hyperparameter fetch failed for SN%d: %s", netuid, exc)
 
         # dTAO AMM pool — fetch FIRST so alpha_price_tao is available for emission conversion.
         # SubnetTAO and SubnetAlphaIn are both stored in rao; /1e9 → TAO / Alpha units.

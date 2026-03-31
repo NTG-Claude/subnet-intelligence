@@ -114,6 +114,12 @@ def _to_snapshot(d: _SubnetData, current_block: int, history: list) -> RawSubnet
         last_update_blocks=m.last_update_blocks,
         yuma_mask=m.yuma_mask,
         mechanism_ids=m.mechanism_ids,
+        immunity_period=m.immunity_period,
+        registration_allowed=m.registration_allowed,
+        target_regs_per_interval=m.target_regs_per_interval,
+        min_burn=m.min_burn,
+        max_burn=m.max_burn,
+        difficulty=m.difficulty,
         github=d.repo_activity,
         history=history,
     )

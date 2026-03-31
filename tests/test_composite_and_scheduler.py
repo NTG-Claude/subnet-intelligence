@@ -65,6 +65,12 @@ def _make_metrics(netuid: int) -> SubnetMetrics:
         last_update_blocks=[5_000_000] * 128,
         yuma_mask=[True] * 128 + [False] * 128,
         mechanism_ids=[0] * 128 + [1] * 128,
+        immunity_period=4096,
+        registration_allowed=True,
+        target_regs_per_interval=2,
+        min_burn=0.1,
+        max_burn=0.2,
+        difficulty=10_000.0,
     )
 
 
@@ -89,6 +95,18 @@ def test_build_scores_produces_analysis_and_label():
     assert isinstance(first.label, str)
     breakdown = _legacy_breakdown(first)
     assert 0.0 <= breakdown.capital_score <= 30.0
+
+
+def test_build_scores_penalizes_closed_registration_without_paths():
+    snapshot = _make_snapshot(1)
+    snapshot.registration_allowed = False
+    snapshot.min_burn = 0.0
+    snapshot.max_burn = 0.0
+    snapshot.difficulty = 0.0
+    snapshot.immunity_period = 0
+    snapshot.active_neurons_7d = 2
+    artifacts = build_scores([snapshot])[1]
+    assert "registration_closed_without_burn_or_pow_penalty" in artifacts.explanation["activated_hard_rules"]
 
 
 @pytest.mark.asyncio

@@ -37,6 +37,11 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         activated.append("thin_liquidity_caps_economic_sustainability")
         economic_cap = 0.35 if economic_cap is None else min(economic_cap, 0.35)
 
+    if not snapshot.registration_allowed and snapshot.min_burn <= 0 and snapshot.max_burn <= 0 and snapshot.difficulty <= 0:
+        activated.append("registration_closed_without_burn_or_pow_penalty")
+        total_cap = 0.40 if total_cap is None else min(total_cap, 0.40)
+        force_negative_label = True
+
     if concentration > 0.60:
         activated.append("concentration_caps_intrinsic_quality")
         intrinsic_cap = 0.45 if intrinsic_cap is None else min(intrinsic_cap, 0.45)
@@ -44,6 +49,10 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     if consensus_hollow:
         activated.append("uninformative_consensus_caps_consensus_component")
         intrinsic_cap = 0.50 if intrinsic_cap is None else min(intrinsic_cap, 0.50)
+
+    if snapshot.immunity_period <= 0 and (bundle.raw.get("dereg_risk_proxy") or 0.0) > 0.55:
+        activated.append("post_immunity_high_dereg_risk_penalty")
+        total_cap = 0.45 if total_cap is None else min(total_cap, 0.45)
 
     return HardRuleResult(
         activated=activated,

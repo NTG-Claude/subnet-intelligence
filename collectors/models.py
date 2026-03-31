@@ -49,5 +49,11 @@ class RawSubnetSnapshot:
     last_update_blocks: list[int] = field(default_factory=list)
     yuma_mask: list[bool] = field(default_factory=list)
     mechanism_ids: list[int] = field(default_factory=list)
+    immunity_period: int = 0
+    registration_allowed: bool = False
+    target_regs_per_interval: int = 0
+    min_burn: float = 0.0
+    max_burn: float = 0.0
+    difficulty: float = 0.0
     github: Optional[RepoActivitySnapshot] = None
     history: list[HistoricalFeaturePoint] = field(default_factory=list)
