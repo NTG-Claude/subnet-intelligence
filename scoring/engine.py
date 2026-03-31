@@ -142,6 +142,46 @@ def _history_fallback_primary(snapshot: RawSubnetSnapshot, current_primary: Prim
     )
 
 
+def _limit_signal_drift(current_value: float, history_value: float | None, max_step: float) -> float:
+    if history_value is None:
+        return current_value
+    lower = max(0.0, history_value - max_step)
+    upper = min(1.0, history_value + max_step)
+    return max(lower, min(upper, current_value))
+
+
+def _stabilize_primary_with_history(snapshot: RawSubnetSnapshot, current_primary: PrimarySignals) -> PrimarySignals:
+    history_point = _latest_valid_history_point(snapshot)
+    if history_point is None:
+        return current_primary
+
+    history_primary = (
+        PrimarySignals(
+            fundamental_quality=history_point.fundamental_quality,
+            mispricing_signal=history_point.mispricing_signal,
+            fragility_risk=history_point.fragility_risk,
+            signal_confidence=history_point.signal_confidence,
+        )
+        if all(
+            value is not None
+            for value in (
+                history_point.fundamental_quality,
+                history_point.mispricing_signal,
+                history_point.fragility_risk,
+                history_point.signal_confidence,
+            )
+        )
+        else _signals_from_legacy_history(history_point)
+    )
+
+    return PrimarySignals(
+        fundamental_quality=_limit_signal_drift(current_primary.fundamental_quality, history_primary.fundamental_quality, 0.08),
+        mispricing_signal=_limit_signal_drift(current_primary.mispricing_signal, history_primary.mispricing_signal, 0.10),
+        fragility_risk=_limit_signal_drift(current_primary.fragility_risk, history_primary.fragility_risk, 0.08),
+        signal_confidence=_limit_signal_drift(current_primary.signal_confidence, history_primary.signal_confidence, 0.08),
+    )
+
+
 def _legacy_axes_from_primary(signals: PrimarySignals, bundle: FeatureBundle, stress_robustness: float | None = None) -> AxisScores:
     intrinsic = max(0.0, min(1.0, 0.82 * signals.fundamental_quality + 0.18 * (bundle.raw.get("cohort_quality_edge") or 0.0)))
     economic = max(
@@ -266,6 +306,7 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
             fragility_risk=max(primary.fragility_risk, 0.65 * primary.fragility_risk + 0.35 * (1.0 - stress.robustness)),
             signal_confidence=primary.signal_confidence,
         )
+        primary = _stabilize_primary_with_history(snapshot, primary)
         axes = _legacy_axes_from_primary(primary, bundle, stress.robustness)
         score = _apply_total_cap(_ranking_priority_score(primary, bundle), primary, rules)
         label, thesis = assign_label(primary, bundle, stress, rules)

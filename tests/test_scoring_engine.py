@@ -1,8 +1,10 @@
+import pytest
+
 from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from features.types import AxisScores
 from features.types import FeatureBundle, PrimarySignals
 from regimes.hard_rules import HardRuleResult
-from scoring.engine import _apply_total_cap, _ranking_priority_score, build_scores
+from scoring.engine import _apply_total_cap, _ranking_priority_score, _stabilize_primary_with_history, build_scores
 
 
 def test_apply_total_cap_keeps_plain_caps_for_non_negative_rules():
@@ -104,3 +106,32 @@ def test_ranking_priority_rewards_market_relevance_for_flagship_like_subnets():
     micro_bundle = FeatureBundle(raw={"market_relevance_proxy": 0.12})
 
     assert _ranking_priority_score(signals, flagship_bundle) > _ranking_priority_score(signals, micro_bundle)
+
+
+def test_stabilize_primary_with_history_limits_run_to_run_jumps():
+    snapshot = RawSubnetSnapshot(
+        netuid=7,
+        current_block=1000,
+        history=[
+            HistoricalFeaturePoint(
+                timestamp="2026-03-31T11:46:31+00:00",
+                fundamental_quality=0.50,
+                mispricing_signal=0.52,
+                fragility_risk=0.48,
+                signal_confidence=0.54,
+            )
+        ],
+    )
+    current = PrimarySignals(
+        fundamental_quality=0.70,
+        mispricing_signal=0.70,
+        fragility_risk=0.70,
+        signal_confidence=0.70,
+    )
+
+    stabilized = _stabilize_primary_with_history(snapshot, current)
+
+    assert stabilized.fundamental_quality == pytest.approx(0.58)
+    assert stabilized.mispricing_signal == pytest.approx(0.62)
+    assert stabilized.fragility_risk == pytest.approx(0.56)
+    assert stabilized.signal_confidence == pytest.approx(0.62)
