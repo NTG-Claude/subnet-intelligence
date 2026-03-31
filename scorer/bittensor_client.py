@@ -86,7 +86,7 @@ def _coerce_sequence(value) -> list:
 def _first_non_empty_sequence(*values) -> list:
     for value in values:
         seq = _coerce_sequence(value)
-        if seq:
+        if len(seq) > 0:
             return seq
     return []
 
