@@ -93,6 +93,20 @@ def _with_db_mocks(meta_netuid=1):
 
 
 # ---------------------------------------------------------------------------
+# GET /
+# ---------------------------------------------------------------------------
+
+def test_root():
+    from api.main import app
+    with TestClient(app) as c:
+        resp = c.get("/")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["service"] == "subnet-intelligence-api"
+    assert data["health_url"] == "/health"
+
+
+# ---------------------------------------------------------------------------
 # /health
 # ---------------------------------------------------------------------------
 
@@ -101,6 +115,17 @@ def test_health_ok():
         from api.main import app
         with TestClient(app) as c:
             resp = c.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["subnet_count"] == 5
+
+
+def test_api_health_ok():
+    with _with_db_mocks():
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/health")
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
@@ -341,6 +366,8 @@ def test_openapi_json():
         resp = c.get("/openapi.json")
     assert resp.status_code == 200
     schema = resp.json()
+    assert "/" in schema["paths"]
+    assert "/api/health" in schema["paths"]
     assert "/api/v1/subnets" in schema["paths"]
     assert "/api/v1/leaderboard" in schema["paths"]
     assert "/health" in schema["paths"]

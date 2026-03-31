@@ -170,6 +170,20 @@ def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
 # ---------------------------------------------------------------------------
 
 @app.get(
+    "/",
+    summary="Service root",
+    tags=["System"],
+)
+async def root() -> dict[str, Any]:
+    return {
+        "service": "subnet-intelligence-api",
+        "status": "ok",
+        "docs_url": "/docs",
+        "health_url": "/health",
+        "api_health_url": "/api/health",
+    }
+
+@app.get(
     "/api/v1/subnets",
     response_model=SubnetListResponse,
     summary="List all subnets with current scores",
@@ -427,3 +441,13 @@ async def health() -> HealthResponse:
     except Exception as exc:
         logger.warning("DB unavailable during health check: %s", exc)
         return HealthResponse(status="degraded", last_score_run=None, subnet_count=0)
+
+
+@app.get(
+    "/api/health",
+    response_model=HealthResponse,
+    summary="API health check",
+    tags=["System"],
+)
+async def api_health() -> HealthResponse:
+    return await health()
