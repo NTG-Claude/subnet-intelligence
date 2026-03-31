@@ -370,7 +370,7 @@ def _fetch_all_identities_sync() -> None:
         for storage_key in ("SubnetIdentitiesV2", "SubnetIdentities"):
             try:
                 identity_map = st.substrate.query_map("SubtensorModule", storage_key)
-                logger.warning("query_map(%s) returned type: %s", storage_key, type(identity_map).__name__)
+                logger.debug("query_map(%s) returned type: %s", storage_key, type(identity_map).__name__)
                 for netuid_key, val_obj in identity_map:
                     try:
                         netuid = int(netuid_key.value)
@@ -399,7 +399,7 @@ def _fetch_all_identities_sync() -> None:
                 )
                 break  # success — don't try fallback key
             except Exception as exc:
-                logger.warning("query_map(%s) failed: %s — trying fallback", storage_key, exc)
+                logger.info("query_map(%s) unavailable: %s; trying fallback", storage_key, exc)
 
         _all_identities_fetched = True
 
