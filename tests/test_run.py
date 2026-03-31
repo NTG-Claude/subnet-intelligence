@@ -3,6 +3,7 @@ Tests für scorer/run.py
 """
 
 import pytest
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -156,3 +157,37 @@ async def test_run_logs_top3_from_investable_subnets():
 
     top3_logs = [call.args[1] for call in mock_logger.info.call_args_list if call.args and call.args[0] == "Top 3: %s"]
     assert top3_logs == ["SN1(80), SN2(70), SN3(60)"]
+
+
+@pytest.mark.asyncio
+async def test_load_subnet_names_negative_caches_failed_taostats_fetch():
+    from scorer.run import _load_subnet_names
+
+    cache_file = Path("data/test_subnet_names_cache.json")
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        cache_file.write_text(
+            '{\n'
+            '  "_fetched_at": "2020-01-01T00:00:00+00:00",\n'
+            '  "_note": "seed names",\n'
+            '  "4": "Targon"\n'
+            '}',
+            encoding="utf-8",
+        )
+        os.utime(cache_file, (1, 1))
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get_all_subnets = AsyncMock(return_value=None)
+        mock_client.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={4: "Targon", 64: "Chutes"})
+
+        with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
+             patch("scorer.run.TaostatsClient", return_value=mock_client):
+            names = await _load_subnet_names([4, 64])
+
+        assert names == {4: "Targon", 64: "Chutes"}
+        rewritten = cache_file.read_text(encoding="utf-8")
+        assert "Targon" in rewritten
+        assert "Chutes" in rewritten
+    finally:
+        if cache_file.exists():
+            cache_file.unlink()
