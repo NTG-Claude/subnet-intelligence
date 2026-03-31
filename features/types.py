@@ -1,0 +1,33 @@
+from dataclasses import dataclass, field
+
+
+@dataclass
+class FeatureMetric:
+    name: str
+    value: float | None
+    normalized: float
+    category: str
+    axis: str
+    weight: float
+    higher_is_better: bool = True
+
+    @property
+    def contribution(self) -> float:
+        centered = self.normalized if self.higher_is_better else (1.0 - self.normalized)
+        return centered * self.weight
+
+
+@dataclass
+class AxisScores:
+    intrinsic_quality: float
+    economic_sustainability: float
+    reflexivity: float
+    stress_robustness: float
+    opportunity_gap: float
+
+
+@dataclass
+class FeatureBundle:
+    raw: dict[str, float | None]
+    metrics: dict[str, FeatureMetric] = field(default_factory=dict)
+    axes: AxisScores | None = None

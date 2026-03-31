@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import scorer.bittensor_client as _bt_client
-from scorer.bittensor_client import get_all_netuids, get_subnet_identity, prefetch_all_identities
+from scorer.bittensor_client import clear_caches, get_all_netuids, get_subnet_identity, prefetch_all_identities
 from scorer.composite import compute_all_subnets
 from scorer.database import create_tables, save_scores, upsert_metadata
 from scorer.taostats_client import TaostatsClient
@@ -114,6 +114,10 @@ async def run(
     """
     start = time.monotonic()
     logger.info("=== Score run started at %s ===", datetime.now(timezone.utc).isoformat())
+
+    if force_refresh:
+        clear_caches()
+        logger.info("In-memory bittensor caches cleared due to --force-refresh")
 
     # 1. Pre-fetch ALL subnet identities in a single batch query_map call.
     # This populates _identity_cache so _fetch_data() can use GitHub URLs immediately.

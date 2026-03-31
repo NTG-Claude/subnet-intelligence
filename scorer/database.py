@@ -139,7 +139,7 @@ def save_scores(scores: list, raw_data_by_netuid: Optional[dict] = None) -> None
             rank=s.rank,
             computed_at=now,
             score_version=s.version,
-            raw_data=raw_data_by_netuid.get(s.netuid),
+            raw_data=raw_data_by_netuid.get(s.netuid) or getattr(s, "analysis", None),
             alpha_price_tao=getattr(s, "alpha_price_tao", None) or None,
             tao_in_pool=getattr(s, "tao_in_pool", None) or None,
             market_cap_tao=getattr(s, "market_cap_tao", None) or None,
@@ -250,6 +250,18 @@ def get_top_subnets(n: int = 10) -> list[dict]:
     return get_latest_scores()[:n]
 
 
+def get_scores_since(days: int = 90) -> list[dict]:
+    """Return all score rows across subnets over the past `days` days."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(SubnetScoreRow)
+            .where(SubnetScoreRow.computed_at >= since)
+            .order_by(SubnetScoreRow.netuid, SubnetScoreRow.computed_at)
+        ).scalars().all()
+    return [_row_to_dict(r) for r in rows]
+
+
 def get_score_distribution(buckets: int = 10) -> list[dict]:
     """
     Return a histogram of the latest score distribution.
@@ -294,4 +306,5 @@ def _row_to_dict(row: SubnetScoreRow) -> dict:
         "tao_in_pool": row.tao_in_pool,
         "market_cap_tao": row.market_cap_tao,
         "staking_apy": row.staking_apy,
+        "raw_data": row.raw_data,
     }

@@ -27,6 +27,8 @@ class SubnetSummaryResponse(BaseModel):
     tao_in_pool: Optional[float] = None
     market_cap_tao: Optional[float] = None
     staking_apy: Optional[float] = None
+    label: Optional[str] = None
+    thesis: Optional[str] = None
 
 
 class SubnetMetadataResponse(BaseModel):
@@ -61,6 +63,9 @@ class SubnetDetailResponse(BaseModel):
     market_cap_tao: Optional[float] = None
     staking_apy: Optional[float] = None
     score_delta_7d: Optional[float] = None
+    label: Optional[str] = None
+    thesis: Optional[str] = None
+    analysis: Optional[dict] = None
 
 
 class SubnetListResponse(BaseModel):
@@ -97,3 +102,32 @@ class HealthResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class BacktestLabelSummary(BaseModel):
+    label: str
+    observations: int
+    avg_future_score_change: Optional[float] = None
+    avg_future_return_proxy: Optional[float] = None
+    avg_future_slippage_deterioration: Optional[float] = None
+    avg_future_concentration_increase: Optional[float] = None
+
+
+class BacktestObservation(BaseModel):
+    netuid: int
+    start_at: Optional[str] = None
+    end_at: Optional[str] = None
+    label: str
+    score: Optional[float] = None
+    future_score_change: Optional[float] = None
+    future_return_proxy: Optional[float] = None
+    future_slippage_deterioration: Optional[float] = None
+    future_concentration_increase: Optional[float] = None
+    opportunity_gap: Optional[float] = None
+    stress_robustness: Optional[float] = None
+
+
+class BacktestResponse(BaseModel):
+    observations: int
+    labels: list[BacktestLabelSummary]
+    examples: list[BacktestObservation]

@@ -100,6 +100,8 @@ def test_subnet_metrics_defaults():
     assert m.emission_per_block_tao == 0.0
     assert m.incentive_scores == []
     assert m.n_validators == 0
+    assert m.registration_allowed is False
+    assert m.immunity_period == 0
 
 
 # ---------------------------------------------------------------------------
@@ -213,3 +215,14 @@ def test_fetch_all_identities_sync_handles_query_map_failure():
         assert bt_client._all_identities_fetched is True
     finally:
         bt_client._all_identities_fetched = False
+
+
+def test_clear_caches_resets_identity_state():
+    import scorer.bittensor_client as bt_client
+
+    bt_client._identity_cache[1] = SubnetIdentity(netuid=1, name="x")
+    bt_client._all_identities_fetched = True
+    bt_client.clear_caches()
+
+    assert bt_client._identity_cache == {}
+    assert bt_client._all_identities_fetched is False

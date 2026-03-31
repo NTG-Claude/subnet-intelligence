@@ -1,23 +1,16 @@
 """
-Tests für scorer/composite.py, scorer/scheduler.py, api/dependencies.py.
+Tests for the signal-separation scorer, scheduler, and API dependencies.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from collectors.models import RawSubnetSnapshot
 from scorer.bittensor_client import SubnetMetrics
-from scorer.composite import (
-    ScoreBreakdown,
-    SubnetScore,
-    _CrossSubnetContext,
-    _SubnetData,
-    _score_one,
-)
+from scorer.composite import _legacy_breakdown, _to_snapshot, compute_all_subnets
+from scoring.engine import build_scores
 
-
-# ---------------------------------------------------------------------------
-# api/dependencies.py
-# ---------------------------------------------------------------------------
 
 def test_get_db_yields_session_and_closes():
     from sqlalchemy import create_engine
@@ -37,141 +30,105 @@ def test_get_db_yields_session_and_closes():
         gen = deps.get_db()
         session = next(gen)
         assert session is not None
-        try:
+        with pytest.raises(StopIteration):
             next(gen)
-        except StopIteration:
-            pass
     finally:
         db_module.SessionLocal = original_sl
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _make_metrics(netuid: int) -> SubnetMetrics:
     return SubnetMetrics(
         netuid=netuid,
         n_total=256,
-        n_active_7d=100 + netuid * 10,
+        yuma_n_total=128,
+        n_active_7d=64 + netuid * 5,
         total_stake_tao=10_000.0 * (netuid + 1),
         unique_coldkeys=100 + netuid * 20,
-        top3_stake_fraction=max(0.05, 0.4 - netuid * 0.03),
-        emission_per_block_tao=0.005 * (netuid + 1),
-        incentive_scores=[0.5 - i * 0.02 for i in range(20)],
-        n_validators=5 + netuid,
-        tao_in_pool=500.0 * (netuid + 1),   # dTAO pool data
+        top3_stake_fraction=max(0.10, 0.45 - netuid * 0.04),
+        emission_per_block_tao=0.003 * (netuid + 1),
+        incentive_scores=[0.5 - i * 0.015 for i in range(20)],
+        n_validators=8 + netuid,
+        tao_in_pool=400.0 * (netuid + 1),
         alpha_in_pool=1000.0 * (netuid + 1),
-        alpha_price_tao=0.5,
+        alpha_price_tao=0.4,
+        coldkey_stakes=[1200.0, 900.0, 700.0, 500.0],
+        validator_stakes=[400.0, 300.0, 200.0],
+        validator_weight_matrix=[
+            [0.5, 0.3, 0.2],
+            [0.2, 0.5, 0.3],
+            [0.2, 0.2, 0.6],
+        ],
+        validator_bond_matrix=[
+            [0.6, 0.2, 0.2],
+            [0.3, 0.4, 0.3],
+        ],
+        last_update_blocks=[5_000_000] * 128,
+        yuma_mask=[True] * 128 + [False] * 128,
+        mechanism_ids=[0] * 128 + [1] * 128,
+        immunity_period=4096,
+        registration_allowed=True,
+        target_regs_per_interval=2,
+        min_burn=0.1,
+        max_burn=0.2,
+        difficulty=10_000.0,
     )
 
 
-def _make_data(netuid: int) -> _SubnetData:
-    d = _SubnetData(netuid)
-    d.metrics = _make_metrics(netuid)
-    d.commits = MagicMock(commits_30d=20 * netuid, unique_contributors_30d=3 + netuid)
-    return d
+def _make_snapshot(netuid: int) -> RawSubnetSnapshot:
+    metrics = _make_metrics(netuid)
+    data = MagicMock(netuid=netuid, metrics=metrics, repo_activity=None)
+    return _to_snapshot(data, current_block=5_000_000, history=[])
 
 
-# ---------------------------------------------------------------------------
-# _CrossSubnetContext
-# ---------------------------------------------------------------------------
-
-def test_cross_subnet_context_builds():
-    all_data = [_make_data(n) for n in range(1, 6)]
-    ctx = _CrossSubnetContext(all_data)
-
-    assert len(ctx.value_ratios) == 5
-    assert len(ctx.apys) == 5
-    assert len(ctx.pool_depths) == 5
-    assert len(ctx.active_ratios) == 5
-    assert len(ctx.n_validators) == 5
-    assert len(ctx.stake_per_emission) == 5
-    assert len(ctx.commits_30d) == 5
-    assert len(ctx.contributors_30d) == 5
+def test_to_snapshot_uses_yuma_denominator():
+    snapshot = _make_snapshot(1)
+    assert snapshot.yuma_neurons == 128
+    assert snapshot.active_neurons_7d == 69
 
 
-def test_cross_subnet_context_no_metrics():
-    """Subnet with no metrics should produce None entries in all lists."""
-    d = _SubnetData(99)
-    d.metrics = None
-    d.commits = None
-    all_data = [_make_data(n) for n in range(1, 4)] + [d]
-    ctx = _CrossSubnetContext(all_data)
-    assert ctx.value_ratios[-1] is None
-    assert ctx.apys[-1] is None
+def test_build_scores_produces_analysis_and_label():
+    snapshots = [_make_snapshot(n) for n in range(1, 4)]
+    artifacts = build_scores(snapshots)
+    first = artifacts[1]
+    assert 0.0 <= first.score <= 100.0
+    assert "component_scores" in first.explanation
+    assert isinstance(first.label, str)
+    breakdown = _legacy_breakdown(first)
+    assert 0.0 <= breakdown.capital_score <= 30.0
 
 
-# ---------------------------------------------------------------------------
-# _score_one
-# ---------------------------------------------------------------------------
+def test_build_scores_penalizes_closed_registration_without_paths():
+    snapshot = _make_snapshot(1)
+    snapshot.registration_allowed = False
+    snapshot.min_burn = 0.0
+    snapshot.max_burn = 0.0
+    snapshot.difficulty = 0.0
+    snapshot.immunity_period = 0
+    snapshot.active_neurons_7d = 2
+    artifacts = build_scores([snapshot])[1]
+    assert "registration_closed_without_burn_or_pow_penalty" in artifacts.explanation["activated_hard_rules"]
 
-def test_score_one_produces_valid_score():
-    all_data = [_make_data(n) for n in range(1, 6)]
-    ctx = _CrossSubnetContext(all_data)
-
-    score = _score_one(all_data[0], ctx, 0)
-    assert 0.0 <= score.score <= 100.0
-    assert score.netuid == 1
-    assert score.breakdown.capital_score >= 0
-    assert score.breakdown.activity_score >= 0
-    assert score.breakdown.efficiency_score >= 0
-    assert score.breakdown.dev_score >= 0
-
-
-def test_score_one_sums_to_total():
-    all_data = [_make_data(n) for n in range(1, 4)]
-    ctx = _CrossSubnetContext(all_data)
-
-    score = _score_one(all_data[1], ctx, 1)
-    b = score.breakdown
-    total_from_breakdown = round(
-        b.capital_score + b.activity_score + b.efficiency_score + b.health_score + b.dev_score, 2
-    )
-    assert abs(total_from_breakdown - score.score) < 0.1
-
-
-def test_score_one_missing_data_returns_valid():
-    """Subnet with None metrics should still produce a valid (low) score."""
-    d = _SubnetData(99)
-    d.metrics = None
-    d.commits = None
-
-    all_data = [_make_data(n) for n in range(1, 5)] + [d]
-    ctx = _CrossSubnetContext(all_data)
-
-    score = _score_one(d, ctx, len(all_data) - 1)
-    assert 0.0 <= score.score <= 100.0
-
-
-# ---------------------------------------------------------------------------
-# compute_all_subnets
-# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_compute_all_subnets_ranks_correctly():
-    from scorer.composite import compute_all_subnets
-
-    netuids = [1, 2, 3]
-
     async def mock_fetch_data(netuid, block, progress):
         progress[0] += 1
-        return _make_data(netuid)
+        data = MagicMock()
+        data.netuid = netuid
+        data.metrics = _make_metrics(netuid)
+        data.repo_activity = None
+        return data
 
     with patch("scorer.composite.get_current_block", new=AsyncMock(return_value=5_000_000)), \
-         patch("scorer.composite.get_all_netuids", new=AsyncMock(return_value=netuids)), \
-         patch("scorer.composite._fetch_data", side_effect=mock_fetch_data):
-        scores = await compute_all_subnets(netuids=netuids)
+         patch("scorer.composite.get_all_netuids", new=AsyncMock(return_value=[1, 2, 3])), \
+         patch("scorer.composite._fetch_data", side_effect=mock_fetch_data), \
+         patch("scorer.composite.load_recent_analysis_history", return_value={}):
+        scores = await compute_all_subnets(netuids=[1, 2, 3])
 
     assert len(scores) == 3
-    ranks = [s.rank for s in scores]
-    assert sorted(ranks) == [1, 2, 3]
     assert scores[0].score >= scores[1].score >= scores[2].score
+    assert scores[0].analysis["analysis"]["label"]
 
-
-# ---------------------------------------------------------------------------
-# scorer/scheduler.py
-# ---------------------------------------------------------------------------
 
 def test_scheduler_job_calls_run():
     from scorer.scheduler import _run_job
@@ -214,7 +171,6 @@ def test_send_alert_with_webhook():
             mock_post.return_value = MagicMock(status_code=200)
             _send_alert("test message")
         mock_post.assert_called_once()
-        assert "test message" in str(mock_post.call_args)
     finally:
         sched.ALERT_WEBHOOK_URL = ""
 

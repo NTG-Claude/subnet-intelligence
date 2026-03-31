@@ -18,6 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.models import (
+    BacktestLabelSummary,
+    BacktestObservation,
+    BacktestResponse,
     DistributionBucket,
     DistributionResponse,
     ErrorResponse,
@@ -37,10 +40,12 @@ from scorer.database import (
     SubnetScoreRow,
     get_all_metadata,
     get_latest_scores,
+    get_scores_since,
     get_score_distribution,
     get_score_history,
     get_top_subnets,
 )
+from backtests.engine import build_backtest_summary
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +132,7 @@ def _compute_percentile(rank: Optional[int], total: int) -> Optional[float]:
 
 
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
+    raw_data = row.get("raw_data") or {}
     return SubnetSummaryResponse(
         netuid=row["netuid"],
         name=meta.name if meta else None,
@@ -139,6 +145,8 @@ def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse
         tao_in_pool=row.get("tao_in_pool"),
         market_cap_tao=row.get("market_cap_tao"),
         staking_apy=row.get("staking_apy"),
+        label=raw_data.get("label"),
+        thesis=raw_data.get("thesis"),
     )
 
 
@@ -160,6 +168,20 @@ def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+@app.get(
+    "/",
+    summary="Service root",
+    tags=["System"],
+)
+async def root() -> dict[str, Any]:
+    return {
+        "service": "subnet-intelligence-api",
+        "status": "ok",
+        "docs_url": "/docs",
+        "health_url": "/health",
+        "api_health_url": "/api/health",
+    }
 
 @app.get(
     "/api/v1/subnets",
@@ -260,6 +282,9 @@ async def get_subnet(
         market_cap_tao=row.get("market_cap_tao"),
         staking_apy=row.get("staking_apy"),
         score_delta_7d=score_delta_7d,
+        label=(row.get("raw_data") or {}).get("label"),
+        thesis=(row.get("raw_data") or {}).get("thesis"),
+        analysis=(row.get("raw_data") or {}).get("analysis"),
     )
     _cache_set(cache_key, result)
     return result
@@ -376,6 +401,33 @@ async def score_distribution(
 
 
 @app.get(
+    "/api/v1/backtests/labels",
+    response_model=BacktestResponse,
+    summary="Backtest summary by label and forward proxies",
+    tags=["Backtests"],
+)
+async def backtest_labels(
+    request: Request,
+    days: int = Query(90, ge=7, le=365),
+    _: None = Depends(_check_rate_limit),
+) -> BacktestResponse:
+    cache_key = f"backtests:{days}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    rows = get_scores_since(days=days)
+    summary = build_backtest_summary(rows)
+    result = BacktestResponse(
+        observations=summary["observations"],
+        labels=[BacktestLabelSummary(**row) for row in summary["labels"]],
+        examples=[BacktestObservation(**row) for row in summary["examples"]],
+    )
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.get(
     "/health",
     response_model=HealthResponse,
     summary="Health check",
@@ -389,3 +441,13 @@ async def health() -> HealthResponse:
     except Exception as exc:
         logger.warning("DB unavailable during health check: %s", exc)
         return HealthResponse(status="degraded", last_score_run=None, subnet_count=0)
+
+
+@app.get(
+    "/api/health",
+    response_model=HealthResponse,
+    summary="API health check",
+    tags=["System"],
+)
+async def api_health() -> HealthResponse:
+    return await health()

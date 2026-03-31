@@ -93,10 +93,11 @@ async def test_run_specific_netuids():
 
 @pytest.mark.asyncio
 async def test_run_force_refresh_is_accepted():
-    """force_refresh param is accepted (no-op now that bittensor is always fresh)."""
+    """force_refresh clears caches before computing fresh scores."""
     scores = [_make_score(1, 70.0)]
 
-    with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+    with patch("scorer.run.clear_caches") as mock_clear, \
+         patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity())), \
          patch("scorer.run._load_subnet_names", new=AsyncMock(return_value={})), \
@@ -106,4 +107,5 @@ async def test_run_force_refresh_is_accepted():
 
         result = await run(force_refresh=True)
 
+    mock_clear.assert_called_once()
     assert len(result) == 1

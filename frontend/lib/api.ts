@@ -12,6 +12,8 @@ export interface SubnetSummary {
   tao_in_pool: number | null
   market_cap_tao: number | null
   staking_apy: number | null
+  label: string | null
+  thesis: string | null
 }
 
 export interface ScoreBreakdown {
@@ -45,6 +47,20 @@ export interface SubnetDetail {
   market_cap_tao: number | null
   staking_apy: number | null
   score_delta_7d: number | null
+  label: string | null
+  thesis: string | null
+  analysis: {
+    label?: string
+    thesis?: string
+    component_scores?: Record<string, number>
+    top_positive_drivers?: { metric: string; effect: number; value: number | null; normalized: number; category: string }[]
+    top_negative_drivers?: { metric: string; effect: number; value: number | null; normalized: number; category: string }[]
+    activated_hard_rules?: string[]
+    stress_drawdown?: number
+    fragility_class?: string
+    earned_reflexive_fragile?: Record<string, number>
+    stress_scenarios?: { name: string; score_after: number; drawdown: number }[]
+  } | null
 }
 
 export interface DistributionBucket {
@@ -56,6 +72,33 @@ export interface DistributionBucket {
 export interface LeaderboardData {
   top: SubnetSummary[]
   bottom: SubnetSummary[]
+}
+
+export interface BacktestLabelSummary {
+  label: string
+  observations: number
+  avg_future_score_change: number | null
+  avg_future_return_proxy: number | null
+  avg_future_slippage_deterioration: number | null
+  avg_future_concentration_increase: number | null
+}
+
+export interface BacktestData {
+  observations: number
+  labels: BacktestLabelSummary[]
+  examples: {
+    netuid: number
+    start_at: string | null
+    end_at: string | null
+    label: string
+    score: number | null
+    future_score_change: number | null
+    future_return_proxy: number | null
+    future_slippage_deterioration: number | null
+    future_concentration_increase: number | null
+    opportunity_gap: number | null
+    stress_robustness: number | null
+  }[]
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -78,3 +121,6 @@ export const fetchDistribution = () =>
 
 export const fetchLatestRun = () =>
   get<{ last_score_run: string | null; subnet_count: number }>('/api/v1/scores/latest')
+
+export const fetchLabelBacktests = (days = 90) =>
+  get<BacktestData>(`/api/v1/backtests/labels?days=${days}`)

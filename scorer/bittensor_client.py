@@ -11,10 +11,16 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Optional
 
-# Import bittensor FIRST so its logging setup runs before ours.
-# bittensor may reconfigure root handlers or set propagate=False on various loggers;
-# we re-assert our logger below so it always inherits from the root handler.
-import bittensor as bt  # noqa: E402
+try:
+    # Import bittensor FIRST so its logging setup runs before ours.
+    # bittensor may reconfigure root handlers or set propagate=False on various loggers;
+    # we re-assert our logger below so it always inherits from the root handler.
+    import bittensor as bt  # noqa: E402
+except Exception as exc:  # noqa: BLE001
+    bt = None
+    _IMPORT_ERROR = exc
+else:
+    _IMPORT_ERROR = None
 
 logger = logging.getLogger(__name__)
 logger.propagate = True  # bittensor import may set propagate=False; undo that
@@ -54,9 +60,18 @@ _all_identities_fetched = False
 
 
 def _subtensor():
+    if bt is None:
+        raise RuntimeError(f"bittensor unavailable: {_IMPORT_ERROR}")
     if not hasattr(_local, "st"):
         _local.st = bt.Subtensor(network=NETWORK)
     return _local.st
+
+
+def clear_caches() -> None:
+    global _all_identities_fetched
+    with _identity_cache_lock:
+        _identity_cache.clear()
+        _all_identities_fetched = False
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +90,7 @@ class SubnetIdentity:
 class SubnetMetrics:
     netuid: int
     n_total: int = 0
+    yuma_n_total: int = 0
     n_active_7d: int = 0
     total_stake_tao: float = 0.0
     unique_coldkeys: int = 0
@@ -86,6 +102,19 @@ class SubnetMetrics:
     tao_in_pool: float = 0.0       # SubnetTAO / 1e9
     alpha_in_pool: float = 0.0     # SubnetAlphaIn / 1e9
     alpha_price_tao: float = 0.0   # tao_in_pool / alpha_in_pool
+    coldkey_stakes: list[float] = field(default_factory=list)
+    validator_stakes: list[float] = field(default_factory=list)
+    validator_weight_matrix: list[list[float]] = field(default_factory=list)
+    validator_bond_matrix: list[list[float]] = field(default_factory=list)
+    last_update_blocks: list[int] = field(default_factory=list)
+    yuma_mask: list[bool] = field(default_factory=list)
+    mechanism_ids: list[int] = field(default_factory=list)
+    immunity_period: int = 0
+    registration_allowed: bool = False
+    target_regs_per_interval: int = 0
+    min_burn: float = 0.0
+    max_burn: float = 0.0
+    difficulty: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +124,8 @@ class SubnetMetrics:
 def _fetch_netuids() -> list[int]:
     try:
         st = _subtensor()
-        logger.info("Subtensor connected — bt v%s", bt.__version__)
+        version = getattr(bt, "__version__", "unknown")
+        logger.info("Subtensor connected — bt v%s", version)
         result = st.get_all_subnets_netuid()  # bittensor 10.x API (was get_subnets() in 8.x)
         if not result:
             logger.error("get_all_subnets_netuid() returned empty list")
@@ -144,6 +174,7 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
         total_stake = sum(coldkey_stakes.values())
         m.total_stake_tao = total_stake
         m.unique_coldkeys = len(coldkey_stakes)
+        m.coldkey_stakes = list(coldkey_stakes.values())
 
         # Top-3 coldkey stake fraction
         if total_stake > 0 and coldkey_stakes:
@@ -162,12 +193,17 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
                            getattr(meta, "mechids", None) or [])
         if raw_mechids and len(raw_mechids) == n:
             yuma_mask = [int(mid) == 0 for mid in raw_mechids]
+            m.mechanism_ids = [int(mid) for mid in raw_mechids]
         else:
             yuma_mask = [True] * n  # single-mechanism: treat all as yuma
+            m.mechanism_ids = [0] * n
+        m.yuma_mask = yuma_mask
+        m.yuma_n_total = int(sum(1 for flag in yuma_mask if flag))
 
         # Active neurons (weights set within last 7 days, yuma only)
         cutoff = current_block - 7 * BLOCKS_PER_DAY
         last_update = list(getattr(meta, "last_update", []))
+        m.last_update_blocks = [int(v) for v in last_update[:n]]
         m.n_active_7d = int(sum(
             1 for i, lu in enumerate(last_update)
             if i < n and yuma_mask[i] and int(lu) >= cutoff
@@ -181,6 +217,45 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
             1 for i, vp in enumerate(getattr(meta, "validator_permit", []))
             if i < n and yuma_mask[i] and vp
         ))
+        validator_stakes: list[float] = []
+        for idx, vp in enumerate(getattr(meta, "validator_permit", [])):
+            if idx < n and yuma_mask[idx] and vp:
+                validator_stakes.append(float(stake_arr[idx]) if idx < len(stake_arr) else 0.0)
+        m.validator_stakes = validator_stakes
+
+        weight_rows = getattr(meta, "W", None) or getattr(meta, "weights", None) or []
+        for idx, row in enumerate(weight_rows):
+            if idx >= n or not yuma_mask[idx]:
+                continue
+            try:
+                values = [float(v) for v in row]
+            except TypeError:
+                values = []
+            if any(values):
+                m.validator_weight_matrix.append(values)
+
+        bond_rows = getattr(meta, "B", None) or getattr(meta, "bonds", None) or []
+        for idx, row in enumerate(bond_rows):
+            if idx >= n or not yuma_mask[idx]:
+                continue
+            try:
+                values = [float(v) for v in row]
+            except TypeError:
+                values = []
+            if any(values):
+                m.validator_bond_matrix.append(values)
+
+        try:
+            hyper = st.get_subnet_hyperparameters(netuid)
+            if hyper is not None:
+                m.immunity_period = int(getattr(hyper, "immunity_period", 0) or 0)
+                m.registration_allowed = bool(getattr(hyper, "registration_allowed", False))
+                m.target_regs_per_interval = int(getattr(hyper, "target_regs_per_interval", 0) or 0)
+                m.min_burn = float(getattr(hyper, "min_burn", 0) or 0) / 1e9
+                m.max_burn = float(getattr(hyper, "max_burn", 0) or 0) / 1e9
+                m.difficulty = float(getattr(hyper, "difficulty", 0) or 0)
+        except Exception as exc:
+            logger.warning("hyperparameter fetch failed for SN%d: %s", netuid, exc)
 
         # dTAO AMM pool — fetch FIRST so alpha_price_tao is available for emission conversion.
         # SubnetTAO and SubnetAlphaIn are both stored in rao; /1e9 → TAO / Alpha units.

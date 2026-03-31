@@ -15,6 +15,7 @@ from scorer.database import (
     SubnetMetadataRow,
     _row_to_dict,
     get_latest_scores,
+    get_scores_since,
     get_score_at,
     get_score_distribution,
     get_score_history,
@@ -172,6 +173,32 @@ def test_get_score_history_filters_by_days():
     history = get_score_history(8, days=30)
     assert len(history) == 1
     assert history[0]["score"] == 65.0
+
+
+def test_get_scores_since_across_subnets():
+    import scorer.database as db_module
+
+    now = datetime.now(timezone.utc)
+    with db_module.SessionLocal() as session:
+        session.add(SubnetScoreRow(
+            netuid=8, score=65.0,
+            capital_score=0, activity_score=0,
+            efficiency_score=0, health_score=0, dev_score=0,
+            computed_at=now - timedelta(days=5),
+            score_version="v1",
+        ))
+        session.add(SubnetScoreRow(
+            netuid=9, score=35.0,
+            capital_score=0, activity_score=0,
+            efficiency_score=0, health_score=0, dev_score=0,
+            computed_at=now - timedelta(days=3),
+            score_version="v1",
+        ))
+        session.commit()
+
+    rows = get_scores_since(days=30)
+    assert len(rows) == 2
+    assert {row["netuid"] for row in rows} == {8, 9}
 
 
 # ---------------------------------------------------------------------------
