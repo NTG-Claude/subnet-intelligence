@@ -41,6 +41,28 @@ SCORES = [
     for i in range(1, 6)
 ]  # scores: 75, 60, 45, 30, 15
 
+ROOT_ROW = {
+    "id": 999,
+    "netuid": 0,
+    "score": 99.0,
+    "capital_score": 25.0,
+    "activity_score": 25.0,
+    "efficiency_score": 20.0,
+    "health_score": 15.0,
+    "dev_score": 10.0,
+    "rank": None,
+    "computed_at": NOW,
+    "score_version": "v4_signal_separation",
+    "alpha_price_tao": 1.0,
+    "raw_data": {
+        "label": "Root Infrastructure",
+        "thesis": "context only",
+        "investable": False,
+        "special_case": "root_subnet",
+        "analysis": {},
+    },
+}
+
 
 def _make_meta(netuid: int):
     from api.models import SubnetMetadataResponse
@@ -148,6 +170,22 @@ def test_list_subnets():
     assert scores == sorted(scores, reverse=True)
 
 
+def test_list_subnets_excludes_root_subnet():
+    rows = [ROOT_ROW, *SCORES]
+    with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=rows), \
+         patch("api.main._get_metadata", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets")
+    assert resp.status_code == 200
+    netuids = [row["netuid"] for row in resp.json()["subnets"]]
+    assert 0 not in netuids
+
+
 def test_list_subnets_limit():
     with _with_db_mocks():
         from api.main import app
@@ -203,6 +241,24 @@ def test_get_subnet_detail():
     assert "breakdown" in data
     assert "history" in data
     assert data["metadata"]["name"] == "subnet-1"
+
+
+def test_get_root_subnet_detail_still_available():
+    rows = [ROOT_ROW, *SCORES]
+    with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=rows), \
+         patch("api.main._get_metadata", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets/0")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["netuid"] == 0
+    assert data["rank"] is None
+    assert data["label"] == "Root Infrastructure"
 
 
 def test_get_subnet_includes_percentile():
@@ -281,6 +337,22 @@ def test_leaderboard():
     top_scores = [s["score"] for s in data["top"]]
     assert top_scores == sorted(top_scores, reverse=True)
     assert data["bottom"][-1]["score"] == 15.0
+
+
+def test_leaderboard_excludes_root_subnet():
+    rows = [ROOT_ROW, *SCORES]
+    with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=rows), \
+         patch("api.main._get_metadata", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/leaderboard")
+    assert resp.status_code == 200
+    top_netuids = [row["netuid"] for row in resp.json()["top"]]
+    assert 0 not in top_netuids
 
 
 # ---------------------------------------------------------------------------

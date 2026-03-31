@@ -126,8 +126,31 @@ async def test_compute_all_subnets_ranks_correctly():
         scores = await compute_all_subnets(netuids=[1, 2, 3])
 
     assert len(scores) == 3
-    assert scores[0].score >= scores[1].score >= scores[2].score
-    assert scores[0].analysis["analysis"]["label"]
+    ranked = sorted(scores, key=lambda score: score.rank or 9999)
+    assert ranked[0].score >= ranked[1].score >= ranked[2].score
+    assert ranked[0].analysis["analysis"]["label"]
+
+
+@pytest.mark.asyncio
+async def test_compute_all_subnets_marks_root_as_non_investable():
+    async def mock_fetch_data(netuid, block, progress):
+        progress[0] += 1
+        data = MagicMock()
+        data.netuid = netuid
+        data.metrics = _make_metrics(netuid)
+        data.repo_activity = None
+        return data
+
+    with patch("scorer.composite.get_current_block", new=AsyncMock(return_value=5_000_000)), \
+         patch("scorer.composite._fetch_data", side_effect=mock_fetch_data), \
+         patch("scorer.composite.load_recent_analysis_history", return_value={}):
+        scores = await compute_all_subnets(netuids=[0, 1, 2])
+
+    by_netuid = {score.netuid: score for score in scores}
+    assert by_netuid[0].rank is None
+    assert by_netuid[0].analysis["investable"] is False
+    assert by_netuid[0].analysis["label"] == "Root Infrastructure"
+    assert by_netuid[1].rank is not None
 
 
 def test_scheduler_job_calls_run():
