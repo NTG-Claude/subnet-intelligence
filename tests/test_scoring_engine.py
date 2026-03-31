@@ -4,7 +4,13 @@ from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from features.types import AxisScores
 from features.types import FeatureBundle, PrimarySignals
 from regimes.hard_rules import HardRuleResult
-from scoring.engine import _apply_total_cap, _ranking_priority_score, _stabilize_primary_with_history, build_scores
+from scoring.engine import (
+    _apply_total_cap,
+    _ranking_priority_score,
+    _stabilize_primary_with_history,
+    _stabilize_priority_with_history,
+    build_scores,
+)
 
 
 def test_apply_total_cap_keeps_plain_caps_for_non_negative_rules():
@@ -135,3 +141,46 @@ def test_stabilize_primary_with_history_limits_run_to_run_jumps():
     assert stabilized.mispricing_signal == pytest.approx(0.62)
     assert stabilized.fragility_risk == pytest.approx(0.56)
     assert stabilized.signal_confidence == pytest.approx(0.62)
+
+
+def test_stabilize_priority_with_history_limits_leaderboard_pressure():
+    snapshot = RawSubnetSnapshot(
+        netuid=9,
+        current_block=1000,
+        history=[
+            HistoricalFeaturePoint(
+                timestamp="2026-03-31T11:46:31+00:00",
+                fundamental_quality=0.52,
+                mispricing_signal=0.50,
+                fragility_risk=0.42,
+                signal_confidence=0.57,
+            )
+        ],
+    )
+    bundle = FeatureBundle(raw={"market_relevance_proxy": 0.42})
+    history_priority = _ranking_priority_score(
+        PrimarySignals(
+            fundamental_quality=0.52,
+            mispricing_signal=0.50,
+            fragility_risk=0.42,
+            signal_confidence=0.57,
+        ),
+        bundle,
+    )
+    current_priority = _ranking_priority_score(
+        PrimarySignals(
+            fundamental_quality=0.60,
+            mispricing_signal=0.58,
+            fragility_risk=0.36,
+            signal_confidence=0.64,
+        ),
+        bundle,
+    )
+
+    stabilized = _stabilize_priority_with_history(snapshot, bundle, current_priority)
+    expected_blend = 0.7 * history_priority + 0.3 * current_priority
+
+    assert current_priority > history_priority
+    assert stabilized > history_priority
+    assert stabilized == pytest.approx(expected_blend)
+    assert stabilized < current_priority

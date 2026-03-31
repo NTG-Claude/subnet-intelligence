@@ -230,6 +230,43 @@ def _ranking_priority_score(signals: PrimarySignals, bundle: FeatureBundle) -> f
     )
 
 
+def _history_priority_score(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> float | None:
+    history_point = _latest_valid_history_point(snapshot)
+    if history_point is None:
+        return None
+
+    history_primary = (
+        PrimarySignals(
+            fundamental_quality=history_point.fundamental_quality,
+            mispricing_signal=history_point.mispricing_signal,
+            fragility_risk=history_point.fragility_risk,
+            signal_confidence=history_point.signal_confidence,
+        )
+        if all(
+            value is not None
+            for value in (
+                history_point.fundamental_quality,
+                history_point.mispricing_signal,
+                history_point.fragility_risk,
+                history_point.signal_confidence,
+            )
+        )
+        else _signals_from_legacy_history(history_point)
+    )
+    return _ranking_priority_score(history_primary, bundle)
+
+
+def _stabilize_priority_with_history(snapshot: RawSubnetSnapshot, bundle: FeatureBundle, current_score: float) -> float:
+    history_score = _history_priority_score(snapshot, bundle)
+    if history_score is None:
+        return current_score
+
+    # Damp tiny run-to-run movements at the actual ranking layer so adjacent
+    # names with near-identical scores do not keep leapfrogging every few minutes.
+    blended_score = 0.7 * history_score + 0.3 * current_score
+    return _limit_signal_drift(blended_score, history_score, 0.035)
+
+
 def _apply_total_cap(score: float, signals: PrimarySignals | AxisScores, rules: HardRuleResult) -> float:
     if isinstance(signals, AxisScores):
         signals = _signals_from_legacy_history(
@@ -277,7 +314,7 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
                 signal_confidence=max(0.35, fallback_primary.signal_confidence),
             )
             axes = _legacy_axes_from_primary(fallback_primary, bundle, stress.robustness)
-            score = _ranking_priority_score(fallback_primary, bundle)
+            score = _stabilize_priority_with_history(snapshot, bundle, _ranking_priority_score(fallback_primary, bundle))
             label = "Under Review"
             thesis = (
                 "Latest telemetry is incomplete, so the framework falls back to the subnet's recently validated "
@@ -308,7 +345,8 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
         )
         primary = _stabilize_primary_with_history(snapshot, primary)
         axes = _legacy_axes_from_primary(primary, bundle, stress.robustness)
-        score = _apply_total_cap(_ranking_priority_score(primary, bundle), primary, rules)
+        score = _stabilize_priority_with_history(snapshot, bundle, _ranking_priority_score(primary, bundle))
+        score = _apply_total_cap(score, primary, rules)
         label, thesis = assign_label(primary, bundle, stress, rules)
         explanation = build_explanation(bundle, primary, axes, stress, rules, label, thesis)
         results[snapshot.netuid] = ScoreArtifacts(
