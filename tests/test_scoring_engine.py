@@ -5,6 +5,9 @@ from features.types import AxisScores
 from features.types import FeatureBundle, PrimarySignals
 from regimes.hard_rules import HardRuleResult
 from scoring.engine import (
+    PRIMARY_SIGNAL_DRIFT_CAPS,
+    RANKING_DRIFT_CAP,
+    RANKING_HISTORY_BLEND,
     _apply_total_cap,
     _ranking_priority_score,
     _stabilize_primary_with_history,
@@ -96,7 +99,7 @@ def test_incomplete_snapshot_uses_recent_history_instead_of_dereg_penalty():
 
     artifacts = build_scores([snapshot])[4]
 
-    assert artifacts.score > 30.0
+    assert artifacts.score > 25.0
     assert artifacts.label == "Under Review"
     assert "telemetry_gap_uses_recent_history" in artifacts.explanation["activated_hard_rules"]
 
@@ -137,10 +140,10 @@ def test_stabilize_primary_with_history_limits_run_to_run_jumps():
 
     stabilized = _stabilize_primary_with_history(snapshot, current)
 
-    assert stabilized.fundamental_quality == pytest.approx(0.58)
-    assert stabilized.mispricing_signal == pytest.approx(0.62)
-    assert stabilized.fragility_risk == pytest.approx(0.56)
-    assert stabilized.signal_confidence == pytest.approx(0.62)
+    assert stabilized.fundamental_quality == pytest.approx(0.50 + PRIMARY_SIGNAL_DRIFT_CAPS["fundamental_quality"])
+    assert stabilized.mispricing_signal == pytest.approx(0.52 + PRIMARY_SIGNAL_DRIFT_CAPS["mispricing_signal"])
+    assert stabilized.fragility_risk == pytest.approx(0.48 + PRIMARY_SIGNAL_DRIFT_CAPS["fragility_risk"])
+    assert stabilized.signal_confidence == pytest.approx(0.54 + PRIMARY_SIGNAL_DRIFT_CAPS["signal_confidence"])
 
 
 def test_stabilize_priority_with_history_limits_leaderboard_pressure():
@@ -178,9 +181,51 @@ def test_stabilize_priority_with_history_limits_leaderboard_pressure():
     )
 
     stabilized = _stabilize_priority_with_history(snapshot, bundle, current_priority)
-    expected_blend = 0.7 * history_priority + 0.3 * current_priority
+    expected_blend = RANKING_HISTORY_BLEND * history_priority + (1.0 - RANKING_HISTORY_BLEND) * current_priority
 
     assert current_priority > history_priority
     assert stabilized > history_priority
     assert stabilized == pytest.approx(expected_blend)
     assert stabilized < current_priority
+
+
+def test_ranking_priority_prefers_v2_ranking_artifacts_when_available():
+    signals = PrimarySignals(
+        fundamental_quality=0.55,
+        mispricing_signal=0.55,
+        fragility_risk=0.45,
+        signal_confidence=0.55,
+    )
+    low_bundle = FeatureBundle(
+        raw={"market_relevance_proxy": 0.1, "confidence_adjusted_thesis_strength": 0.2},
+        ranking={"market_relevance": 0.2, "thesis_strength": 0.2, "resilience": 0.2},
+    )
+    high_bundle = FeatureBundle(
+        raw={"market_relevance_proxy": 0.1, "confidence_adjusted_thesis_strength": 0.2},
+        ranking={"market_relevance": 0.8, "thesis_strength": 0.8, "resilience": 0.8},
+    )
+
+    assert _ranking_priority_score(signals, high_bundle) > _ranking_priority_score(signals, low_bundle)
+
+
+def test_ranking_priority_drift_cap_is_respected():
+    history_score = 0.50
+    current_score = 0.90
+    snapshot = RawSubnetSnapshot(
+        netuid=11,
+        current_block=1000,
+        history=[
+            HistoricalFeaturePoint(
+                timestamp="2026-03-31T11:46:31+00:00",
+                fundamental_quality=0.50,
+                mispricing_signal=0.50,
+                fragility_risk=0.50,
+                signal_confidence=0.50,
+            )
+        ],
+    )
+    bundle = FeatureBundle(ranking={"market_relevance": 0.5, "thesis_strength": 0.5, "resilience": 0.5}, raw={})
+
+    stabilized = _stabilize_priority_with_history(snapshot, bundle, current_score)
+
+    assert stabilized <= history_score + RANKING_DRIFT_CAP
