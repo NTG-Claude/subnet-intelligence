@@ -311,6 +311,158 @@ def test_post_incentive_retention_rewards_broader_improving_structure():
     assert retained.raw["post_incentive_retention"] > subsidized.raw["post_incentive_retention"]
 
 
+def test_zero_positive_only_mispricing_features_do_not_score_as_positive():
+    inert_bundle, active_bundle, strong_bundle = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=5,
+                    unique_coldkeys=3,
+                    n_validators=3,
+                    tao_in_pool=20_000.0,
+                    alpha_in_pool=5_000.0,
+                    alpha_price_tao=10.0,
+                    emission_per_block_tao=0.04,
+                    history=[
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-29T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=20_000.0,
+                            emission_per_block_tao=0.04,
+                            active_ratio=0.50,
+                            participation_breadth=0.30,
+                            validator_participation=0.30,
+                            incentive_distribution_quality=0.45,
+                            market_structure_floor=0.50,
+                        ),
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-30T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=20_000.0,
+                            emission_per_block_tao=0.04,
+                            active_ratio=0.50,
+                            participation_breadth=0.30,
+                            validator_participation=0.30,
+                            incentive_distribution_quality=0.45,
+                            market_structure_floor=0.50,
+                        ),
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-31T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=20_000.0,
+                            emission_per_block_tao=0.04,
+                            active_ratio=0.50,
+                            participation_breadth=0.30,
+                            validator_participation=0.30,
+                            incentive_distribution_quality=0.45,
+                            market_structure_floor=0.50,
+                        ),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=7,
+                    unique_coldkeys=8,
+                    n_validators=7,
+                    tao_in_pool=32_000.0,
+                    alpha_in_pool=8_000.0,
+                    alpha_price_tao=10.1,
+                    emission_per_block_tao=0.04,
+                    history=[
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-29T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=26_000.0,
+                            emission_per_block_tao=0.046,
+                            active_ratio=0.42,
+                            participation_breadth=0.22,
+                            validator_participation=0.24,
+                            incentive_distribution_quality=0.41,
+                            market_structure_floor=0.36,
+                        ),
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-30T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=28_000.0,
+                            emission_per_block_tao=0.043,
+                            active_ratio=0.48,
+                            participation_breadth=0.28,
+                            validator_participation=0.32,
+                            incentive_distribution_quality=0.45,
+                            market_structure_floor=0.44,
+                        ),
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-31T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=30_000.0,
+                            emission_per_block_tao=0.041,
+                            active_ratio=0.54,
+                            participation_breadth=0.35,
+                            validator_participation=0.40,
+                            incentive_distribution_quality=0.50,
+                            market_structure_floor=0.53,
+                        ),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=8,
+                    unique_coldkeys=9,
+                    n_validators=8,
+                    tao_in_pool=42_000.0,
+                    alpha_in_pool=10_500.0,
+                    alpha_price_tao=10.05,
+                    emission_per_block_tao=0.038,
+                    history=[
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-29T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=28_000.0,
+                            emission_per_block_tao=0.047,
+                            active_ratio=0.38,
+                            participation_breadth=0.18,
+                            validator_participation=0.22,
+                            incentive_distribution_quality=0.39,
+                            market_structure_floor=0.31,
+                        ),
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-30T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=32_000.0,
+                            emission_per_block_tao=0.043,
+                            active_ratio=0.46,
+                            participation_breadth=0.25,
+                            validator_participation=0.30,
+                            incentive_distribution_quality=0.44,
+                            market_structure_floor=0.40,
+                        ),
+                        HistoricalFeaturePoint(
+                            timestamp="2026-03-31T00:00:00+00:00",
+                            alpha_price_tao=10.0,
+                            tao_in_pool=36_000.0,
+                            emission_per_block_tao=0.040,
+                            active_ratio=0.54,
+                            participation_breadth=0.34,
+                            validator_participation=0.40,
+                            incentive_distribution_quality=0.50,
+                            market_structure_floor=0.50,
+                        ),
+                    ],
+                )
+            ),
+        ]
+    )
+
+    assert inert_bundle.raw["reserve_growth_without_price"] == 0.0
+    assert inert_bundle.metrics["reserve_growth_without_price"].normalized == 0.0
+    assert active_bundle.raw["reserve_growth_without_price"] > 0.0
+    assert strong_bundle.raw["reserve_growth_without_price"] > active_bundle.raw["reserve_growth_without_price"]
+    assert active_bundle.metrics["reserve_growth_without_price"].normalized >= inert_bundle.metrics["reserve_growth_without_price"].normalized
+    assert strong_bundle.metrics["reserve_growth_without_price"].normalized > inert_bundle.metrics["reserve_growth_without_price"].normalized
+
+
 def test_market_relevance_proxy_rewards_scaled_participating_subnets():
     flagship = compute_raw_features(
         _snapshot(
@@ -745,6 +897,61 @@ def test_missing_consensus_signals_reduce_evidence_confidence():
     assert with_consensus.raw["evidence_confidence"] > without_consensus.raw["evidence_confidence"]
 
 
+def test_missing_consensus_and_external_evidence_cap_confidence_even_for_large_onchain_names():
+    supported_bundle, unsupported_bundle = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=8,
+                    unique_coldkeys=9,
+                    n_validators=7,
+                    tao_in_pool=180_000.0,
+                    alpha_in_pool=20_000.0,
+                    alpha_price_tao=12.4,
+                    validator_weight_matrix=[
+                        [0.4, 0.3, 0.2, 0.1],
+                        [0.3, 0.3, 0.2, 0.2],
+                        [0.35, 0.25, 0.2, 0.2],
+                    ],
+                    validator_bond_matrix=[
+                        [0.5, 0.3, 0.2],
+                        [0.45, 0.35, 0.2],
+                        [0.4, 0.4, 0.2],
+                    ],
+                    github=None,
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=12.0, tao_in_pool=168_000.0, active_ratio=0.56, fundamental_quality=0.57),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=12.1, tao_in_pool=172_000.0, active_ratio=0.59, fundamental_quality=0.60),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=12.2, tao_in_pool=176_000.0, active_ratio=0.62, fundamental_quality=0.63),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=8,
+                    unique_coldkeys=9,
+                    n_validators=7,
+                    tao_in_pool=180_000.0,
+                    alpha_in_pool=20_000.0,
+                    alpha_price_tao=12.4,
+                    validator_weight_matrix=[],
+                    validator_bond_matrix=[],
+                    github=None,
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=12.0, tao_in_pool=168_000.0, active_ratio=0.56, fundamental_quality=0.57),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=12.1, tao_in_pool=172_000.0, active_ratio=0.59, fundamental_quality=0.60),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=12.2, tao_in_pool=176_000.0, active_ratio=0.62, fundamental_quality=0.63),
+                    ],
+                )
+            ),
+        ]
+    )
+
+    assert unsupported_bundle.raw["evidence_confidence"] <= unsupported_bundle.raw["evidence_confidence_ceiling"]
+    assert supported_bundle.raw["evidence_confidence_ceiling"] > unsupported_bundle.raw["evidence_confidence_ceiling"]
+    assert supported_bundle.primary_signals.signal_confidence > unsupported_bundle.primary_signals.signal_confidence
+
+
 def test_crowded_structure_penalty_raises_fragility_and_dampens_confidence():
     balanced_bundle, crowded_bundle = normalize_features(
         [
@@ -758,6 +965,16 @@ def test_crowded_structure_penalty_raises_fragility_and_dampens_confidence():
                     alpha_price_tao=10.3,
                     top3_stake_fraction=0.44,
                     emission_per_block_tao=0.026,
+                    validator_weight_matrix=[
+                        [0.4, 0.3, 0.2, 0.1],
+                        [0.3, 0.3, 0.2, 0.2],
+                        [0.35, 0.25, 0.2, 0.2],
+                    ],
+                    validator_bond_matrix=[
+                        [0.5, 0.3, 0.2],
+                        [0.45, 0.35, 0.2],
+                        [0.4, 0.4, 0.2],
+                    ],
                     history=[
                         HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=78_000.0, active_ratio=0.54, fundamental_quality=0.53),
                         HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=81_000.0, active_ratio=0.57, fundamental_quality=0.57),
@@ -776,6 +993,16 @@ def test_crowded_structure_penalty_raises_fragility_and_dampens_confidence():
                     top3_stake_fraction=0.78,
                     incentive_scores=[0.92, 0.08],
                     emission_per_block_tao=0.06,
+                    validator_weight_matrix=[
+                        [0.65, 0.2, 0.1, 0.05],
+                        [0.62, 0.2, 0.1, 0.08],
+                        [0.7, 0.15, 0.1, 0.05],
+                    ],
+                    validator_bond_matrix=[
+                        [0.72, 0.18, 0.1],
+                        [0.7, 0.2, 0.1],
+                        [0.74, 0.16, 0.1],
+                    ],
                     history=[
                         HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=12.0, tao_in_pool=195_000.0, active_ratio=0.50, fundamental_quality=0.50),
                         HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=13.8, tao_in_pool=202_000.0, active_ratio=0.51, fundamental_quality=0.51),

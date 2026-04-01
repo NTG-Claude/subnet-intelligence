@@ -926,6 +926,27 @@ def _normalize_metric_value(key: str, value: float | None, population: list[floa
             "meaningful_discrimination",
             "bond_responsiveness",
         } else clamp01(value or 0.0)
+    positive_only = {
+        "quality_acceleration",
+        "liquidity_improvement_rate",
+        "validator_diversity_trend",
+        "expected_price_response_gap",
+        "expected_reserve_response_gap",
+        "cohort_implied_fair_value_gap",
+        "underreaction_score",
+        "price_response_lag_to_quality_shift",
+        "emission_to_sticky_usage_conversion",
+        "post_incentive_retention",
+        "reserve_growth_without_price",
+        "participation_without_crowding",
+    }
+    if key in positive_only:
+        if value is None or value <= 0:
+            return 0.0
+        positive_population = [candidate for candidate in population if candidate is not None and candidate > 0]
+        if not positive_population:
+            return 0.0
+        return percentile_rank(value, positive_population)
     return percentile_rank(value, population)
 
 
@@ -1082,6 +1103,18 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             + 0.06 * (1.0 - consensus_signal_gap)
             - 0.08 * clamp01(bundle.raw.get("low_evidence_high_conviction") or 0.0)
         )
+        validator_signal_coverage = clamp01(bundle.raw.get("validator_signal_coverage") or 0.0)
+        external_evidence_coverage = clamp01(bundle.raw.get("external_evidence_coverage") or 0.0)
+        evidence_confidence_ceiling = clamp01(
+            0.72
+            - 0.26 * consensus_signal_gap
+            - 0.18 * (1.0 - external_evidence_coverage)
+            - 0.08 * (1.0 - validator_signal_coverage)
+            + 0.08 * market_structure_floor
+            + 0.06 * market_relevance_proxy
+            + 0.05 * clamp01(bundle.raw.get("history_depth_score") or 0.0)
+        )
+        evidence_confidence = min(evidence_confidence, evidence_confidence_ceiling)
         reflexive_confidence_drag = clamp01(
             0.38 * crowding_proxy
             + 0.22 * overreaction_score
@@ -1160,6 +1193,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         bundle.raw["quality_resolution_bonus"] = quality_resolution_bonus
         bundle.raw["quality_resolution_drag"] = quality_resolution_drag
         bundle.raw["evidence_confidence"] = evidence_confidence
+        bundle.raw["evidence_confidence_ceiling"] = evidence_confidence_ceiling
         bundle.raw["thesis_confidence"] = thesis_confidence
         bundle.raw["reflexive_confidence_drag"] = reflexive_confidence_drag
         bundle.raw["structural_confidence_drag"] = structural_confidence_drag
