@@ -163,7 +163,7 @@ History stabilization, bounded drift, telemetry-gap fallback, and stress integra
 | `market_confidence` | core component | `bundle.base_components["market_confidence"]` |
 | `thesis_confidence` | core component | `bundle.base_components["thesis_confidence"]` |
 | `confidence_adjusted_thesis_strength` | ranking helper | `bundle.ranking["thesis_strength"]` |
-| `confidence_adjusted_mispricing` | compatibility helper | `bundle.primary_signals.mispricing_signal` |
+| `confidence_adjusted_mispricing` | internal debug | `bundle.primary_signals.mispricing_signal` |
 | `signal_fabrication_risk` | confidence hygiene helper | keep as derived raw/debug field |
 | `mispricing_structural_drag` | compat/debug | `structural_validity_factor` inside primary-signal logic |
 | `crowded_repricing_discount` | compat/debug | small-penalty path inside `mispricing_signal` |
@@ -184,7 +184,7 @@ History stabilization, bounded drift, telemetry-gap fallback, and stress integra
 1. Continue moving remaining tests from `fragility_block` aliases to `bundle.core_blocks["fragility"]`.
    The first `base_mispricing_signal` cleanup has already been migrated to `opportunity_underreaction`.
 2. Finish removing remaining incidental consumers of internal debug fields such as `base_signal_confidence`, `quality_resolution_bonus`, and `quality_resolution_drag`.
-3. Remove direct consumers of `confidence_adjusted_mispricing` once ranking exclusively reads V2 ranking artifacts.
+3. `confidence_adjusted_mispricing` no longer drives ranking and remains only as an internal debug breadcrumb.
 
 ## Explainability Migration
 

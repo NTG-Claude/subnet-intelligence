@@ -209,7 +209,7 @@ def test_ranking_priority_prefers_v2_ranking_artifacts_when_available():
     assert _ranking_priority_score(signals, high_bundle) > _ranking_priority_score(signals, low_bundle)
 
 
-def test_ranking_priority_uses_v2_opportunity_block_instead_of_raw_adjusted_mispricing():
+def test_ranking_priority_uses_v2_opportunity_block_even_if_legacy_raw_differs():
     signals = PrimarySignals(
         fundamental_quality=0.58,
         mispricing_signal=0.40,
@@ -217,11 +217,11 @@ def test_ranking_priority_uses_v2_opportunity_block_instead_of_raw_adjusted_misp
         signal_confidence=0.57,
     )
     stronger_bundle = FeatureBundle(
-        raw={"confidence_adjusted_mispricing": 0.10, "market_relevance_proxy": 0.35},
+        raw={"market_relevance_proxy": 0.35},
         core_blocks={"opportunity_underreaction": 0.72},
     )
     weaker_bundle = FeatureBundle(
-        raw={"confidence_adjusted_mispricing": 0.90, "market_relevance_proxy": 0.35},
+        raw={"market_relevance_proxy": 0.35},
         core_blocks={"opportunity_underreaction": 0.28},
     )
 
