@@ -372,7 +372,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
   const outputs = subnet.primary_outputs ?? analysis?.primary_outputs ?? null
   const conditioning = analysis?.conditioning
   const confidence = analysis?.confidence_rationale
-  const reliabilityEntries = Object.entries(conditioning?.reliability ?? {}).map(([key, value]) => ({
+  const reliabilityEntries: MemoSectionItem[] = Object.entries(conditioning?.reliability ?? {}).map(([key, value]) => ({
     title: RELIABILITY_LABELS[key] ?? key.replaceAll('_', ' '),
     body: `${(value * 100).toFixed(1)} / 100`,
     tone: value >= 0.65 ? 'confidence' : value >= 0.45 ? 'warning' : 'fragility',
