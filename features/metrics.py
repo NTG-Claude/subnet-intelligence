@@ -311,6 +311,31 @@ def _mispricing_structural_drag(
     )
 
 
+def _crowded_repricing_discount(
+    market_relevance: float,
+    market_structure_floor: float,
+    crowding_proxy: float,
+    underreaction_score: float,
+    overreaction_score: float,
+    fragility_excess: float,
+) -> float:
+    crowded_flag = clamp01(
+        0.30 * market_relevance
+        + 0.20 * market_structure_floor
+        + 0.35 * crowding_proxy
+        + 0.15 * underreaction_score
+    )
+    return clamp01(
+        crowded_flag
+        * (
+            0.50 * crowding_proxy
+            + 0.22 * underreaction_score
+            + 0.18 * fragility_excess
+            + 0.10 * overreaction_score
+        )
+    )
+
+
 def _cohort_key(bundle: FeatureBundle) -> str:
     reserve_depth = bundle.raw.get("reserve_depth") or 0.0
     active_ratio = bundle.raw.get("active_ratio") or 0.0
@@ -800,6 +825,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         yield_heat = clamp01(max((bundle.raw.get("staking_apy_proxy") or 0.0) - 60.0, 0.0) / 100.0)
         signal_fabrication_risk = clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
         overreaction_score = clamp01(bundle.raw.get("overreaction_score") or 0.0)
+        underreaction_score = clamp01(bundle.raw.get("underreaction_score") or 0.0)
         crowding_proxy = clamp01(bundle.raw.get("crowding_proxy") or 0.0)
         market_structure_floor = clamp01(bundle.raw.get("market_structure_floor") or 0.0)
         market_relevance_proxy = clamp01(bundle.raw.get("market_relevance_proxy") or 0.0)
@@ -855,12 +881,22 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             fragility_excess=fragility_excess,
             yield_heat=yield_heat,
         )
+        crowded_repricing_discount = _crowded_repricing_discount(
+            market_relevance=market_relevance_proxy,
+            market_structure_floor=market_structure_floor,
+            crowding_proxy=crowding_proxy,
+            underreaction_score=underreaction_score,
+            overreaction_score=overreaction_score,
+            fragility_excess=fragility_excess,
+        )
         confidence_adjusted_mispricing = clamp01(
             base_mispricing_signal
             * (0.25 + 0.75 * adjusted_signal_confidence)
             * (1.0 - 0.60 * mispricing_structural_drag)
+            * (1.0 - 0.70 * crowded_repricing_discount)
             - 0.24 * signal_fabrication_risk
             - 0.10 * overreaction_score
+            - 0.22 * crowded_repricing_discount
         )
         confidence_adjusted_thesis_strength = clamp01(
             0.45 * base_fundamental_quality
@@ -877,6 +913,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         bundle.raw["adjusted_thesis_confidence"] = adjusted_thesis_confidence
         bundle.raw["adjusted_signal_confidence"] = adjusted_signal_confidence
         bundle.raw["mispricing_structural_drag"] = mispricing_structural_drag
+        bundle.raw["crowded_repricing_discount"] = crowded_repricing_discount
         bundle.raw["confidence_adjusted_mispricing"] = confidence_adjusted_mispricing
         bundle.raw["confidence_adjusted_thesis_strength"] = confidence_adjusted_thesis_strength
         primary = PrimarySignals(

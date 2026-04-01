@@ -273,6 +273,55 @@ def test_mispricing_structural_drag_penalizes_extreme_yield_microstructure():
     assert robust_bundle.primary_signals.mispricing_signal > hype_bundle.primary_signals.mispricing_signal
 
 
+def test_crowded_repricing_discount_penalizes_crowded_large_names():
+    balanced_bundle, crowded_bundle = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=7,
+                    unique_coldkeys=8,
+                    n_validators=6,
+                    tao_in_pool=52_000.0,
+                    alpha_in_pool=12_000.0,
+                    alpha_price_tao=10.2,
+                    emission_per_block_tao=0.025,
+                    top3_stake_fraction=0.42,
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=47_000.0, active_ratio=0.49, fundamental_quality=0.48),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=49_000.0, active_ratio=0.56, fundamental_quality=0.56),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=51_000.0, active_ratio=0.62, fundamental_quality=0.63),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=7,
+                    unique_coldkeys=8,
+                    n_validators=6,
+                    tao_in_pool=210_000.0,
+                    alpha_in_pool=18_000.0,
+                    alpha_price_tao=16.0,
+                    emission_per_block_tao=0.06,
+                    top3_stake_fraction=0.78,
+                    incentive_scores=[0.92, 0.08],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=12.0, tao_in_pool=195_000.0, active_ratio=0.50, fundamental_quality=0.50),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=13.8, tao_in_pool=202_000.0, active_ratio=0.51, fundamental_quality=0.51),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=15.0, tao_in_pool=207_000.0, active_ratio=0.52, fundamental_quality=0.52),
+                    ],
+                )
+            ),
+        ]
+    )
+
+    assert balanced_bundle.raw["crowded_repricing_discount"] < crowded_bundle.raw["crowded_repricing_discount"]
+    assert crowded_bundle.raw["base_mispricing_signal"] > balanced_bundle.raw["base_mispricing_signal"]
+    balanced_discount = balanced_bundle.raw["base_mispricing_signal"] - balanced_bundle.primary_signals.mispricing_signal
+    crowded_discount = crowded_bundle.raw["base_mispricing_signal"] - crowded_bundle.primary_signals.mispricing_signal
+
+    assert crowded_discount > balanced_discount
+
+
 def test_signal_confidence_is_discounted_for_reflexive_fragile_structures():
     robust_bundle, crowded_bundle = normalize_features(
         [
