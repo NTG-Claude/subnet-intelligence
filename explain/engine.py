@@ -32,6 +32,17 @@ def _fmt(items: list[tuple[str, float, object]]) -> list[dict]:
     ]
 
 
+def _to_desirability_contribution(item: dict, invert: bool = False) -> dict:
+    signed = float(item.get("signed_contribution", 0.0))
+    if invert:
+        signed = -signed
+    direction = "positive" if signed > 0 else "negative" if signed < 0 else "neutral"
+    normalized = dict(item)
+    normalized["signed_contribution"] = round(signed, 4)
+    normalized["direction"] = direction
+    return normalized
+
+
 def build_explanation(
     bundle: FeatureBundle,
     signals: PrimarySignals,
@@ -98,8 +109,16 @@ def build_explanation(
         key=lambda item: item.get("signed_contribution", 0.0),
         reverse=True,
     )[:5]
+    fragility_desirability = [
+        _to_desirability_contribution(item, invert=True)
+        for item in primary_contributors["fragility_risk"]
+    ]
+    confidence_desirability = [
+        _to_desirability_contribution(item)
+        for item in primary_contributors["signal_confidence"]
+    ]
     top_negative_drags = sorted(
-        primary_contributors["fragility_risk"] + primary_contributors["signal_confidence"],
+        fragility_desirability + confidence_desirability,
         key=lambda item: item.get("signed_contribution", 0.0),
     )
     top_negative_drags = [item for item in top_negative_drags if item.get("signed_contribution", 0.0) <= 0][:5]

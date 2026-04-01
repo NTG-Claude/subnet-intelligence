@@ -94,6 +94,43 @@ def test_explainability_uses_block_and_primary_contributors():
     assert "visibility" in explanation["conditioning"]
 
 
+def test_explainability_treats_high_fragility_as_negative_drag():
+    bundle = normalize_features([compute_raw_features(_snapshot())])[0]
+    bundle.contributions["fragility_risk"] = [
+        {
+            "name": "fragility",
+            "signed_contribution": 0.31,
+            "direction": "positive",
+            "short_explanation": "Fragility risk is driven directly by the fragility block.",
+            "source_block": "core_blocks",
+        }
+    ]
+    bundle.contributions["signal_confidence"] = [
+        {
+            "name": "thesis_confidence",
+            "signed_contribution": -0.08,
+            "direction": "negative",
+            "short_explanation": "The thesis remains weaker when evidence is incoherent.",
+            "source_block": "core_blocks",
+        }
+    ]
+    stress = StressTestResult(scenarios=[], robustness=0.32, fragility_class="fragile", max_drawdown=0.34)
+    explanation = build_explanation(
+        bundle,
+        bundle.primary_signals or PrimarySignals(0.0, 0.0, 1.0, 0.0),
+        bundle.axes or AxisScores(0.0, 0.0, 0.0, 0.0, 0.0),
+        stress,
+        HardRuleResult(activated=[]),
+        "Under Review",
+        "Synthetic fragile thesis",
+    )
+
+    assert any(item["name"] == "fragility" for item in explanation["top_negative_drags"])
+    fragility_item = next(item for item in explanation["top_negative_drags"] if item["name"] == "fragility")
+    assert fragility_item["signed_contribution"] < 0
+    assert fragility_item["direction"] == "negative"
+
+
 def test_missing_history_reduces_history_reliability_and_signal_confidence():
     rich_bundle, thin_bundle = normalize_features(
         [
