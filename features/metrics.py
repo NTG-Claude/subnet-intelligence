@@ -476,9 +476,14 @@ def _cohort_key(bundle: FeatureBundle) -> str:
 
 def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     yuma_neurons = snapshot.yuma_neurons or snapshot.n_total or 1
-    active_ratio = safe_ratio(snapshot.active_neurons_7d, yuma_neurons)
+    validator_reference = max(4.0, min(16.0, math.sqrt(max(yuma_neurons, 1))))
+    has_validator_activity_basis = snapshot.active_validators_7d is not None and snapshot.n_validators > 0
+    active_ratio = safe_ratio(
+        snapshot.active_validators_7d if has_validator_activity_basis else snapshot.active_neurons_7d,
+        snapshot.n_validators if has_validator_activity_basis else yuma_neurons,
+    )
     participation_breadth = safe_ratio(snapshot.unique_coldkeys, max(snapshot.n_total, 1))
-    validator_participation = safe_ratio(snapshot.n_validators, yuma_neurons)
+    validator_participation = clamp01(snapshot.n_validators / validator_reference)
     incentive_distribution_quality = 1.0 - gini(snapshot.incentive_scores)
     incentive_concentration = herfindahl(snapshot.incentive_scores)
     validator_dominance = max(

@@ -44,6 +44,7 @@ class RawSubnetSnapshot:
     n_total: int = 0
     yuma_neurons: int = 0
     active_neurons_7d: int = 0
+    active_validators_7d: Optional[int] = None
     total_stake_tao: float = 0.0
     unique_coldkeys: int = 0
     top3_stake_fraction: float = 1.0

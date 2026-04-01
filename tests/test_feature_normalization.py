@@ -141,6 +141,24 @@ def test_update_freshness_rewards_recent_updates_with_age_curve():
     assert recent.raw["update_freshness"] > 0.2
 
 
+def test_flagship_validator_activity_uses_validator_denominator_not_total_yuma():
+    bundle = compute_raw_features(
+        _snapshot(
+            n_total=256,
+            yuma_neurons=256,
+            active_neurons_7d=4,
+            active_validators_7d=4,
+            n_validators=4,
+            unique_coldkeys=99,
+            tao_in_pool=120_000.0,
+            alpha_in_pool=15_000.0,
+        )
+    )
+
+    assert bundle.raw["active_ratio"] == 1.0
+    assert bundle.raw["validator_participation"] == 0.25
+
+
 def test_mispricing_temporal_features_follow_quality_history_not_active_history():
     snapshot = _snapshot(
         active_neurons_7d=5,
@@ -218,6 +236,7 @@ def test_post_incentive_retention_rewards_broader_improving_structure():
     retained = compute_raw_features(
         _snapshot(
             active_neurons_7d=7,
+            active_validators_7d=7,
             unique_coldkeys=8,
             n_validators=7,
             tao_in_pool=38_000.0,
@@ -263,6 +282,7 @@ def test_post_incentive_retention_rewards_broader_improving_structure():
     subsidized = compute_raw_features(
         _snapshot(
             active_neurons_7d=4,
+            active_validators_7d=1,
             unique_coldkeys=3,
             n_validators=3,
             tao_in_pool=8_000.0,

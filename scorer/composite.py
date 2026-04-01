@@ -98,6 +98,7 @@ def _to_snapshot(d: _SubnetData, current_block: int, history: list) -> RawSubnet
         n_total=m.n_total,
         yuma_neurons=m.yuma_n_total or m.n_total,
         active_neurons_7d=m.n_active_7d,
+        active_validators_7d=m.n_active_validators_7d if m.n_validators > 0 else None,
         total_stake_tao=m.total_stake_tao,
         unique_coldkeys=m.unique_coldkeys,
         top3_stake_fraction=m.top3_stake_fraction,

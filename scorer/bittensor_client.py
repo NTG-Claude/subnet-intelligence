@@ -109,6 +109,7 @@ class SubnetMetrics:
     n_total: int = 0
     yuma_n_total: int = 0
     n_active_7d: int = 0
+    n_active_validators_7d: int = 0
     total_stake_tao: float = 0.0
     unique_coldkeys: int = 0
     top3_stake_fraction: float = 1.0
@@ -227,17 +228,22 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
             1 for i, lu in enumerate(last_update)
             if i < n and yuma_mask[i] and int(lu) >= cutoff
         ))
+        validator_permit = list(getattr(meta, "validator_permit", []))
+        m.n_active_validators_7d = int(sum(
+            1 for i, lu in enumerate(last_update)
+            if i < n and yuma_mask[i] and i < len(validator_permit) and validator_permit[i] and int(lu) >= cutoff
+        ))
 
         # Incentive scores (all neurons — used for distribution health signal)
         m.incentive_scores = [float(v) for v in getattr(meta, "I", [])]
 
         # Validator count (yuma neurons only)
         m.n_validators = int(sum(
-            1 for i, vp in enumerate(getattr(meta, "validator_permit", []))
+            1 for i, vp in enumerate(validator_permit)
             if i < n and yuma_mask[i] and vp
         ))
         validator_stakes: list[float] = []
-        for idx, vp in enumerate(getattr(meta, "validator_permit", [])):
+        for idx, vp in enumerate(validator_permit):
             if idx < n and yuma_mask[idx] and vp:
                 validator_stakes.append(float(stake_arr[idx]) if idx < len(stake_arr) else 0.0)
         m.validator_stakes = validator_stakes
