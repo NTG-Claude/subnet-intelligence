@@ -175,6 +175,13 @@ def _coverage_ratio(values: dict[str, float | None], keys: list[str]) -> float:
     return safe_ratio(available, len(keys))
 
 
+def _signal_presence_ratio(values: list[float | None]) -> float:
+    if not values:
+        return 0.0
+    available = sum(1 for value in values if value is not None)
+    return clamp01(available / len(values))
+
+
 def _market_relevance_proxy(
     reserve_depth: float,
     active_ratio: float,
@@ -511,33 +518,50 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         max(0.0, (emission_change or 0.0) - max(quality_change or 0.0, 0.0)),
         flow_to_price_elasticity,
     )
-    data_coverage = _coverage_ratio(
-        {
-            "validator_weight_entropy": validator_weight_entropy,
-            "cross_validator_disagreement": cross_validator_disagreement,
-            "meaningful_discrimination": meaningful_discrimination,
-            "bond_responsiveness": bond_responsiveness,
-            "slippage_10_tao": slippage_10,
-            "slippage_50_tao": slippage_50,
-            "emission_persistence": _persistence(emission_history),
-            "flow_stability": _persistence(flow_history),
-            "quality_acceleration": quality_acceleration,
-            "liquidity_improvement_rate": liquidity_improvement_rate,
-            "concentration_delta": concentration_change,
-        },
+    validator_signal_coverage = _signal_presence_ratio(
         [
-            "validator_weight_entropy",
-            "cross_validator_disagreement",
-            "meaningful_discrimination",
-            "bond_responsiveness",
-            "slippage_10_tao",
-            "slippage_50_tao",
-            "emission_persistence",
-            "flow_stability",
-            "quality_acceleration",
-            "liquidity_improvement_rate",
-            "concentration_delta",
-        ],
+            validator_weight_entropy,
+            cross_validator_disagreement,
+            meaningful_discrimination,
+            bond_responsiveness,
+        ]
+    )
+    market_signal_coverage = _signal_presence_ratio(
+        [
+            slippage_1,
+            slippage_10,
+            slippage_50,
+            avg_slippage,
+            snapshot.alpha_price_tao,
+            snapshot.tao_in_pool,
+            snapshot.alpha_in_pool,
+        ]
+    )
+    history_signal_coverage = _signal_presence_ratio(
+        [
+            _persistence(emission_history),
+            _persistence(flow_history),
+            quality_acceleration,
+            liquidity_improvement_rate,
+            concentration_change,
+            validator_diversity_trend,
+            price_response_lag_to_quality_shift,
+            emission_to_sticky_usage_conversion,
+            post_incentive_retention,
+        ]
+    )
+    external_evidence_coverage = _signal_presence_ratio(
+        [
+            float(snapshot.github.commits_30d) if snapshot.github else None,
+            float(snapshot.github.contributors_30d) if snapshot.github else None,
+            1.0 if snapshot.github and snapshot.github.last_push else None,
+        ]
+    )
+    data_coverage = clamp01(
+        0.40 * market_signal_coverage
+        + 0.35 * history_signal_coverage
+        + 0.15 * external_evidence_coverage
+        + 0.10 * validator_signal_coverage
     )
     expected_price_response = _expected_price_response(
         quality_change,
@@ -678,6 +702,10 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "reserve_growth_without_price": reserve_growth_without_price,
         "participation_without_crowding": participation_without_crowding,
         "data_coverage": data_coverage,
+        "validator_signal_coverage": validator_signal_coverage,
+        "market_signal_coverage": market_signal_coverage,
+        "history_signal_coverage": history_signal_coverage,
+        "external_evidence_coverage": external_evidence_coverage,
         "history_depth_score": history_depth_score,
         "onchain_evidence_support": onchain_evidence_support,
         "proxy_reliance_penalty": proxy_reliance_penalty,
@@ -710,10 +738,10 @@ METRIC_MAP = {
     "market_relevance_proxy": ("derived_onchain", "fundamental_quality", 0.06, False),
     "market_structure_floor": ("derived_onchain", "fundamental_quality", 0.10, False),
     "update_freshness": ("direct_onchain", "signal_confidence", 0.18, False),
-    "validator_weight_entropy": ("derived_onchain", "fundamental_quality", 0.05, False),
-    "cross_validator_disagreement": ("derived_onchain", "fundamental_quality", 0.10, False),
-    "meaningful_discrimination": ("derived_onchain", "fundamental_quality", 0.10, False),
-    "bond_responsiveness": ("derived_onchain", "fundamental_quality", 0.08, False),
+    "validator_weight_entropy": ("derived_onchain", "fundamental_quality", 0.0, False),
+    "cross_validator_disagreement": ("derived_onchain", "fundamental_quality", 0.0, False),
+    "meaningful_discrimination": ("derived_onchain", "fundamental_quality", 0.0, False),
+    "bond_responsiveness": ("derived_onchain", "fundamental_quality", 0.0, False),
     "incentive_concentration": ("derived_onchain", "fragility_risk", 0.10, False),
     "validator_dominance": ("derived_onchain", "fragility_risk", 0.12, False),
     "reserve_depth": ("direct_onchain", "fundamental_quality", 0.08, False),

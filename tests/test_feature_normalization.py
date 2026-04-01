@@ -45,6 +45,45 @@ def test_missing_consensus_metrics_are_neutral_not_zeroed():
     assert debug["validator_weight_entropy"].normalized == 0.5
     assert debug["cross_validator_disagreement"].normalized == 0.5
     assert debug["meaningful_discrimination"].normalized == 0.5
+    assert debug["bond_responsiveness"].normalized == 0.5
+    assert debug["validator_weight_entropy"].weight == 0.0
+    assert debug["cross_validator_disagreement"].weight == 0.0
+    assert debug["meaningful_discrimination"].weight == 0.0
+    assert debug["bond_responsiveness"].weight == 0.0
+
+
+def test_data_coverage_reflects_live_signal_family_availability():
+    rich = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=8,
+            unique_coldkeys=8,
+            n_validators=7,
+            tao_in_pool=40_000.0,
+            alpha_in_pool=10_000.0,
+            alpha_price_tao=10.2,
+            github=None,
+            history=[
+                HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=36_000.0, active_ratio=0.50, fundamental_quality=0.49),
+                HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=38_000.0, active_ratio=0.55, fundamental_quality=0.56),
+                HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=39_000.0, active_ratio=0.60, fundamental_quality=0.61),
+            ],
+        )
+    )
+    poor = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=2,
+            unique_coldkeys=2,
+            n_validators=2,
+            tao_in_pool=0.0,
+            alpha_in_pool=0.0,
+            alpha_price_tao=0.0,
+            history=[],
+        )
+    )
+
+    assert rich.raw["market_signal_coverage"] > poor.raw["market_signal_coverage"]
+    assert rich.raw["history_signal_coverage"] > poor.raw["history_signal_coverage"]
+    assert rich.raw["data_coverage"] > poor.raw["data_coverage"]
 
 
 def test_mispricing_temporal_features_follow_quality_history_not_active_history():
