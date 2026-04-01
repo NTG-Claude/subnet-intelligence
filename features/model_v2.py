@@ -1129,35 +1129,39 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
                 {"name": "thesis_confidence", "signed_contribution": round((confidence_components["thesis_confidence"] - 0.5) * 0.30, 4), "direction": "positive" if confidence_components["thesis_confidence"] >= 0.5 else "negative", "short_explanation": "The thesis remains stronger when evidence is coherent and not overly reflexive.", "source_block": "core_blocks"},
             ],
         }
-        # Keep a compact compatibility/debug surface on bundle.raw while V1-era
+        # Keep a compact compatibility surface on bundle.raw while V1-era
         # explainers, rules, and tests are still being migrated to V2 blocks.
-        bundle.raw.update(
-            {
-                "fundamental_health": fundamental_health,
-                "opportunity_underreaction": opportunity_underreaction,
-                "fragility_block": fragility_block,
-                "evidence_confidence": evidence_confidence,
-                "data_confidence": confidence_components["data_confidence"],
-                "market_confidence": confidence_components["market_confidence"],
-                "thesis_confidence": confidence_components["thesis_confidence"],
-                "market_legitimacy": market_legitimacy,
-                "base_mispricing_signal": opportunity_underreaction,
-                "base_signal_confidence": evidence_confidence,
-                "crowded_structure_penalty": crowded_structure_penalty,
-                "quality_resolution_bonus": quality_resolution_bonus,
-                "quality_resolution_drag": quality_resolution_drag,
-                "evidence_confidence_ceiling": confidence_structural_ceiling,
-                "reflexive_confidence_drag": fragility_components["crowding_level"],
-                "structural_confidence_drag": mispricing_structural_drag,
-                "confidence_structural_ceiling": confidence_structural_ceiling,
-                "adjusted_thesis_confidence": adjusted_thesis_confidence,
-                "adjusted_signal_confidence": adjusted_signal_confidence,
-                "mispricing_structural_drag": mispricing_structural_drag,
-                "crowded_repricing_discount": crowded_repricing_discount,
-                "confidence_adjusted_mispricing": confidence_adjusted_mispricing,
-                "confidence_adjusted_thesis_strength": confidence_adjusted_thesis_strength,
-            }
-        )
+        compatibility_raw = {
+            "fundamental_health": fundamental_health,
+            "opportunity_underreaction": opportunity_underreaction,
+            "fragility_block": fragility_block,
+            "evidence_confidence": evidence_confidence,
+            "data_confidence": confidence_components["data_confidence"],
+            "market_confidence": confidence_components["market_confidence"],
+            "thesis_confidence": confidence_components["thesis_confidence"],
+            "market_legitimacy": market_legitimacy,
+            "base_mispricing_signal": opportunity_underreaction,
+            "evidence_confidence_ceiling": confidence_structural_ceiling,
+            "reflexive_confidence_drag": fragility_components["crowding_level"],
+            "structural_confidence_drag": mispricing_structural_drag,
+            "confidence_structural_ceiling": confidence_structural_ceiling,
+            "adjusted_thesis_confidence": adjusted_thesis_confidence,
+            "adjusted_signal_confidence": adjusted_signal_confidence,
+            "mispricing_structural_drag": mispricing_structural_drag,
+            "crowded_repricing_discount": crowded_repricing_discount,
+            "confidence_adjusted_mispricing": confidence_adjusted_mispricing,
+            "confidence_adjusted_thesis_strength": confidence_adjusted_thesis_strength,
+        }
+        # These fields no longer drive downstream V2 logic. They remain only as
+        # internal debug breadcrumbs until remaining tooling is migrated.
+        internal_debug_raw = {
+            "base_signal_confidence": evidence_confidence,
+            "crowded_structure_penalty": crowded_structure_penalty,
+            "quality_resolution_bonus": quality_resolution_bonus,
+            "quality_resolution_drag": quality_resolution_drag,
+        }
+        bundle.raw.update(compatibility_raw)
+        bundle.raw.update(internal_debug_raw)
         primary = PrimarySignals(
             fundamental_quality=fundamental_quality,
             mispricing_signal=mispricing_signal,

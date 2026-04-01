@@ -168,22 +168,22 @@ History stabilization, bounded drift, telemetry-gap fallback, and stress integra
 | `mispricing_structural_drag` | compat/debug | `structural_validity_factor` inside primary-signal logic |
 | `crowded_repricing_discount` | compat/debug | small-penalty path inside `mispricing_signal` |
 | `base_mispricing_signal` | compat/debug | `bundle.core_blocks["opportunity_underreaction"]` |
-| `base_signal_confidence` | compat/debug | `bundle.core_blocks["evidence_confidence"]` |
+| `base_signal_confidence` | internal debug | `bundle.core_blocks["evidence_confidence"]` |
 | `fragility_block` | compat/debug | `bundle.core_blocks["fragility"]` |
 | `adjusted_signal_confidence` | compat/debug | final `signal_confidence` plus ceilings in V2 logic |
 | `adjusted_thesis_confidence` | compat/debug | `bundle.base_components["thesis_confidence"]` plus structural ceiling logic |
 | `evidence_confidence_ceiling` | compat/debug | confidence ceiling inside V2 confidence orchestration |
 | `structural_confidence_drag` | compat/debug | derived from `structural_validity_factor` |
 | `reflexive_confidence_drag` | compat/debug | `bundle.base_components["crowding_level"]` |
-| `crowded_structure_penalty` | compat/debug | bounded structural penalty inside confidence orchestration |
-| `quality_resolution_bonus` | deprecate later | folded into `fundamental_quality` composition |
-| `quality_resolution_drag` | deprecate later | folded into `fundamental_quality` composition |
+| `crowded_structure_penalty` | internal debug | bounded structural penalty inside confidence orchestration |
+| `quality_resolution_bonus` | internal debug | folded into `fundamental_quality` composition |
+| `quality_resolution_drag` | internal debug | folded into `fundamental_quality` composition |
 
 ### Suggested Next Cleanup Order
 
 1. Continue moving remaining tests from `fragility_block` aliases to `bundle.core_blocks["fragility"]`.
    The first `base_mispricing_signal` cleanup has already been migrated to `opportunity_underreaction`.
-2. Treat `base_signal_confidence`, `quality_resolution_bonus`, and `quality_resolution_drag` as internal-only debug fields.
+2. Finish removing remaining incidental consumers of internal debug fields such as `base_signal_confidence`, `quality_resolution_bonus`, and `quality_resolution_drag`.
 3. Remove direct consumers of `confidence_adjusted_mispricing` once ranking exclusively reads V2 ranking artifacts.
 
 ## Explainability Migration
