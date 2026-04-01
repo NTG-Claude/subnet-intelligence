@@ -677,7 +677,7 @@ def test_confidence_adjusted_mispricing_discounted_by_signal_fabrication_risk():
 
     assert robust_bundle.raw["signal_fabrication_risk"] < noisy_bundle.raw["signal_fabrication_risk"]
     assert robust_bundle.primary_signals.mispricing_signal > noisy_bundle.primary_signals.mispricing_signal
-    assert robust_bundle.raw["mispricing_structural_drag"] < noisy_bundle.raw["mispricing_structural_drag"]
+    assert robust_bundle.core_blocks["structural_validity"] > noisy_bundle.core_blocks["structural_validity"]
 
 
 def test_mispricing_structural_drag_penalizes_extreme_yield_microstructure():
@@ -720,7 +720,7 @@ def test_mispricing_structural_drag_penalizes_extreme_yield_microstructure():
         ]
     )
 
-    assert robust_bundle.raw["mispricing_structural_drag"] < hype_bundle.raw["mispricing_structural_drag"]
+    assert robust_bundle.core_blocks["structural_validity"] > hype_bundle.core_blocks["structural_validity"]
     assert robust_bundle.primary_signals.mispricing_signal > hype_bundle.primary_signals.mispricing_signal
 
 
@@ -765,7 +765,7 @@ def test_crowded_repricing_discount_penalizes_crowded_large_names():
         ]
     )
 
-    assert balanced_bundle.raw["crowded_repricing_discount"] < crowded_bundle.raw["crowded_repricing_discount"]
+    assert balanced_bundle.core_blocks["crowded_structure_watchlist"] < crowded_bundle.core_blocks["crowded_structure_watchlist"]
     assert crowded_bundle.core_blocks["opportunity_underreaction"] >= balanced_bundle.core_blocks["opportunity_underreaction"]
     balanced_discount = balanced_bundle.core_blocks["opportunity_underreaction"] - balanced_bundle.primary_signals.mispricing_signal
     crowded_discount = crowded_bundle.core_blocks["opportunity_underreaction"] - crowded_bundle.primary_signals.mispricing_signal
@@ -857,7 +857,7 @@ def test_signal_confidence_is_discounted_for_reflexive_fragile_structures():
         ]
     )
 
-    assert robust_bundle.raw["reflexive_confidence_drag"] < crowded_bundle.raw["reflexive_confidence_drag"]
+    assert robust_bundle.base_components["crowding_level"] < crowded_bundle.base_components["crowding_level"]
     assert robust_bundle.primary_signals.signal_confidence > crowded_bundle.primary_signals.signal_confidence
 
 
@@ -1003,8 +1003,9 @@ def test_missing_consensus_and_external_evidence_cap_confidence_even_for_large_o
         ]
     )
 
-    assert unsupported_bundle.raw["evidence_confidence"] <= unsupported_bundle.raw["evidence_confidence_ceiling"]
-    assert supported_bundle.raw["evidence_confidence_ceiling"] > unsupported_bundle.raw["evidence_confidence_ceiling"]
+    assert unsupported_bundle.raw["evidence_confidence"] <= unsupported_bundle.core_blocks["evidence_confidence"]
+    assert supported_bundle.base_components["data_confidence"] > unsupported_bundle.base_components["data_confidence"]
+    assert supported_bundle.base_components["thesis_confidence"] > unsupported_bundle.base_components["thesis_confidence"]
     assert supported_bundle.primary_signals.signal_confidence > unsupported_bundle.primary_signals.signal_confidence
 
 
@@ -1069,7 +1070,7 @@ def test_crowded_structure_penalty_raises_fragility_and_dampens_confidence():
         ]
     )
 
-    assert balanced_bundle.raw["crowded_structure_penalty"] < crowded_bundle.raw["crowded_structure_penalty"]
+    assert balanced_bundle.core_blocks["crowded_structure_watchlist"] < crowded_bundle.core_blocks["crowded_structure_watchlist"]
     assert balanced_bundle.primary_signals.fragility_risk < crowded_bundle.primary_signals.fragility_risk
     assert balanced_bundle.primary_signals.signal_confidence > crowded_bundle.primary_signals.signal_confidence
 
@@ -1114,8 +1115,8 @@ def test_signal_confidence_uses_structural_ceiling_for_crowded_yield_setups():
         ]
     )
 
-    assert robust_bundle.raw["structural_confidence_drag"] < crowded_bundle.raw["structural_confidence_drag"]
-    assert crowded_bundle.primary_signals.signal_confidence <= crowded_bundle.raw["confidence_structural_ceiling"]
+    assert robust_bundle.core_blocks["structural_validity"] > crowded_bundle.core_blocks["structural_validity"]
+    assert crowded_bundle.primary_signals.signal_confidence <= crowded_bundle.raw["evidence_confidence"]
     assert robust_bundle.primary_signals.signal_confidence > crowded_bundle.primary_signals.signal_confidence
 
 
@@ -1160,8 +1161,29 @@ def test_signal_confidence_is_bounded_by_lower_of_evidence_and_thesis_confidence
     )
 
     assert robust_bundle.primary_signals.signal_confidence <= robust_bundle.raw["evidence_confidence"]
-    assert robust_bundle.primary_signals.signal_confidence <= robust_bundle.raw["adjusted_thesis_confidence"]
+    assert robust_bundle.primary_signals.signal_confidence <= robust_bundle.base_components["thesis_confidence"]
     assert structurally_weak_bundle.primary_signals.signal_confidence <= structurally_weak_bundle.raw["evidence_confidence"]
-    assert structurally_weak_bundle.primary_signals.signal_confidence <= structurally_weak_bundle.raw["adjusted_thesis_confidence"]
+    assert structurally_weak_bundle.primary_signals.signal_confidence <= structurally_weak_bundle.base_components["thesis_confidence"]
     assert robust_bundle.primary_signals.signal_confidence > structurally_weak_bundle.primary_signals.signal_confidence
+
+
+def test_removed_legacy_compatibility_fields_are_not_emitted_from_v2_bundle():
+    bundle = normalize_features([compute_raw_features(_snapshot())])[0]
+
+    removed_fields = {
+        "base_mispricing_signal",
+        "evidence_confidence_ceiling",
+        "reflexive_confidence_drag",
+        "structural_confidence_drag",
+        "mispricing_structural_drag",
+        "crowded_repricing_discount",
+        "confidence_adjusted_mispricing",
+        "confidence_adjusted_thesis_strength",
+        "base_signal_confidence",
+        "crowded_structure_penalty",
+        "quality_resolution_bonus",
+        "quality_resolution_drag",
+    }
+
+    assert removed_fields.isdisjoint(bundle.raw)
 

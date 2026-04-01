@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from collectors.models import RawSubnetSnapshot
+from features.normalization import clamp01
 from features.types import FeatureBundle, PrimarySignals
 
 
@@ -23,6 +24,33 @@ class HardRuleResult:
             self.total_cap = self.legacy_score_cap
 
 
+def _bundle_value(bundle: FeatureBundle, key: str, fallback: float = 0.0) -> float:
+    if key in bundle.core_blocks:
+        return float(bundle.core_blocks.get(key, fallback))
+    if key in bundle.base_components:
+        return float(bundle.base_components.get(key, fallback))
+    value = bundle.raw.get(key)
+    return fallback if value is None else float(value)
+
+
+def _crowded_structure_watchlist(bundle: FeatureBundle, concentration: float, staking_apy: float) -> float:
+    direct = bundle.core_blocks.get("crowded_structure_watchlist")
+    if direct is not None:
+        return float(direct)
+    crowding_level = _bundle_value(bundle, "crowding_level", _bundle_value(bundle, "crowding_proxy"))
+    thin_liquidity_risk = _bundle_value(
+        bundle,
+        "thin_liquidity_risk",
+        clamp01(1.0 - _bundle_value(bundle, "market_structure_floor")),
+    )
+    return clamp01(
+        0.35 * crowding_level
+        + 0.30 * concentration
+        + 0.20 * thin_liquidity_risk
+        + 0.15 * clamp01(max(staking_apy - 90.0, 0.0) / 120.0)
+    )
+
+
 def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> HardRuleResult:
     activated: list[str] = []
     quality_cap = None
@@ -42,8 +70,8 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     participation = bundle.raw.get("participation_breadth") or 0.0
     concentration_delta = bundle.raw.get("concentration_delta")
     pool_depth = snapshot.tao_in_pool or 0.0
-    market_relevance = bundle.raw.get("market_relevance_proxy") or 0.0
-    market_structure_floor = bundle.raw.get("market_structure_floor") or 0.0
+    market_relevance = _bundle_value(bundle, "market_relevance", bundle.raw.get("market_relevance_proxy") or 0.0)
+    market_structure_floor = _bundle_value(bundle, "market_structure_floor")
     confidence_inputs = bundle.raw.get("data_coverage") or 0.0
     proxy_reliance = bundle.raw.get("proxy_reliance_penalty") or 0.0
     thesis_coherence = bundle.raw.get("confidence_thesis_coherence") or 0.0
@@ -52,10 +80,10 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     underreaction_score = bundle.raw.get("underreaction_score") or 0.0
     crowding_proxy = bundle.raw.get("crowding_proxy") or 0.0
     overreaction_score = bundle.raw.get("overreaction_score") or 0.0
-    crowded_structure_penalty = bundle.raw.get("crowded_structure_penalty") or 0.0
     staking_apy = 0.0
     if pool_depth > 0:
         staking_apy = max(0.0, snapshot.emission_per_block_tao * 7200 * 365 / pool_depth * 100)
+    crowded_structure_penalty = _crowded_structure_watchlist(bundle, concentration, staking_apy)
     consensus_hollow = (
         (bundle.raw.get("validator_weight_entropy") or 0.0) > 0.92
         and (bundle.raw.get("cross_validator_disagreement") or 0.0) < 0.08

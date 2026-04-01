@@ -117,29 +117,31 @@ def _signals_from_legacy_history(point: HistoricalFeaturePoint) -> PrimarySignal
     )
 
 
+def _history_primary_signals(point: HistoricalFeaturePoint) -> PrimarySignals:
+    if all(
+        value is not None
+        for value in (
+            point.fundamental_quality,
+            point.mispricing_signal,
+            point.fragility_risk,
+            point.signal_confidence,
+        )
+    ):
+        return PrimarySignals(
+            fundamental_quality=point.fundamental_quality,
+            mispricing_signal=point.mispricing_signal,
+            fragility_risk=point.fragility_risk,
+            signal_confidence=point.signal_confidence,
+        )
+    return _signals_from_legacy_history(point)
+
+
 def _history_fallback_primary(snapshot: RawSubnetSnapshot, current_primary: PrimarySignals) -> PrimarySignals:
     history_point = _latest_valid_history_point(snapshot)
     if history_point is None:
         return current_primary
 
-    history_primary = (
-        PrimarySignals(
-            fundamental_quality=history_point.fundamental_quality,
-            mispricing_signal=history_point.mispricing_signal,
-            fragility_risk=history_point.fragility_risk,
-            signal_confidence=history_point.signal_confidence,
-        )
-        if all(
-            value is not None
-            for value in (
-                history_point.fundamental_quality,
-                history_point.mispricing_signal,
-                history_point.fragility_risk,
-                history_point.signal_confidence,
-            )
-        )
-        else _signals_from_legacy_history(history_point)
-    )
+    history_primary = _history_primary_signals(history_point)
 
     def _blend(history_value: float, current_value: float, history_weight: float = 0.9) -> float:
         return max(0.0, min(1.0, history_weight * history_value + (1.0 - history_weight) * current_value))
@@ -165,24 +167,7 @@ def _stabilize_primary_with_history(snapshot: RawSubnetSnapshot, current_primary
     if history_point is None:
         return current_primary
 
-    history_primary = (
-        PrimarySignals(
-            fundamental_quality=history_point.fundamental_quality,
-            mispricing_signal=history_point.mispricing_signal,
-            fragility_risk=history_point.fragility_risk,
-            signal_confidence=history_point.signal_confidence,
-        )
-        if all(
-            value is not None
-            for value in (
-                history_point.fundamental_quality,
-                history_point.mispricing_signal,
-                history_point.fragility_risk,
-                history_point.signal_confidence,
-            )
-        )
-        else _signals_from_legacy_history(history_point)
-    )
+    history_primary = _history_primary_signals(history_point)
 
     return PrimarySignals(
         fundamental_quality=_limit_signal_drift(current_primary.fundamental_quality, history_primary.fundamental_quality, PRIMARY_SIGNAL_DRIFT_CAPS["fundamental_quality"]),
@@ -193,6 +178,8 @@ def _stabilize_primary_with_history(snapshot: RawSubnetSnapshot, current_primary
 
 
 def _legacy_axes_from_primary(signals: PrimarySignals, bundle: FeatureBundle, stress_robustness: float | None = None) -> AxisScores:
+    # AxisScores remain a compatibility projection for labels, stress, and
+    # persisted surfaces that still expect the older axis vocabulary.
     intrinsic = max(0.0, min(1.0, 0.82 * signals.fundamental_quality + 0.18 * (bundle.raw.get("cohort_quality_edge") or 0.0)))
     economic = max(
         0.0,
@@ -227,13 +214,23 @@ def _ranking_priority_score(signals: PrimarySignals, bundle: FeatureBundle) -> f
     ranking_artifacts = bundle.ranking or {}
     market_relevance = ranking_artifacts.get("market_relevance")
     if market_relevance is None:
-        market_relevance = bundle.raw.get("market_legitimacy") or bundle.raw.get("market_relevance_proxy") or bundle.raw.get("cohort_relevance_edge") or 0.0
+        market_relevance = (
+            bundle.core_blocks.get("market_legitimacy")
+            or bundle.base_components.get("market_relevance")
+            or bundle.raw.get("market_legitimacy")
+            or bundle.raw.get("market_relevance_proxy")
+            or bundle.raw.get("cohort_relevance_edge")
+            or 0.0
+        )
     thesis_strength = ranking_artifacts.get("thesis_strength")
     base_opportunity = bundle.core_blocks.get("opportunity_underreaction")
+    if base_opportunity is None:
+        base_opportunity = bundle.base_components.get("opportunity_underreaction")
     fragility_headwind = max(0.0, (signals.fragility_risk - 0.55) / 0.45)
     resilience = ranking_artifacts.get("resilience")
     if resilience is None:
-        resilience = max(0.0, 1.0 - fragility_headwind)
+        resilience = 1.0 - (bundle.core_blocks.get("fragility") or signals.fragility_risk)
+        resilience = max(0.0, min(1.0, resilience))
     mispricing_component = base_opportunity if base_opportunity is not None else signals.mispricing_signal
     thesis_component = thesis_strength if thesis_strength is not None else (
         0.45 * signals.fundamental_quality
@@ -259,24 +256,7 @@ def _history_priority_score(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) 
     if history_point is None:
         return None
 
-    history_primary = (
-        PrimarySignals(
-            fundamental_quality=history_point.fundamental_quality,
-            mispricing_signal=history_point.mispricing_signal,
-            fragility_risk=history_point.fragility_risk,
-            signal_confidence=history_point.signal_confidence,
-        )
-        if all(
-            value is not None
-            for value in (
-                history_point.fundamental_quality,
-                history_point.mispricing_signal,
-                history_point.fragility_risk,
-                history_point.signal_confidence,
-            )
-        )
-        else _signals_from_legacy_history(history_point)
-    )
+    history_primary = _history_primary_signals(history_point)
     return _ranking_priority_score(history_primary, bundle)
 
 
@@ -328,6 +308,9 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
     for snapshot, bundle in zip(snapshots, bundles):
         provisional_primary = bundle.primary_signals or PrimarySignals(0.0, 0.0, 1.0, 0.0)
         if _is_incomplete_snapshot(snapshot, bundle):
+            # Telemetry-gap handling is the one place where history stays in the
+            # critical path: we preserve the latest validated V2 state, then run
+            # the normal V2 ranking and stress layers on top of it.
             fallback_primary = _history_fallback_primary(snapshot, provisional_primary)
             fallback_axes = _legacy_axes_from_primary(fallback_primary, bundle)
             stress = run_stress_tests(snapshot, bundle, fallback_axes)
@@ -359,6 +342,8 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
 
         rules = evaluate_hard_rules(snapshot, bundle)
         primary = apply_rule_caps(provisional_primary, rules)
+        # Stress and labels still consume AxisScores, but the primary runtime
+        # truth is the V2 signal vector and V2 ranking artifacts.
         provisional_axes = _legacy_axes_from_primary(primary, bundle)
         stress = run_stress_tests(snapshot, bundle, provisional_axes)
         primary = PrimarySignals(

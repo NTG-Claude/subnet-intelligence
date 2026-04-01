@@ -1,131 +1,121 @@
-# Contributing — How to Add a New Signal
+# Contributing
 
-## Steps
+## Runtime Architecture
 
-### 1. Add the signal function to `scorer/signals.py`
+The current scoring runtime is V2-first. Treat this pipeline as the source of truth:
 
-Each signal is a **pure function** that returns a `float` in `[0.0, 1.0]`.
+`conditioning -> raw features -> base components -> core blocks -> primary signals -> ranking -> explanation`
 
-```python
-def my_new_score(
-    raw_value: Optional[float],
-    all_values: list[Optional[float]],
-) -> float:
-    return percentile_rank(raw_value, all_values)
-```
+The main flow lives in:
 
-Rules:
-- `None` input → return `0.0` (pessimistic)
-- Always percentile-rank against the full cross-subnet universe
-- No side effects, no network calls
+- `features/conditioning.py`
+- `features/model_v2.py`
+- `features/components_*.py`
+- `scoring/engine.py`
+- `explain/engine.py`
 
----
+Legacy axes and legacy-history projections still exist only as compatibility layers for a few downstream surfaces such as stress, labels, and persisted responses. Do not add new product logic on top of `AxisScores` or old V1 composite paths.
 
-### 2. Register the signal in `scorer/composite.py`
+## Where To Add Logic
 
-**a)** Add the new cross-subnet list to `_CrossSubnetContext.__init__`:
-```python
-self.my_values: list[Optional[float]] = [
-    raw.my_field for raw in all_raw
-]
-```
+### 1. Conditioning
 
-**b)** Call the signal inside `_score_one`:
-```python
-my = my_new_score(raw.my_field, ctx.my_values)
-```
+If the change is about repairing, bounding, or visibility/reliability of raw inputs, update `features/conditioning.py`.
 
-**c)** Update `_WEIGHTS` (must sum to 100):
-```python
-_WEIGHTS = {
-    "capital": 20,   # reduced from 25
-    ...
-    "my_signal": 5,
-}
-```
+Keep conditioning responsibilities limited to:
 
-**d)** Include the new score in `composite`:
-```python
-composite = (
-    cap * _WEIGHTS["capital"]
-    + ...
-    + my * _WEIGHTS["my_signal"]
-)
-```
+- preserving usable source values,
+- bounding malformed inputs,
+- reconstructing missing values only when the rule is explicit,
+- recording `reliability` and `visibility`.
 
----
+### 2. Raw Features
 
-### 3. Extend `ScoreBreakdown` in `scorer/composite.py` and `api/models.py`
+If the change is about deriving telemetry, cohort-relative signals, or history-aware measurements, update `features/model_v2.py`.
 
-```python
-# scorer/composite.py
-class ScoreBreakdown(BaseModel):
-    ...
-    my_score: float
+Raw features should:
 
-# api/models.py
-class ScoreBreakdownResponse(BaseModel):
-    ...
-    my_score: float
-```
+- remain typed and deterministic,
+- avoid network access,
+- write stable V2 inputs to `bundle.raw`,
+- avoid adding temporary compatibility aliases unless there is a verified downstream need.
 
----
+### 3. Base Components
 
-### 4. Add a DB column in `scorer/database.py`
+If the change belongs to a reusable building block, update the component modules:
 
-```python
-class SubnetScoreRow(Base):
-    ...
-    my_score = Column(Float, nullable=False, default=0.0)
-```
+- `features/components_quality.py`
+- `features/components_opportunity.py`
+- `features/components_fragility.py`
+- `features/components_confidence.py`
 
-Then generate and apply a migration:
-```bash
-make migrate-new MSG="add my_score column"
-make migrate
-```
+Base components should be interpretable sub-scores, not product labels or leaderboard policy.
 
----
+### 4. Core Blocks And Primary Signals
 
-### 5. Add the signal to the frontend in `components/SignalBreakdown.tsx`
+If the change affects the model’s actual investment view, update `features/model_v2.py` where V2 core blocks, contributions, ranking artifacts, and `PrimarySignals` are assembled.
 
-```typescript
-const SIGNALS: Signal[] = [
-  ...
-  {
-    key: 'my_score',
-    label: 'My Signal',
-    maxWeight: 5,
-    description: 'What this signal measures and why it matters.',
-  },
-]
-```
+Prefer:
 
----
+- `bundle.base_components`
+- `bundle.core_blocks`
+- `bundle.contributions`
+- `bundle.ranking`
+- `bundle.primary_signals`
 
-### 6. Write tests in `tests/test_signals.py`
+Avoid introducing new logic that depends on legacy axis names when a V2 block or contribution already exists.
 
-```python
-def test_my_new_score_output_in_range(subnets):
-    all_vals = [s["my_field"] for s in subnets]
-    for s in subnets:
-        score = my_new_score(s["my_field"], all_vals)
-        assert 0.0 <= score <= 1.0
+### 5. Ranking
 
-def test_my_new_score_none_returns_zero():
-    assert my_new_score(None, [1.0, 2.0]) == 0.0
-```
+If the change affects ordering or score stabilization, update `scoring/engine.py`.
 
----
+Ranking should be driven primarily by:
 
-### 7. Update `CHANGELOG.md`
+- `bundle.primary_signals`
+- `bundle.core_blocks`
+- `bundle.ranking`
 
-Bump to the next minor version (e.g. `v1.1.0`) and describe the new signal.
+History blending and telemetry-gap fallbacks are allowed, but they should remain explicit compatibility behavior around the V2 runtime rather than replacing it.
 
----
+### 6. Explanation
 
-## Code Style
-- Python: standard library + project dependencies only
-- No new dependencies without discussion
-- All functions typed, no `Any` in signal code
-- `pytest tests/ -v` must pass at ≥80% coverage before merging
+If the change affects narratives or drivers, update `explain/engine.py`.
+
+Explanations should prefer:
+
+- V2 contributions,
+- V2 core blocks,
+- conditioned reliability and visibility,
+- direct primary-signal rationale.
+
+Metric-by-metric axis sorting should only be fallback context, not the main explanation source.
+
+## Compatibility Guidance
+
+Before removing any field from `bundle.raw`:
+
+1. Check `scoring/`, `regimes/`, `labels/`, `explain/`, `api/`, `frontend/`, and `tests/`.
+2. If the field is only used by tests or an internal compatibility shim, migrate those callers first.
+3. Keep only the smallest compatibility surface needed to avoid accidental API regressions.
+
+When compatibility is required:
+
+- prefer reading from V2 blocks/components first,
+- fall back to raw aliases only when necessary,
+- document the reason in code with a short comment.
+
+## Tests
+
+Add or update tests in the area you changed:
+
+- `tests/test_scoring_model_v2.py` for V2 bundle assembly, conditioning, and explanation behavior
+- `tests/test_feature_normalization.py` for raw-feature and component interactions
+- `tests/test_scoring_engine.py` for ranking, drift caps, and history fallbacks
+- `tests/test_regimes_and_labels.py` for hard-rule and label integration
+
+Minimum expectations:
+
+- no new dependencies,
+- typed code,
+- deterministic tests,
+- `pytest` should pass before merging.

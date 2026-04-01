@@ -3,6 +3,15 @@ from regimes.hard_rules import HardRuleResult
 from stress.scenarios import StressTestResult
 
 
+def _bundle_score(bundle: FeatureBundle, key: str, fallback: float = 0.0) -> float:
+    if key in bundle.core_blocks:
+        return float(bundle.core_blocks.get(key, fallback))
+    if key in bundle.base_components:
+        return float(bundle.base_components.get(key, fallback))
+    value = bundle.raw.get(key)
+    return fallback if value is None else float(value)
+
+
 def _sorted_drivers(bundle: FeatureBundle, output: str, positive: bool) -> list[tuple[str, float, object]]:
     scored = []
     for metric in bundle.metrics.values():
@@ -43,6 +52,80 @@ def _to_desirability_contribution(item: dict, invert: bool = False) -> dict:
     return normalized
 
 
+def _sorted_primary_contributions(bundle: FeatureBundle, signal_name: str, invert: bool = False) -> list[dict]:
+    return sorted(
+        [_to_desirability_contribution(item, invert=invert) for item in bundle.contributions.get(signal_name, [])],
+        key=lambda item: abs(item.get("signed_contribution", 0.0)),
+        reverse=True,
+    )
+
+
+def _conditioning_uncertainties(bundle: FeatureBundle) -> list[dict]:
+    conditioned = bundle.conditioned
+    if conditioned is None:
+        return []
+    reliability_specs = {
+        "market_data_reliability": (
+            "market_data_reliability",
+            "Conditioned market telemetry is thin, stale, or heavily repaired.",
+            "conditioning",
+        ),
+        "validator_data_reliability": (
+            "validator_data_reliability",
+            "Validator-side evidence is too sparse to fully trust consensus structure.",
+            "conditioning",
+        ),
+        "history_data_reliability": (
+            "history_data_reliability",
+            "Historical depth is too limited for a stable before-versus-now read.",
+            "conditioning",
+        ),
+        "external_data_reliability": (
+            "external_data_reliability",
+            "External corroboration remains light, so the thesis relies mostly on onchain evidence.",
+            "conditioning",
+        ),
+    }
+    uncertainties: list[dict] = []
+    for key, (name, explanation, source_block) in reliability_specs.items():
+        value = conditioned.reliability.get(key, 0.0)
+        if value < 0.55:
+            uncertainties.append(
+                {
+                    "name": name,
+                    "signed_contribution": round(value - 0.5, 4),
+                    "direction": "negative",
+                    "short_explanation": explanation,
+                    "source_block": source_block,
+                }
+            )
+    reconstructed = conditioned.visibility.get("reconstructed", [])
+    if reconstructed:
+        ratio = len(reconstructed) / max(len(conditioned.values), 1)
+        uncertainties.append(
+            {
+                "name": "reconstructed_inputs",
+                "signed_contribution": round(-ratio, 4),
+                "direction": "negative",
+                "short_explanation": "Some inputs were reconstructed during conditioning, which lowers conviction in the final mix.",
+                "source_block": "conditioning",
+            }
+        )
+    discarded = conditioned.visibility.get("discarded", [])
+    if discarded:
+        ratio = len(discarded) / max(len(conditioned.values), 1)
+        uncertainties.append(
+            {
+                "name": "discarded_inputs",
+                "signed_contribution": round(-ratio, 4),
+                "direction": "negative",
+                "short_explanation": "Some unusable inputs were discarded during conditioning, so visibility is incomplete.",
+                "source_block": "conditioning",
+            }
+        )
+    return uncertainties
+
+
 def build_explanation(
     bundle: FeatureBundle,
     signals: PrimarySignals,
@@ -73,68 +156,38 @@ def build_explanation(
         name: round(score * 100, 2)
         for name, score in bundle.core_blocks.items()
     }
-    uncertainties = []
-    if (bundle.raw.get("data_confidence") or 0.0) < 0.5:
-        uncertainties.append(
-            {
-                "name": "data_confidence",
-                "signed_contribution": round((bundle.raw.get("data_confidence") or 0.0) - 0.5, 4),
-                "direction": "negative",
-                "short_explanation": "Conditioned telemetry is still too thin or too repaired to fully trust the signal.",
-                "source_block": "evidence_confidence",
-            }
-        )
-    if (bundle.raw.get("market_confidence") or 0.0) < 0.5:
-        uncertainties.append(
-            {
-                "name": "market_confidence",
-                "signed_contribution": round((bundle.raw.get("market_confidence") or 0.0) - 0.5, 4),
-                "direction": "negative",
-                "short_explanation": "Market structure remains too weak for a fully investable read-through.",
-                "source_block": "evidence_confidence",
-            }
-        )
-    if (bundle.raw.get("thesis_confidence") or 0.0) < 0.5:
-        uncertainties.append(
-            {
-                "name": "thesis_confidence",
-                "signed_contribution": round((bundle.raw.get("thesis_confidence") or 0.0) - 0.5, 4),
-                "direction": "negative",
-                "short_explanation": "The improvement thesis still has internal contradictions or reflexive dependence.",
-                "source_block": "evidence_confidence",
-            }
-        )
-    top_positive_drivers = sorted(
-        primary_contributors["fundamental_quality"] + primary_contributors["mispricing_signal"],
-        key=lambda item: item.get("signed_contribution", 0.0),
-        reverse=True,
-    )[:5]
-    fragility_desirability = [
-        _to_desirability_contribution(item, invert=True)
-        for item in primary_contributors["fragility_risk"]
-    ]
-    confidence_desirability = [
-        _to_desirability_contribution(item)
-        for item in primary_contributors["signal_confidence"]
-    ]
-    top_negative_drags = sorted(
-        fragility_desirability + confidence_desirability,
-        key=lambda item: item.get("signed_contribution", 0.0),
+    v2_desirability = (
+        _sorted_primary_contributions(bundle, "fundamental_quality")
+        + _sorted_primary_contributions(bundle, "mispricing_signal")
+        + _sorted_primary_contributions(bundle, "signal_confidence")
+        + _sorted_primary_contributions(bundle, "fragility_risk", invert=True)
     )
-    top_negative_drags = [item for item in top_negative_drags if item.get("signed_contribution", 0.0) <= 0][:5]
+    top_positive_drivers = [
+        item for item in sorted(v2_desirability, key=lambda entry: entry.get("signed_contribution", 0.0), reverse=True)
+        if item.get("signed_contribution", 0.0) > 0
+    ][:5]
+    top_negative_drags = [
+        item for item in sorted(v2_desirability, key=lambda entry: entry.get("signed_contribution", 0.0))
+        if item.get("signed_contribution", 0.0) < 0
+    ][:5]
+    uncertainties = _conditioning_uncertainties(bundle)
+    for item in _sorted_primary_contributions(bundle, "signal_confidence"):
+        if item.get("signed_contribution", 0.0) < 0:
+            uncertainties.append(item)
+    uncertainties = sorted(uncertainties, key=lambda item: item.get("signed_contribution", 0.0))[:5]
 
     thesis_breakers = []
-    if (bundle.raw.get("price_response_lag_to_quality_shift") or 0.0) < 0.02:
+    if _bundle_score(bundle, "price_lag", bundle.raw.get("price_response_lag_to_quality_shift") or 0.0) < 0.02:
         thesis_breakers.append("Price has already largely caught up to the quality improvement.")
     if signals.fragility_risk > 0.65:
         thesis_breakers.append("Fragility is already high; any outflow shock would likely dominate the upside thesis.")
     if signals.signal_confidence < 0.45:
         thesis_breakers.append("Evidence quality is too weak or stale to rely on the current signal mix.")
-    if (bundle.raw.get("thesis_confidence") or 0.0) < 0.45:
+    if _bundle_score(bundle, "thesis_confidence", signals.signal_confidence) < 0.45:
         thesis_breakers.append("Market structure and crowding still make the thesis too fragile to treat as high-conviction.")
     if (bundle.raw.get("post_incentive_retention") or 0.0) <= 0.0:
         thesis_breakers.append("Usage is not retaining once incentives normalize, which weakens the structural thesis.")
-    if (bundle.raw.get("market_structure_floor") or 0.0) < 0.45:
+    if _bundle_score(bundle, "market_structure_floor") < 0.45:
         thesis_breakers.append("Market structure is still too thin for larger capital to enter or exit without dominating the thesis.")
 
     return {
@@ -170,10 +223,10 @@ def build_explanation(
         "confidence_rationale": {
             "supports": confidence_support,
             "headwinds": confidence_headwinds,
-            "evidence_confidence": round((bundle.raw.get("evidence_confidence") or 0.0) * 100, 2),
-            "thesis_confidence": round((bundle.raw.get("thesis_confidence") or 0.0) * 100, 2),
-            "data_confidence": round((bundle.raw.get("data_confidence") or 0.0) * 100, 2),
-            "market_confidence": round((bundle.raw.get("market_confidence") or 0.0) * 100, 2),
+            "evidence_confidence": round(_bundle_score(bundle, "evidence_confidence") * 100, 2),
+            "thesis_confidence": round(_bundle_score(bundle, "thesis_confidence") * 100, 2),
+            "data_confidence": round(_bundle_score(bundle, "data_confidence") * 100, 2),
+            "market_confidence": round(_bundle_score(bundle, "market_confidence") * 100, 2),
         },
         "quality_rationale": {
             "supports": quality_support,

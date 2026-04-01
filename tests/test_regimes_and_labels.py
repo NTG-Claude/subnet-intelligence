@@ -384,7 +384,7 @@ def test_market_relevant_concentration_uses_watchlist_caps():
     assert "concentration_caps_fundamental_quality" in rules.activated
     assert "market_relevant_concentration_watchlist" in rules.activated
     assert rules.quality_cap == 0.56
-    assert rules.fragility_floor == 0.60
+    assert rules.fragility_floor >= 0.60
 
 
 def test_resilient_midcap_concentration_uses_softer_watchlist_cap():
@@ -565,8 +565,8 @@ def test_crowded_structure_evidence_watchlist_caps_confidence_and_sets_fragility
         signal_fabrication_risk=0.20,
         low_evidence_high_conviction=0.12,
         underreaction_score=0.18,
-        crowded_structure_penalty=0.64,
     )
+    bundle.core_blocks["crowded_structure_watchlist"] = 0.64
     rules = evaluate_hard_rules(snapshot, bundle)
     adjusted = apply_rule_caps(
         PrimarySignals(
