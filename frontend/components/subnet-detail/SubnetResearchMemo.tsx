@@ -25,7 +25,7 @@ export default function SubnetResearchMemo({ memo }: { memo: DetailMemoViewModel
       </Link>
 
       <section className="rounded-[2rem] border border-white/10 bg-[#10151b] p-5 sm:p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_340px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_360px]">
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="neutral">{memo.netuidLabel}</StatusBadge>
@@ -42,7 +42,10 @@ export default function SubnetResearchMemo({ memo }: { memo: DetailMemoViewModel
                 <div className="text-sm text-stone-500">Updated {memo.updatedLabel}</div>
               </div>
               <p className="max-w-4xl text-base leading-7 text-stone-300">{memo.thesis}</p>
-              <div className="max-w-4xl text-sm leading-6 text-stone-400">{memo.decisionLine}</div>
+              <div className="rounded-2xl border border-sky-500/20 bg-sky-500/[0.05] p-4 text-sm leading-6 text-stone-300">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-sky-200">Decision framing</div>
+                <div className="mt-2">{memo.decisionLine}</div>
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -52,10 +55,20 @@ export default function SubnetResearchMemo({ memo }: { memo: DetailMemoViewModel
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-stone-950 p-4">
-            <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Investment summary</div>
-            <div className="mt-4">
-              <MetricGrid items={memo.summaryMetrics} />
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-white/10 bg-stone-950 p-4">
+              <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Investment summary</div>
+              <div className="mt-4">
+                <MetricGrid items={memo.summaryMetrics} />
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-violet-500/20 bg-violet-500/[0.05] p-4">
+              <div className="text-[11px] uppercase tracking-[0.24em] text-violet-200">How to read this memo</div>
+              <div className="mt-3 space-y-3 text-sm leading-6 text-stone-300">
+                <p>Start with the thesis and the four primary signals. Then check whether the positive case survives the failure modes and confidence sections.</p>
+                <p>Only treat the raw market context as supporting evidence. It should not be the first decision input.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -107,6 +120,12 @@ export default function SubnetResearchMemo({ memo }: { memo: DetailMemoViewModel
       >
         <div className="space-y-5">
           <MetricGrid items={memo.confidenceHeadline} />
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-4 text-sm leading-6 text-stone-300">
+            <div className="text-[11px] uppercase tracking-[0.24em] text-amber-200">Trust interpretation</div>
+            <p className="mt-2">
+              Reliability shows how complete and stable the input evidence was. Visibility tells us whether the model had to reconstruct, bound, or discard parts of the underlying telemetry.
+            </p>
+          </div>
           <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
             <div>
               <div className="mb-3 text-[11px] uppercase tracking-[0.24em] text-stone-500">Conditioning reliability</div>
@@ -143,22 +162,27 @@ export default function SubnetResearchMemo({ memo }: { memo: DetailMemoViewModel
         subtitle="Classic market fields stay available, but only after the thesis, break risk, and trust sections."
         className="bg-[#10151b]"
       >
-        <div className="space-y-5">
-          <MetricList items={memo.rawContext} />
-          <div className="flex flex-wrap gap-2">
-            {memo.links.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-2xl border border-white/10 bg-stone-950 px-3 py-2 text-sm text-stone-300 transition-colors hover:bg-white/[0.08]"
-              >
-                {link.label}
-              </a>
-            ))}
+        <details className="group rounded-2xl border border-white/10 bg-stone-950 p-4 open:border-white/15">
+          <summary className="cursor-pointer list-none text-sm font-medium text-stone-200">
+            Expand raw market context and external links
+          </summary>
+          <div className="mt-5 space-y-5">
+            <MetricList items={memo.rawContext} />
+            <div className="flex flex-wrap gap-2">
+              {memo.links.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-2xl border border-white/10 bg-[#131922] px-3 py-2 text-sm text-stone-300 transition-colors hover:bg-white/[0.08]"
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
+        </details>
       </ResearchPanel>
     </div>
   )

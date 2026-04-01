@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 
 import { SubnetSummary } from '@/lib/api'
+import RankingSnapshot from '@/components/universe/RankingSnapshot'
 import {
   UNIVERSE_LENSES,
   UNIVERSE_SORTS,
@@ -23,6 +24,8 @@ interface Props {
   focusedUniverse: number
   awaitingRunCount: number
   lowConfidenceCount: number
+  leaderboardTop: SubnetSummary[]
+  leaderboardBottom: SubnetSummary[]
 }
 
 function queryMatches(subnet: SubnetSummary, query: string): boolean {
@@ -49,9 +52,11 @@ export default function UniverseWorkspace({
   focusedUniverse,
   awaitingRunCount,
   lowConfidenceCount,
+  leaderboardTop,
+  leaderboardBottom,
 }: Props) {
   const [search, setSearch] = useState('')
-  const [lensId, setLensId] = useState('high-mispricing-confidence')
+  const [lensId, setLensId] = useState('all')
   const [sortId, setSortId] = useState<UniverseSortId>('rank')
   const [telemetryOnly, setTelemetryOnly] = useState(false)
   const [selectedOnly, setSelectedOnly] = useState(false)
@@ -93,7 +98,7 @@ export default function UniverseWorkspace({
 
   const resetAll = () => {
     setSearch('')
-    setLensId('high-mispricing-confidence')
+    setLensId('all')
     setSortId('rank')
     setTelemetryOnly(false)
     setSelectedOnly(false)
@@ -121,71 +126,95 @@ export default function UniverseWorkspace({
   return (
     <div className="space-y-6">
       <section className="rounded-[1.9rem] border border-white/10 bg-[#10151b] p-4 sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-3">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] xl:items-end">
+          <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="neutral">Universe workspace</StatusBadge>
+              <StatusBadge tone="neutral">Universe</StatusBadge>
               <StatusBadge tone={lastRun ? (isStale(lastRun) ? 'warning' : 'confidence') : 'warning'}>
                 {lastRun ? (isStale(lastRun) ? 'Stale run' : 'Run live') : 'Awaiting run'}
               </StatusBadge>
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-stone-50 sm:text-3xl">V2-native research workspace</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-stone-50 sm:text-3xl">Ranking-first subnet research</h1>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-stone-400">
-                Screen first, then open the memo. The universe list is the primary surface; the lens panels below are only secondary shortcuts for idea discovery.
+                Start with the overall ranking, narrow with one lens, then open the memo only when a name survives the first pass. The page should answer what matters, why it matters, and how trustworthy the read is.
               </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-stone-950 p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">How to use this</div>
+                <p className="mt-2 text-sm leading-6 text-stone-400">
+                  Read left to right: rank, thesis, support, risks, then trust.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-stone-950 p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Default answer</div>
+                <p className="mt-2 text-sm leading-6 text-stone-400">
+                  Overall ranking is now the default universe view instead of a special lens.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-stone-950 p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Trust rule</div>
+                <p className="mt-2 text-sm leading-6 text-stone-400">
+                  Low confidence and telemetry repairs stay visible, but never hidden inside deep memo sections.
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] xl:min-w-[440px]">
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value)
-                setPage(0)
-              }}
-              placeholder="Search subnet, thesis, label, netuid..."
-              className="w-full rounded-2xl border border-white/10 bg-stone-950 px-4 py-3 text-sm text-stone-100 outline-none placeholder:text-stone-500 focus:border-white/20"
-            />
-            <button
-              onClick={resetAll}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-stone-300 transition-colors hover:bg-white/[0.08]"
-            >
-              Clear filters
-            </button>
-          </div>
-        </div>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPage(0)
+                }}
+                aria-label="Search subnets"
+                placeholder="Search subnet, thesis, label, netuid..."
+                className="w-full rounded-2xl border border-white/10 bg-stone-950 px-4 py-3 text-sm text-stone-100 outline-none placeholder:text-stone-500 focus:border-white/20"
+              />
+              <button
+                onClick={resetAll}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-stone-300 transition-colors hover:bg-white/[0.08]"
+              >
+                Clear filters
+              </button>
+            </div>
 
-        <div className="mt-4">
-          <MetricGrid
-            dense
-            items={[
-              {
-                label: 'Last run',
-                value: lastRun
-                  ? new Date(lastRun).toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      timeZone: 'UTC',
-                      timeZoneName: 'short',
-                    })
-                  : 'No run',
-              },
-              { label: 'Tracked subnets', value: String(trackedUniverse) },
-              { label: 'Focused universe', value: String(focusedUniverse) },
-              { label: 'Awaiting run', value: String(awaitingRunCount), tone: awaitingRunCount ? 'warning' : 'neutral' },
-              { label: 'Low confidence', value: String(lowConfidenceCount), tone: lowConfidenceCount ? 'confidence' : 'neutral' },
-            ]}
-          />
+            <MetricGrid
+              dense
+              items={[
+                {
+                  label: 'Last run',
+                  value: lastRun
+                    ? new Date(lastRun).toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'UTC',
+                        timeZoneName: 'short',
+                      })
+                    : 'No run',
+                },
+                { label: 'Tracked subnets', value: String(trackedUniverse) },
+                { label: 'Focused universe', value: String(focusedUniverse) },
+                { label: 'Awaiting run', value: String(awaitingRunCount), tone: awaitingRunCount ? 'warning' : 'neutral' },
+                { label: 'Low confidence', value: String(lowConfidenceCount), tone: lowConfidenceCount ? 'confidence' : 'neutral' },
+              ]}
+            />
+          </div>
         </div>
       </section>
 
+      <RankingSnapshot top={leaderboardTop} bottom={leaderboardBottom} />
+
       <ResearchPanel
         title="Filters / Saved Views / Quick Lenses"
-        subtitle="Use the saved views to jump into a research slice, then tighten the list with workflow chips and sorting."
+        subtitle="The list stays primary. Use one saved view or one workflow chip at a time so the screen remains readable."
         className="bg-[#10151b]"
       >
         <div className="space-y-4">
@@ -197,6 +226,7 @@ export default function UniverseWorkspace({
                   setLensId(lens.id)
                   setPage(0)
                 }}
+                aria-pressed={lensId === lens.id}
                 className={cn(
                   'rounded-full border px-3 py-2 text-xs font-medium transition-colors',
                   lensId === lens.id
@@ -218,6 +248,7 @@ export default function UniverseWorkspace({
                     setTelemetryOnly((value) => !value)
                     setPage(0)
                   }}
+                  aria-pressed={telemetryOnly}
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-xs transition-colors',
                     telemetryOnly ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-white/10 bg-stone-950 text-stone-400',
@@ -230,6 +261,7 @@ export default function UniverseWorkspace({
                     setExcludeFragile((value) => !value)
                     setPage(0)
                   }}
+                  aria-pressed={excludeFragile}
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-xs transition-colors',
                     excludeFragile ? 'border-rose-500/30 bg-rose-500/10 text-rose-200' : 'border-white/10 bg-stone-950 text-stone-400',
@@ -242,6 +274,7 @@ export default function UniverseWorkspace({
                     setSelectedOnly((value) => !value)
                     setPage(0)
                   }}
+                  aria-pressed={selectedOnly}
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-xs transition-colors',
                     selectedOnly ? 'border-sky-500/30 bg-sky-500/10 text-sky-200' : 'border-white/10 bg-stone-950 text-stone-400',
@@ -252,21 +285,25 @@ export default function UniverseWorkspace({
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 xl:justify-end">
-              {UNIVERSE_SORTS.map((sort) => (
-                <button
-                  key={sort.id}
-                  onClick={() => setSortId(sort.id)}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs transition-colors',
-                    sortId === sort.id
-                      ? 'border-violet-500/30 bg-violet-500/10 text-violet-200'
-                      : 'border-white/10 bg-stone-950 text-stone-400 hover:border-white/20 hover:text-stone-200',
-                  )}
-                >
-                  Sort: {sort.label}
-                </button>
-              ))}
+            <div className="space-y-3 xl:text-right">
+              <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Sort order</div>
+              <div className="flex flex-wrap gap-2 xl:justify-end">
+                {UNIVERSE_SORTS.map((sort) => (
+                  <button
+                    key={sort.id}
+                    onClick={() => setSortId(sort.id)}
+                    aria-pressed={sortId === sort.id}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                      sortId === sort.id
+                        ? 'border-violet-500/30 bg-violet-500/10 text-violet-200'
+                        : 'border-white/10 bg-stone-950 text-stone-400 hover:border-white/20 hover:text-stone-200',
+                    )}
+                  >
+                    Sort: {sort.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -274,7 +311,7 @@ export default function UniverseWorkspace({
 
       <ResearchPanel
         title="Main Result List"
-        subtitle="Each row should answer the same workflow question: why is this interesting, what breaks it, and how much should we trust the evidence."
+        subtitle="Each row now follows one consistent decision sequence: ranking, thesis, support, break risk, and trust."
         className="bg-[#10151b]"
       >
         <ResearchList
@@ -286,8 +323,13 @@ export default function UniverseWorkspace({
         />
 
         <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-white/10 bg-stone-950 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-stone-400">
-            {rows.length} result{rows.length === 1 ? '' : 's'}
+          <div className="space-y-1">
+            <div className="text-sm text-stone-300">
+              {rows.length} result{rows.length === 1 ? '' : 's'}
+            </div>
+            <div className="text-xs text-stone-500">
+              {sortId === 'rank' ? 'Showing the current overall order first.' : `Sorted by ${UNIVERSE_SORTS.find((item) => item.id === sortId)?.label?.toLowerCase()}.`}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -313,7 +355,7 @@ export default function UniverseWorkspace({
 
       <ResearchPanel
         title="Secondary Insight Area"
-        subtitle="These lens boards help you spot candidates fast, but they should always feed back into the memo and compare workflow."
+        subtitle="These boards are now secondary by design. They help you branch out after the ranking has already oriented you."
         className="bg-[#10151b]"
       >
         <PrimarySignalBoard subnets={filteredSubnets.filter((subnet) => subnet.primary_outputs)} />

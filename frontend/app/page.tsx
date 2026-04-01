@@ -1,12 +1,13 @@
 import UniverseWorkspace from '@/components/universe/UniverseWorkspace'
-import { fetchLatestRun, fetchSubnets } from '@/lib/api'
+import { fetchLatestRun, fetchLeaderboard, fetchSubnets } from '@/lib/api'
 
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
-  const [{ subnets }, latest] = await Promise.all([
+  const [{ subnets }, latest, leaderboard] = await Promise.all([
     fetchSubnets(200).catch(() => ({ subnets: [], total: 0 })),
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
+    fetchLeaderboard().catch(() => ({ top: [], bottom: [] })),
   ])
 
   const scored = subnets.filter((subnet) => subnet.primary_outputs)
@@ -24,6 +25,8 @@ export default async function HomePage() {
       focusedUniverse={focusedUniverse.length}
       awaitingRunCount={awaitingRunCount}
       lowConfidenceCount={lowConfidenceCount}
+      leaderboardTop={leaderboard.top}
+      leaderboardBottom={leaderboard.bottom}
     />
   )
 }

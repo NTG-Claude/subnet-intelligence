@@ -17,7 +17,7 @@ export default function SecondaryResearchLenses({ subnets }: { subnets: SubnetSu
       {boards.map((board) => (
         <section key={board.id} className="rounded-3xl border border-white/10 bg-[#11161c] p-5">
           <div className="space-y-1">
-            <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Research lens</div>
+            <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Quick lens</div>
             <h3 className="text-lg font-semibold text-stone-50">{board.title}</h3>
             <p className="text-sm leading-6 text-stone-400">{board.description}</p>
           </div>
@@ -32,8 +32,8 @@ export default function SecondaryResearchLenses({ subnets }: { subnets: SubnetSu
 
                 <div className="mt-3 flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <div className="text-base font-semibold text-stone-100">{row.name}</div>
-                    <p className="mt-1 text-sm leading-6 text-stone-400">{row.decisionLine}</p>
+                    <div className="text-base font-semibold text-stone-100">{row.rankLabel} {row.name}</div>
+                    <p className="mt-1 text-sm leading-6 text-stone-400">{row.thesisLine}</p>
                   </div>
                   <div className="min-w-[120px] text-right">
                     <div className="text-xs uppercase tracking-[0.2em] text-stone-500">Trust</div>

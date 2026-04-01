@@ -12,9 +12,9 @@ export default function CompareGrid({ memos }: { memos: DetailMemoViewModel[] })
         </Link>
         <div>
           <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Compare</div>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-stone-50">Side-by-side V2 analysis</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-stone-50">Decision desk</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-400">
-            Compare primary signals, core blocks, drivers and drags, confidence profile, and stress readouts without collapsing back into one composite score.
+            Compare primary signals, core blocks, drivers and drags, confidence profile, and stress readouts without collapsing everything back into one composite number.
           </p>
         </div>
       </div>

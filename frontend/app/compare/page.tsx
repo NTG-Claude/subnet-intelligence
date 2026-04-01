@@ -25,7 +25,7 @@ export default async function ComparePage({ searchParams }: Props) {
         <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Compare</div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-stone-50">No subnets selected</h1>
         <p className="mt-2 text-sm leading-6 text-stone-400">
-          Add two to four names from the universe list to compare signals, drivers, confidence, and stress side by side.
+          Add two to four names from the ranking list to compare thesis, support, risks, confidence, and execution side by side.
         </p>
       </div>
     )
