@@ -14,6 +14,7 @@ from scoring.engine import (
     _stabilize_priority_with_history,
     build_scores,
 )
+from stress.scenarios import run_stress_tests
 
 
 def test_apply_total_cap_keeps_plain_caps_for_non_negative_rules():
@@ -229,3 +230,90 @@ def test_ranking_priority_drift_cap_is_respected():
     stabilized = _stabilize_priority_with_history(snapshot, bundle, current_score)
 
     assert stabilized <= history_score + RANKING_DRIFT_CAP
+
+
+def test_stress_tests_prefer_v2_components_over_raw_proxy_gaps():
+    snapshot = RawSubnetSnapshot(netuid=21, current_block=1000)
+    axes = AxisScores(
+        intrinsic_quality=0.62,
+        economic_sustainability=0.58,
+        reflexivity=0.34,
+        stress_robustness=0.64,
+        opportunity_gap=0.12,
+    )
+    resilient_bundle = FeatureBundle(
+        raw={
+            "active_ratio": 0.05,
+            "meaningful_discrimination": 0.10,
+            "liquidity_thinness": 0.90,
+            "validator_dominance": 0.80,
+            "crowding_proxy": 0.75,
+            "market_relevance_proxy": 0.20,
+        },
+        base_components={
+            "participation_health": 0.76,
+            "validator_health": 0.72,
+            "liquidity_health": 0.74,
+        },
+        core_blocks={
+            "fundamental_health": 0.70,
+            "market_confidence": 0.68,
+            "market_legitimacy": 0.65,
+            "concentration_risk": 0.22,
+            "crowding_level": 0.18,
+            "thin_liquidity_risk": 0.26,
+            "weak_market_structure": 0.24,
+        },
+    )
+    fragile_bundle = FeatureBundle(
+        raw=resilient_bundle.raw.copy(),
+        base_components={
+            "participation_health": 0.28,
+            "validator_health": 0.26,
+            "liquidity_health": 0.24,
+        },
+        core_blocks={
+            "fundamental_health": 0.30,
+            "market_confidence": 0.25,
+            "market_legitimacy": 0.22,
+            "concentration_risk": 0.84,
+            "crowding_level": 0.78,
+            "thin_liquidity_risk": 0.82,
+            "weak_market_structure": 0.80,
+        },
+    )
+
+    resilient = run_stress_tests(snapshot, resilient_bundle, axes)
+    fragile = run_stress_tests(snapshot, fragile_bundle, axes)
+
+    assert resilient.max_drawdown < fragile.max_drawdown
+    assert resilient.robustness > fragile.robustness
+
+
+def test_stress_tests_remain_stable_with_legacy_raw_fallbacks():
+    snapshot = RawSubnetSnapshot(netuid=22, current_block=1000)
+    axes = AxisScores(
+        intrinsic_quality=0.55,
+        economic_sustainability=0.51,
+        reflexivity=0.40,
+        stress_robustness=0.57,
+        opportunity_gap=0.05,
+    )
+    bundle = FeatureBundle(
+        raw={
+            "active_ratio": 0.24,
+            "meaningful_discrimination": 0.33,
+            "liquidity_thinness": 0.42,
+            "validator_dominance": 0.36,
+            "incentive_concentration": 0.31,
+            "crowding_proxy": 0.28,
+            "market_relevance_proxy": 0.44,
+        }
+    )
+
+    result = run_stress_tests(snapshot, bundle, axes)
+
+    assert len(result.scenarios) == 7
+    assert 0.0 <= result.max_drawdown <= 1.0
+    assert 0.0 <= result.robustness <= 1.0
+    assert result.fragility_class in {"robust", "watchlist", "fragile"}
