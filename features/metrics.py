@@ -1,5 +1,6 @@
 import math
 from collections import defaultdict
+from datetime import datetime
 from statistics import fmean
 from typing import Iterable
 
@@ -84,9 +85,57 @@ def simulate_tao_buy_slippage(tao_reserve: float, alpha_reserve: float, tao_in: 
 def _freshness(snapshot: RawSubnetSnapshot, lookback_blocks: int) -> float:
     if not snapshot.last_update_blocks:
         return 0.0
-    recent = sum(1 for block in snapshot.last_update_blocks if block >= snapshot.current_block - lookback_blocks)
-    denom = snapshot.yuma_neurons or snapshot.n_total or 1
-    return clamp01(recent / denom)
+    ages = [max(snapshot.current_block - block, 0) for block in snapshot.last_update_blocks if block is not None]
+    if not ages:
+        return 0.0
+    recent_share = safe_ratio(sum(1 for age in ages if age <= lookback_blocks), len(ages))
+    median_age = sorted(ages)[len(ages) // 2]
+    age_decay = math.exp(-safe_ratio(median_age, max(lookback_blocks * 1.5, 1)))
+    coverage = safe_ratio(
+        len(ages),
+        max(snapshot.yuma_neurons or snapshot.n_total or len(ages), 1),
+    )
+    return clamp01(0.55 * recent_share + 0.35 * age_decay + 0.10 * coverage)
+
+
+def _parse_iso_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _history_depth_score(history: list[HistoricalFeaturePoint]) -> float:
+    if not history:
+        return 0.0
+    expected_fields = [
+        "alpha_price_tao",
+        "tao_in_pool",
+        "emission_per_block_tao",
+        "active_ratio",
+        "concentration_proxy",
+        "liquidity_thinness",
+        "fundamental_quality",
+    ]
+    field_presence = [
+        safe_ratio(
+            sum(1 for point in history if getattr(point, field) is not None),
+            len(history),
+        )
+        for field in expected_fields
+    ]
+    avg_field_presence = fmean(field_presence) if field_presence else 0.0
+    parsed_timestamps = [dt for dt in (_parse_iso_timestamp(point.timestamp) for point in history) if dt is not None]
+    unique_days = len({dt.date() for dt in parsed_timestamps})
+    point_depth = clamp01(len(history) / 18.0)
+    time_depth = clamp01(unique_days / 14.0)
+    return clamp01(
+        0.40 * point_depth
+        + 0.35 * avg_field_presence
+        + 0.25 * time_depth
+    )
 
 
 def _history_values(history: list[HistoricalFeaturePoint], attr: str) -> list[float]:
@@ -285,6 +334,7 @@ def _expected_reserve_response(
 def _signal_fabrication_risk(
     proxy_reliance_penalty: float,
     data_coverage: float,
+    consensus_signal_gap: float,
     confidence_thesis_coherence: float,
     overreaction_score: float,
     crowding_proxy: float,
@@ -294,10 +344,11 @@ def _signal_fabrication_risk(
 ) -> float:
     return clamp01(
         0.35 * proxy_reliance_penalty
-        + 0.20 * (1.0 - data_coverage)
-        + 0.20 * (1.0 - confidence_thesis_coherence)
-        + 0.15 * overreaction_score
-        + 0.10 * crowding_proxy
+        + 0.18 * (1.0 - data_coverage)
+        + 0.14 * consensus_signal_gap
+        + 0.16 * (1.0 - confidence_thesis_coherence)
+        + 0.12 * overreaction_score
+        + 0.08 * crowding_proxy
         - 0.12 * low_manipulation_signal_share
         - 0.10 * market_structure_floor
         - 0.08 * market_relevance
@@ -563,6 +614,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         + 0.15 * external_evidence_coverage
         + 0.10 * validator_signal_coverage
     )
+    consensus_signal_gap = clamp01(1.0 - validator_signal_coverage)
     expected_price_response = _expected_price_response(
         quality_change,
         reserve_change,
@@ -608,7 +660,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         + 0.20 * reversal_risk
     )
     freshness = _freshness(snapshot, lookback_blocks=7200)
-    history_depth_score = clamp01(len(history) / 6.0)
+    history_depth_score = _history_depth_score(history)
     onchain_evidence_support = clamp01(
         0.40 * market_structure_floor
         + 0.30 * market_relevance
@@ -617,11 +669,12 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     )
     proxy_reliance_penalty = clamp01(
         (
-            0.36 * (1.0 - freshness)
-            + 0.24 * (1.0 - history_depth_score)
+            0.30 * (1.0 - freshness)
+            + 0.20 * (1.0 - history_depth_score)
             + 0.16 * (1.0 if snapshot.github else 0.0)
             + 0.12 * (1.0 - data_coverage)
-            + 0.12 * crowding_proxy
+            + 0.10 * crowding_proxy
+            + 0.12 * consensus_signal_gap
         )
         * (1.0 - 0.45 * onchain_evidence_support)
     )
@@ -630,11 +683,13 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         + 0.22 * (1.0 - concentration_now)
         + 0.22 * market_structure_floor
         + 0.20 * market_relevance
-        + 0.12 * data_coverage
+        + 0.08 * data_coverage
+        + 0.06 * (1.0 - consensus_signal_gap)
     )
     signal_fabrication_risk = _signal_fabrication_risk(
         proxy_reliance_penalty,
         data_coverage,
+        consensus_signal_gap,
         confidence_thesis_coherence,
         overreaction_score,
         crowding_proxy,
@@ -706,6 +761,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "market_signal_coverage": market_signal_coverage,
         "history_signal_coverage": history_signal_coverage,
         "external_evidence_coverage": external_evidence_coverage,
+        "consensus_signal_gap": consensus_signal_gap,
         "history_depth_score": history_depth_score,
         "onchain_evidence_support": onchain_evidence_support,
         "proxy_reliance_penalty": proxy_reliance_penalty,
@@ -774,6 +830,7 @@ METRIC_MAP = {
     "reserve_growth_without_price": ("needs_history", "mispricing_signal", 0.10, False),
     "participation_without_crowding": ("needs_history", "mispricing_signal", 0.09, False),
     "data_coverage": ("derived_onchain", "signal_confidence", 0.20, False),
+    "consensus_signal_gap": ("derived_onchain", "signal_confidence", 0.14, True),
     "history_depth_score": ("needs_history", "signal_confidence", 0.18, False),
     "proxy_reliance_penalty": ("derived_onchain", "signal_confidence", 0.20, True),
     "low_manipulation_signal_share": ("derived_onchain", "signal_confidence", 0.16, False),
@@ -799,6 +856,7 @@ def _normalize_metric_value(key: str, value: float | None, population: list[floa
         "bond_responsiveness",
         "update_freshness",
         "data_coverage",
+        "consensus_signal_gap",
         "history_depth_score",
         "proxy_reliance_penalty",
         "low_manipulation_signal_share",
@@ -922,6 +980,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         crowding_proxy = clamp01(bundle.raw.get("crowding_proxy") or 0.0)
         market_structure_floor = clamp01(bundle.raw.get("market_structure_floor") or 0.0)
         market_relevance_proxy = clamp01(bundle.raw.get("market_relevance_proxy") or 0.0)
+        consensus_signal_gap = clamp01(bundle.raw.get("consensus_signal_gap") or 0.0)
         concentration_penalty = clamp01(
             max(
                 bundle.raw.get("validator_dominance") or 0.0,
@@ -965,6 +1024,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             + 0.08 * clamp01(bundle.raw.get("low_manipulation_signal_share") or 0.0)
             + 0.08 * market_structure_floor
             + 0.08 * market_relevance_proxy
+            + 0.06 * (1.0 - consensus_signal_gap)
             - 0.08 * clamp01(bundle.raw.get("low_evidence_high_conviction") or 0.0)
         )
         reflexive_confidence_drag = clamp01(
@@ -996,6 +1056,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             - 0.14 * yield_heat
             - 0.14 * fragility_excess
             - 0.12 * (1.0 - market_structure_floor)
+            - 0.10 * consensus_signal_gap
         )
         adjusted_thesis_confidence = clamp01(
             thesis_confidence

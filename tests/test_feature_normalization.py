@@ -84,6 +84,61 @@ def test_data_coverage_reflects_live_signal_family_availability():
     assert rich.raw["market_signal_coverage"] > poor.raw["market_signal_coverage"]
     assert rich.raw["history_signal_coverage"] > poor.raw["history_signal_coverage"]
     assert rich.raw["data_coverage"] > poor.raw["data_coverage"]
+    assert rich.raw["consensus_signal_gap"] == 1.0
+
+
+def test_history_depth_score_is_not_saturated_by_short_sparse_history():
+    sparse = compute_raw_features(
+        _snapshot(
+            history=[
+                HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.0),
+                HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.1),
+                HistoricalFeaturePoint(timestamp="2026-04-01T00:00:00+00:00", alpha_price_tao=10.2),
+            ],
+        )
+    )
+    dense = compute_raw_features(
+        _snapshot(
+            history=[
+                HistoricalFeaturePoint(
+                    timestamp=f"2026-03-{day:02d}T00:00:00+00:00",
+                    alpha_price_tao=9.0 + day * 0.03,
+                    tao_in_pool=900.0 + day * 12.0,
+                    emission_per_block_tao=0.045 + day * 0.0002,
+                    active_ratio=0.40 + day * 0.005,
+                    concentration_proxy=max(0.2, 0.65 - day * 0.01),
+                    liquidity_thinness=max(0.01, 0.20 - day * 0.01),
+                    fundamental_quality=0.42 + day * 0.006,
+                )
+                for day in range(1, 16)
+            ],
+        )
+    )
+
+    assert sparse.raw["history_depth_score"] < 0.5
+    assert dense.raw["history_depth_score"] > sparse.raw["history_depth_score"]
+
+
+def test_update_freshness_rewards_recent_updates_with_age_curve():
+    recent = compute_raw_features(
+        _snapshot(
+            current_block=200_000,
+            yuma_neurons=128,
+            n_total=128,
+            last_update_blocks=[199_900] * 24 + [198_000] * 8,
+        )
+    )
+    stale = compute_raw_features(
+        _snapshot(
+            current_block=200_000,
+            yuma_neurons=128,
+            n_total=128,
+            last_update_blocks=[160_000] * 24 + [120_000] * 8,
+        )
+    )
+
+    assert recent.raw["update_freshness"] > stale.raw["update_freshness"]
+    assert recent.raw["update_freshness"] > 0.2
 
 
 def test_mispricing_temporal_features_follow_quality_history_not_active_history():
@@ -495,6 +550,50 @@ def test_evidence_confidence_respects_large_onchain_structure_even_when_freshnes
     assert robust_bundle.raw["low_manipulation_signal_share"] > reflexive_bundle.raw["low_manipulation_signal_share"]
     assert robust_bundle.raw["signal_fabrication_risk"] < reflexive_bundle.raw["signal_fabrication_risk"]
     assert robust_bundle.raw["evidence_confidence"] > reflexive_bundle.raw["evidence_confidence"]
+
+
+def test_missing_consensus_signals_reduce_evidence_confidence():
+    with_consensus = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    validator_weight_matrix=[
+                        [0.4, 0.3, 0.2, 0.1],
+                        [0.3, 0.3, 0.2, 0.2],
+                        [0.35, 0.25, 0.2, 0.2],
+                    ],
+                    validator_bond_matrix=[
+                        [0.5, 0.3, 0.2],
+                        [0.45, 0.35, 0.2],
+                        [0.4, 0.4, 0.2],
+                    ],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=900.0, active_ratio=0.45, fundamental_quality=0.50),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=940.0, active_ratio=0.47, fundamental_quality=0.53),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.2, tao_in_pool=980.0, active_ratio=0.49, fundamental_quality=0.56),
+                    ],
+                )
+            )
+        ]
+    )[0]
+    without_consensus = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    validator_weight_matrix=[],
+                    validator_bond_matrix=[],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=900.0, active_ratio=0.45, fundamental_quality=0.50),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=940.0, active_ratio=0.47, fundamental_quality=0.53),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.2, tao_in_pool=980.0, active_ratio=0.49, fundamental_quality=0.56),
+                    ],
+                )
+            )
+        ]
+    )[0]
+
+    assert with_consensus.raw["consensus_signal_gap"] < without_consensus.raw["consensus_signal_gap"]
+    assert with_consensus.raw["evidence_confidence"] > without_consensus.raw["evidence_confidence"]
 
 
 def test_crowded_structure_penalty_raises_fragility_and_dampens_confidence():
