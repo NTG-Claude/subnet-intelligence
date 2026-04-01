@@ -388,6 +388,35 @@ def test_low_evidence_high_conviction_caps_total_score():
     assert rules.total_cap is not None and rules.total_cap <= 0.40
 
 
+def test_reflexive_market_structure_caps_confidence():
+    snapshot = _snapshot(
+        tao_in_pool=18_000.0,
+        emission_per_block_tao=0.06,
+        active_neurons_7d=7,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.26,
+        participation_breadth=0.22,
+        slippage_10_tao=0.03,
+        slippage_50_tao=0.07,
+        validator_dominance=0.71,
+        incentive_concentration=0.69,
+        crowding_proxy=0.66,
+        overreaction_score=0.31,
+        data_coverage=0.72,
+        proxy_reliance_penalty=0.34,
+        confidence_thesis_coherence=0.82,
+        market_structure_floor=0.59,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "reflexive_market_structure_caps_confidence" in rules.activated
+    assert rules.confidence_cap is not None and rules.confidence_cap <= 0.50
+    assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.40
+
+
 def test_severe_market_structure_breach_caps_microstructure_setups():
     snapshot = _snapshot(
         tao_in_pool=700.0,

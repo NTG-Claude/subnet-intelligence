@@ -772,23 +772,36 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         base_mispricing_signal = clamp01(_weighted_output(bundle, "mispricing_signal"))
         base_fragility_risk = clamp01(_weighted_output(bundle, "fragility_risk"))
         base_signal_confidence = clamp01(_weighted_output(bundle, "signal_confidence"))
+        reflexive_confidence_drag = clamp01(
+            0.38 * clamp01(bundle.raw.get("crowding_proxy") or 0.0)
+            + 0.22 * clamp01(bundle.raw.get("overreaction_score") or 0.0)
+            + 0.20 * clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
+            + 0.20 * clamp01(max(base_fragility_risk - 0.50, 0.0) / 0.50)
+        )
+        adjusted_signal_confidence = clamp01(
+            base_signal_confidence * (1.0 - 0.45 * reflexive_confidence_drag)
+            - 0.10 * clamp01(bundle.raw.get("low_evidence_high_conviction") or 0.0)
+        )
         confidence_adjusted_mispricing = clamp01(
-            base_mispricing_signal * (0.55 + 0.45 * base_signal_confidence)
+            base_mispricing_signal * (0.55 + 0.45 * adjusted_signal_confidence)
             - 0.25 * clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
         )
         confidence_adjusted_thesis_strength = clamp01(
             0.45 * base_fundamental_quality
             + 0.35 * confidence_adjusted_mispricing
-            + 0.20 * base_signal_confidence
+            + 0.20 * adjusted_signal_confidence
         )
         bundle.raw["base_mispricing_signal"] = base_mispricing_signal
+        bundle.raw["base_signal_confidence"] = base_signal_confidence
+        bundle.raw["reflexive_confidence_drag"] = reflexive_confidence_drag
+        bundle.raw["adjusted_signal_confidence"] = adjusted_signal_confidence
         bundle.raw["confidence_adjusted_mispricing"] = confidence_adjusted_mispricing
         bundle.raw["confidence_adjusted_thesis_strength"] = confidence_adjusted_thesis_strength
         primary = PrimarySignals(
             fundamental_quality=base_fundamental_quality,
             mispricing_signal=confidence_adjusted_mispricing,
             fragility_risk=base_fragility_risk,
-            signal_confidence=base_signal_confidence,
+            signal_confidence=adjusted_signal_confidence,
         )
         bundle.primary_signals = primary
         bundle.axes = _legacy_axes_from_primary(primary, bundle)

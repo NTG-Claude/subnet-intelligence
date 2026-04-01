@@ -227,3 +227,45 @@ def test_confidence_adjusted_mispricing_discounted_by_signal_fabrication_risk():
     assert robust_bundle.raw["signal_fabrication_risk"] < noisy_bundle.raw["signal_fabrication_risk"]
     assert robust_bundle.primary_signals.mispricing_signal > noisy_bundle.primary_signals.mispricing_signal
 
+
+def test_signal_confidence_is_discounted_for_reflexive_fragile_structures():
+    robust_bundle, crowded_bundle = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=8,
+                    unique_coldkeys=8,
+                    n_validators=7,
+                    tao_in_pool=48_000.0,
+                    alpha_in_pool=11_000.0,
+                    alpha_price_tao=10.4,
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=42_000.0, active_ratio=0.56, fundamental_quality=0.55),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.2, tao_in_pool=44_000.0, active_ratio=0.60, fundamental_quality=0.59),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.3, tao_in_pool=46_000.0, active_ratio=0.64, fundamental_quality=0.63),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=3,
+                    unique_coldkeys=2,
+                    n_validators=2,
+                    tao_in_pool=9_000.0,
+                    alpha_in_pool=95.0,
+                    alpha_price_tao=14.0,
+                    top3_stake_fraction=0.84,
+                    incentive_scores=[0.9, 0.1],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=8.5, tao_in_pool=8_800.0, active_ratio=0.31, fundamental_quality=0.43),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=11.0, tao_in_pool=8_900.0, active_ratio=0.30, fundamental_quality=0.42),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=13.1, tao_in_pool=8_950.0, active_ratio=0.29, fundamental_quality=0.41),
+                    ],
+                )
+            ),
+        ]
+    )
+
+    assert robust_bundle.raw["reflexive_confidence_drag"] < crowded_bundle.raw["reflexive_confidence_drag"]
+    assert robust_bundle.primary_signals.signal_confidence > crowded_bundle.primary_signals.signal_confidence
+

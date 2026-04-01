@@ -48,6 +48,8 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     signal_fabrication_risk = bundle.raw.get("signal_fabrication_risk") or 0.0
     low_evidence_high_conviction = bundle.raw.get("low_evidence_high_conviction") or 0.0
     underreaction_score = bundle.raw.get("underreaction_score") or 0.0
+    crowding_proxy = bundle.raw.get("crowding_proxy") or 0.0
+    overreaction_score = bundle.raw.get("overreaction_score") or 0.0
     staking_apy = 0.0
     if pool_depth > 0:
         staking_apy = max(0.0, snapshot.emission_per_block_tao * 7200 * 365 / pool_depth * 100)
@@ -221,6 +223,19 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         mispricing_cap = 0.32 if mispricing_cap is None else min(mispricing_cap, 0.32)
         confidence_cap = 0.44 if confidence_cap is None else min(confidence_cap, 0.44)
         legacy_score_cap = 0.40 if legacy_score_cap is None else min(legacy_score_cap, 0.40)
+
+    if (
+        crowding_proxy > 0.52
+        and overreaction_score > 0.24
+        and (
+            concentration > 0.58
+            or max_slippage > 0.04
+            or staking_apy > 90
+        )
+    ):
+        activated.append("reflexive_market_structure_caps_confidence")
+        confidence_cap = 0.50 if confidence_cap is None else min(confidence_cap, 0.50)
+        mispricing_cap = 0.40 if mispricing_cap is None else min(mispricing_cap, 0.40)
 
     return HardRuleResult(
         activated=activated,
