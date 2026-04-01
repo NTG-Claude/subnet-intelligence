@@ -504,6 +504,42 @@ def test_market_relevance_proxy_rewards_scaled_participating_subnets():
     assert flagship.raw["market_relevance_proxy"] > micro.raw["market_relevance_proxy"]
 
 
+def test_structural_concentration_is_discounted_for_liquid_broad_flagships():
+    flagship = compute_raw_features(
+        _snapshot(
+            n_total=64,
+            yuma_neurons=64,
+            active_neurons_7d=20,
+            unique_coldkeys=24,
+            n_validators=8,
+            tao_in_pool=180_000.0,
+            alpha_in_pool=18_000.0,
+            top3_stake_fraction=0.94,
+            validator_stakes=[92.0, 4.0, 2.0, 1.0, 0.5, 0.3, 0.1, 0.1],
+            incentive_scores=[95.0, 2.0, 1.2, 0.8, 0.5, 0.3, 0.1],
+        )
+    )
+    micro = compute_raw_features(
+        _snapshot(
+            n_total=10,
+            yuma_neurons=10,
+            active_neurons_7d=2,
+            unique_coldkeys=2,
+            n_validators=2,
+            tao_in_pool=700.0,
+            alpha_in_pool=6.0,
+            top3_stake_fraction=1.0,
+            validator_stakes=[99.0, 1.0],
+            incentive_scores=[99.0, 1.0],
+        )
+    )
+
+    assert flagship.raw["validator_dominance"] < flagship.raw["validator_dominance_raw"]
+    assert flagship.raw["incentive_concentration"] < flagship.raw["incentive_concentration_raw"]
+    assert flagship.raw["structural_concentration_risk"] < micro.raw["structural_concentration_risk"]
+    assert flagship.raw["incentive_distribution_quality"] > flagship.raw["incentive_distribution_quality_raw"]
+
+
 def test_market_structure_floor_penalizes_thin_microstructure():
     robust = compute_raw_features(
         _snapshot(

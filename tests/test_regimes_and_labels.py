@@ -386,6 +386,40 @@ def test_market_relevant_concentration_uses_watchlist_caps():
     assert rules.fragility_floor == 0.60
 
 
+def test_resilient_midcap_concentration_uses_softer_watchlist_cap():
+    snapshot = _snapshot(
+        tao_in_pool=11_000.0,
+        emission_per_block_tao=0.025,
+        active_neurons_7d=6,
+        unique_coldkeys=5,
+        n_validators=4,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.40,
+        participation_breadth=0.28,
+        market_relevance_proxy=0.48,
+        market_structure_floor=0.60,
+        slippage_10_tao=0.025,
+        slippage_50_tao=0.06,
+        validator_dominance=0.76,
+        incentive_concentration=0.73,
+        structural_concentration_risk=0.66,
+        concentration_delta=0.01,
+        validator_weight_entropy=0.48,
+        cross_validator_disagreement=0.21,
+        meaningful_discrimination=0.29,
+        dereg_risk_proxy=0.18,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "concentration_caps_fundamental_quality" in rules.activated
+    assert "resilient_midcap_concentration_watchlist" in rules.activated
+    assert rules.quality_cap == 0.48
+    assert rules.fragility_floor == 0.62
+
+
 def test_signal_fabrication_risk_caps_mispricing_and_confidence():
     snapshot = _snapshot(
         tao_in_pool=6_000.0,

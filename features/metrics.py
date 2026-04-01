@@ -273,6 +273,103 @@ def _market_relevance_proxy(
     )
 
 
+def _effective_participant_share(values: Iterable[float], expected_count: int) -> float:
+    clean = [float(v) for v in values if v > 0]
+    if not clean:
+        return 0.0
+    effective_count = 1.0 / max(herfindahl(clean), 1e-9)
+    reference_count = max(2.0, min(float(expected_count), 24.0))
+    return clamp01((effective_count - 1.0) / max(reference_count - 1.0, 1.0))
+
+
+def _structural_absorption(
+    participation_breadth: float,
+    validator_participation: float,
+    market_structure_floor: float,
+    market_relevance: float,
+) -> float:
+    return clamp01(
+        0.32 * market_structure_floor
+        + 0.24 * market_relevance
+        + 0.24 * participation_breadth
+        + 0.20 * validator_participation
+    )
+
+
+def _contextualize_concentration(
+    raw_concentration: float,
+    participation_breadth: float,
+    validator_participation: float,
+    market_structure_floor: float,
+    market_relevance: float,
+) -> float:
+    absorption = _structural_absorption(
+        participation_breadth=participation_breadth,
+        validator_participation=validator_participation,
+        market_structure_floor=market_structure_floor,
+        market_relevance=market_relevance,
+    )
+    return clamp01(raw_concentration * (1.0 - 0.42 * absorption))
+
+
+def _incentive_distribution_quality(
+    incentive_scores: Iterable[float],
+    participation_breadth: float,
+    validator_participation: float,
+) -> tuple[float, float]:
+    clean = [float(v) for v in incentive_scores if v > 0]
+    if not clean:
+        return 0.0, 1.0
+    total = sum(clean)
+    max_share = max(clean) / total if total > 0 else 1.0
+    raw_concentration = herfindahl(clean)
+    gini_quality = 1.0 - gini(clean)
+    entropy_quality = normalized_entropy(clean)
+    effective_share = _effective_participant_share(clean, len(clean))
+    breadth_support = math.sqrt(
+        clamp01(0.60 * participation_breadth + 0.40 * validator_participation)
+    )
+    tail_balance = 1.0 - clamp01(max_share)
+    quality = clamp01(
+        0.24 * gini_quality
+        + 0.18 * entropy_quality
+        + 0.18 * effective_share
+        + 0.14 * tail_balance
+        + 0.26 * breadth_support
+    )
+    return quality, raw_concentration
+
+
+def _validator_dominance_score(
+    validator_stakes: list[float],
+    top3_stake_fraction: float,
+    n_validators: int,
+    participation_breadth: float,
+    validator_participation: float,
+    market_structure_floor: float,
+    market_relevance: float,
+) -> tuple[float, float]:
+    clean = [float(v) for v in validator_stakes if v > 0]
+    if not clean:
+        return 1.0, 1.0
+    total = sum(clean)
+    validator_count = max(n_validators, len(clean), 1)
+    top1_share = max(clean) / total if total > 0 else 1.0
+    baseline_top1 = 1.0 / validator_count
+    baseline_top3 = min(1.0, 3.0 / validator_count)
+    top1_excess = clamp01((top1_share - baseline_top1) / max(1.0 - baseline_top1, 1e-9))
+    top3_excess = clamp01((top3_stake_fraction - baseline_top3) / max(1.0 - baseline_top3, 1e-9))
+    raw_dominance = clamp01(0.58 * top1_excess + 0.42 * top3_excess)
+    adjusted_dominance = _contextualize_concentration(
+        raw_concentration=raw_dominance,
+        participation_breadth=participation_breadth,
+        validator_participation=validator_participation,
+        market_structure_floor=market_structure_floor,
+        market_relevance=market_relevance,
+    )
+    return adjusted_dominance, raw_dominance
+
+
 def _market_structure_floor(
     reserve_depth: float,
     liquidity_thinness: float | None,
@@ -484,13 +581,6 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     )
     participation_breadth = safe_ratio(snapshot.unique_coldkeys, max(snapshot.n_total, 1))
     validator_participation = clamp01(snapshot.n_validators / validator_reference)
-    incentive_distribution_quality = 1.0 - gini(snapshot.incentive_scores)
-    incentive_concentration = herfindahl(snapshot.incentive_scores)
-    validator_dominance = max(
-        (max(snapshot.validator_stakes) / sum(snapshot.validator_stakes))
-        if sum(snapshot.validator_stakes) > 0 and snapshot.validator_stakes else 1.0,
-        snapshot.top3_stake_fraction,
-    )
     validator_weight_entropy = (
         fmean(normalized_entropy(row) for row in snapshot.validator_weight_matrix)
         if snapshot.validator_weight_matrix else None
@@ -515,6 +605,40 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         fmean(v for v in [slippage_1, slippage_10, slippage_50] if v is not None)
         if any(v is not None for v in [slippage_1, slippage_10, slippage_50]) else None
     )
+    market_relevance = _market_relevance_proxy(
+        snapshot.tao_in_pool,
+        active_ratio,
+        participation_breadth,
+        validator_participation,
+    )
+    market_structure_floor = _market_structure_floor(
+        snapshot.tao_in_pool,
+        avg_slippage,
+        active_ratio,
+        participation_breadth,
+        validator_participation,
+    )
+    incentive_distribution_quality, raw_incentive_concentration = _incentive_distribution_quality(
+        snapshot.incentive_scores,
+        participation_breadth=participation_breadth,
+        validator_participation=validator_participation,
+    )
+    incentive_concentration = _contextualize_concentration(
+        raw_concentration=raw_incentive_concentration,
+        participation_breadth=participation_breadth,
+        validator_participation=validator_participation,
+        market_structure_floor=market_structure_floor,
+        market_relevance=market_relevance,
+    )
+    validator_dominance, raw_validator_dominance = _validator_dominance_score(
+        snapshot.validator_stakes,
+        snapshot.top3_stake_fraction,
+        snapshot.n_validators,
+        participation_breadth=participation_breadth,
+        validator_participation=validator_participation,
+        market_structure_floor=market_structure_floor,
+        market_relevance=market_relevance,
+    )
 
     history = snapshot.history or []
     price_history = _history_values(history, "alpha_price_tao")
@@ -532,13 +656,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     active_change = _change_vs_history(active_ratio, active_history)
     breadth_change = _change_vs_history(participation_breadth, breadth_history)
     validator_change = _change_vs_history(validator_participation, validator_history)
-    structure_change = _change_vs_history(market_structure_floor := _market_structure_floor(
-        snapshot.tao_in_pool,
-        avg_slippage,
-        active_ratio,
-        participation_breadth,
-        validator_participation,
-    ), structure_history)
+    structure_change = _change_vs_history(market_structure_floor, structure_history)
     quality_change = _change_vs_history(
         _current_quality_state(
             active_ratio,
@@ -601,12 +719,6 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     )
     reversal_risk = max(0.0, (price_change or 0.0) - max(quality_change or 0.0, 0.0))
     crowding_proxy = fmean([concentration_now, clamp01(avg_slippage or 0.0), clamp01(max(price_change or 0.0, 0.0))])
-    market_relevance = _market_relevance_proxy(
-        snapshot.tao_in_pool,
-        active_ratio,
-        participation_breadth,
-        validator_participation,
-    )
     staking_apy_proxy = 0.0
     if snapshot.tao_in_pool and snapshot.tao_in_pool > 0:
         staking_apy_proxy = max(0.0, snapshot.emission_per_block_tao * 7200 * 365 / snapshot.tao_in_pool * 100)
@@ -767,13 +879,17 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "participation_breadth": participation_breadth,
         "validator_participation": validator_participation,
         "incentive_distribution_quality": incentive_distribution_quality,
+        "incentive_distribution_quality_raw": 1.0 - gini(snapshot.incentive_scores),
         "update_freshness": freshness,
         "validator_weight_entropy": validator_weight_entropy,
         "cross_validator_disagreement": cross_validator_disagreement,
         "meaningful_discrimination": meaningful_discrimination,
         "bond_responsiveness": bond_responsiveness,
         "incentive_concentration": incentive_concentration,
+        "incentive_concentration_raw": raw_incentive_concentration,
         "validator_dominance": validator_dominance,
+        "validator_dominance_raw": raw_validator_dominance,
+        "structural_concentration_risk": concentration_now,
         "reserve_depth": snapshot.tao_in_pool,
         "alpha_reserve": snapshot.alpha_in_pool,
         "tao_reserve": snapshot.tao_in_pool,
@@ -1068,12 +1184,18 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
                 bundle.raw.get("incentive_concentration") or 0.0,
             )
         )
+        raw_concentration_peak = clamp01(
+            max(
+                bundle.raw.get("validator_dominance_raw") or 0.0,
+                bundle.raw.get("incentive_concentration_raw") or 0.0,
+            )
+        )
         staking_apy_proxy = max(0.0, bundle.raw.get("staking_apy_proxy") or 0.0)
         crowded_structure_penalty = _crowded_structure_penalty(
             market_relevance=market_relevance_proxy,
             market_structure_floor=market_structure_floor,
             crowding_proxy=crowding_proxy,
-            concentration=concentration_penalty,
+            concentration=max(concentration_penalty, 0.65 * raw_concentration_peak),
             staking_apy=staking_apy_proxy,
         )
         quality_resolution_bonus = clamp01(
@@ -1125,6 +1247,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             + 0.22 * overreaction_score
             + 0.20 * signal_fabrication_risk
             + 0.20 * fragility_excess
+            + 0.10 * raw_concentration_peak
         )
         structural_confidence_drag = clamp01(
             0.30 * (1.0 - market_structure_floor)
@@ -1132,6 +1255,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             + 0.20 * crowding_proxy
             + 0.16 * yield_heat
             + 0.12 * fragility_excess
+            + 0.10 * raw_concentration_peak
         )
         thesis_confidence = clamp01(
             0.24 * market_structure_floor
@@ -1150,6 +1274,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             - 0.14 * fragility_excess
             - 0.12 * (1.0 - market_structure_floor)
             - 0.10 * consensus_signal_gap
+            - 0.08 * raw_concentration_peak
         )
         adjusted_thesis_confidence = clamp01(
             thesis_confidence

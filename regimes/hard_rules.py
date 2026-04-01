@@ -35,7 +35,9 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
 
     active_ratio = bundle.raw.get("active_ratio") or 0.0
     max_slippage = max(bundle.raw.get("slippage_10_tao") or 0.0, bundle.raw.get("slippage_50_tao") or 0.0)
-    concentration = max(bundle.raw.get("validator_dominance") or 0.0, bundle.raw.get("incentive_concentration") or 0.0)
+    concentration = bundle.raw.get("structural_concentration_risk")
+    if concentration is None:
+        concentration = max(bundle.raw.get("validator_dominance") or 0.0, bundle.raw.get("incentive_concentration") or 0.0)
     update_freshness = bundle.raw.get("update_freshness") or 0.0
     participation = bundle.raw.get("participation_breadth") or 0.0
     concentration_delta = bundle.raw.get("concentration_delta")
@@ -191,6 +193,14 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         and participation >= 0.30
         and (concentration_delta is None or concentration_delta <= 0.05)
     )
+    resilient_midcap_concentration = (
+        pool_depth >= 8_000
+        and market_structure_floor >= 0.56
+        and max_slippage <= 0.08
+        and participation >= 0.24
+        and market_relevance >= 0.42
+        and (concentration_delta is None or concentration_delta <= 0.04)
+    )
 
     if concentration > 0.60:
         activated.append("concentration_caps_fundamental_quality")
@@ -202,6 +212,10 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
             activated.append("market_relevant_concentration_watchlist")
             quality_cap = 0.56 if quality_cap is None else min(quality_cap, 0.56)
             fragility_floor = 0.60 if fragility_floor is None else max(fragility_floor, 0.60)
+        elif resilient_midcap_concentration:
+            activated.append("resilient_midcap_concentration_watchlist")
+            quality_cap = 0.48 if quality_cap is None else min(quality_cap, 0.48)
+            fragility_floor = 0.62 if fragility_floor is None else max(fragility_floor, 0.62)
         else:
             quality_cap = 0.42 if quality_cap is None else min(quality_cap, 0.42)
             fragility_floor = 0.65 if fragility_floor is None else max(fragility_floor, 0.65)
