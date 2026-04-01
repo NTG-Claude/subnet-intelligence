@@ -5,6 +5,8 @@ Tests für github_client.py und subnet_github_mapper.py
 import json
 import pytest
 from pathlib import Path
+import shutil
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from scorer.github_client import (
@@ -16,6 +18,17 @@ from scorer.github_client import (
     get_repo_stats,
 )
 from scorer.subnet_github_mapper import get_github_coords
+
+
+@pytest.fixture
+def local_tmp_path():
+    base = Path(__file__).resolve().parent.parent / "data" / "_test_tmp"
+    path = base / f"github-mapper-{uuid.uuid4().hex}"
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
@@ -158,13 +171,13 @@ async def test_get_repo_stats_private_repo():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_mapper_uses_override(tmp_path):
+async def test_mapper_uses_override(local_tmp_path):
     overrides = {"1": {"owner": "override_owner", "repo": "override_repo"}}
-    override_file = tmp_path / "github_map_overrides.json"
+    override_file = local_tmp_path / "github_map_overrides.json"
     override_file.write_text(json.dumps(overrides))
 
     with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", override_file), \
-         patch("scorer.subnet_github_mapper._MAP_PATH", tmp_path / "github_map.json"):
+         patch("scorer.subnet_github_mapper._MAP_PATH", local_tmp_path / "github_map.json"):
         result = await get_github_coords(1)
 
     assert result is not None
@@ -173,12 +186,12 @@ async def test_mapper_uses_override(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_mapper_uses_cache(tmp_path):
+async def test_mapper_uses_cache(local_tmp_path):
     cache = {"5": {"owner": "cached_owner", "repo": "cached_repo"}}
-    cache_file = tmp_path / "github_map.json"
+    cache_file = local_tmp_path / "github_map.json"
     cache_file.write_text(json.dumps(cache))
 
-    with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", tmp_path / "overrides.json"), \
+    with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", local_tmp_path / "overrides.json"), \
          patch("scorer.subnet_github_mapper._MAP_PATH", cache_file):
         result = await get_github_coords(5)
 
@@ -187,7 +200,7 @@ async def test_mapper_uses_cache(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_mapper_fetches_from_identity(tmp_path):
+async def test_mapper_fetches_from_identity(local_tmp_path):
     from scorer.bittensor_client import SubnetIdentity
 
     identity = SubnetIdentity(
@@ -196,8 +209,8 @@ async def test_mapper_fetches_from_identity(tmp_path):
         github_url="https://github.com/myorg/myrepo",
     )
 
-    with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", tmp_path / "overrides.json"), \
-         patch("scorer.subnet_github_mapper._MAP_PATH", tmp_path / "github_map.json"), \
+    with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", local_tmp_path / "overrides.json"), \
+         patch("scorer.subnet_github_mapper._MAP_PATH", local_tmp_path / "github_map.json"), \
          patch("scorer.subnet_github_mapper.get_subnet_identity", AsyncMock(return_value=identity)):
         result = await get_github_coords(10, live_fetch=True)
 
@@ -206,18 +219,18 @@ async def test_mapper_fetches_from_identity(tmp_path):
     assert result.repo == "myrepo"
 
     # Verify it was written to cache
-    cache_data = json.loads((tmp_path / "github_map.json").read_text())
+    cache_data = json.loads((local_tmp_path / "github_map.json").read_text())
     assert cache_data["10"]["owner"] == "myorg"
 
 
 @pytest.mark.asyncio
-async def test_mapper_returns_none_when_no_github_url(tmp_path):
+async def test_mapper_returns_none_when_no_github_url(local_tmp_path):
     from scorer.bittensor_client import SubnetIdentity
 
     identity = SubnetIdentity(netuid=99, name="nourl")
 
-    with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", tmp_path / "overrides.json"), \
-         patch("scorer.subnet_github_mapper._MAP_PATH", tmp_path / "github_map.json"), \
+    with patch("scorer.subnet_github_mapper._OVERRIDES_PATH", local_tmp_path / "overrides.json"), \
+         patch("scorer.subnet_github_mapper._MAP_PATH", local_tmp_path / "github_map.json"), \
          patch("scorer.subnet_github_mapper.get_subnet_identity", AsyncMock(return_value=identity)):
         result = await get_github_coords(99, live_fetch=True)
 
