@@ -13,6 +13,7 @@ export interface SubnetSummary {
   tao_in_pool: number | null
   market_cap_tao: number | null
   staking_apy: number | null
+  /** Deprecated compatibility field. Prefer thesis and V2 explanation data in product UI. */
   label: string | null
   thesis: string | null
   analysis_preview?: AnalysisPreview | null
@@ -83,6 +84,7 @@ export interface AnalysisPreview {
 }
 
 export interface SubnetAnalysis {
+  /** Deprecated compatibility field. Prefer thesis and V2 explanation data in product UI. */
   label?: string
   thesis?: string
   primary_outputs?: PrimaryOutputs
@@ -138,6 +140,7 @@ export interface SubnetDetail {
   market_cap_tao: number | null
   staking_apy: number | null
   score_delta_7d: number | null
+  /** Deprecated compatibility field. Prefer thesis and V2 explanation data in product UI. */
   label: string | null
   thesis: string | null
   analysis: SubnetAnalysis | null

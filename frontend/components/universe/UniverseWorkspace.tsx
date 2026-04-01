@@ -33,7 +33,6 @@ function queryMatches(subnet: SubnetSummary, query: string): boolean {
   return (
     (subnet.name ?? '').toLowerCase().includes(q) ||
     String(subnet.netuid).includes(q) ||
-    (subnet.label ?? '').toLowerCase().includes(q) ||
     (subnet.thesis ?? '').toLowerCase().includes(q)
   )
 }
@@ -173,7 +172,7 @@ export default function UniverseWorkspace({
                   setPage(0)
                 }}
                 aria-label="Search subnets"
-                placeholder="Search subnet, thesis, label, netuid..."
+                placeholder="Search subnet, thesis, netuid..."
                 className="w-full rounded-2xl border border-white/10 bg-stone-950 px-4 py-3 text-sm text-stone-100 outline-none placeholder:text-stone-500 focus:border-white/20"
               />
               <button

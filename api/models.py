@@ -3,7 +3,7 @@ API response models (Pydantic).
 """
 
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ScoreBreakdownResponse(BaseModel):
@@ -35,7 +35,11 @@ class SubnetSummaryResponse(BaseModel):
     tao_in_pool: Optional[float] = None
     market_cap_tao: Optional[float] = None
     staking_apy: Optional[float] = None
-    label: Optional[str] = None
+    label: Optional[str] = Field(
+        default=None,
+        description="Deprecated compatibility field. Product surfaces should prefer thesis and V2 explanation data.",
+        json_schema_extra={"deprecated": True},
+    )
     thesis: Optional[str] = None
     analysis_preview: Optional[dict] = None
 
@@ -73,7 +77,11 @@ class SubnetDetailResponse(BaseModel):
     market_cap_tao: Optional[float] = None
     staking_apy: Optional[float] = None
     score_delta_7d: Optional[float] = None
-    label: Optional[str] = None
+    label: Optional[str] = Field(
+        default=None,
+        description="Deprecated compatibility field. Product surfaces should prefer thesis and V2 explanation data.",
+        json_schema_extra={"deprecated": True},
+    )
     thesis: Optional[str] = None
     analysis: Optional[dict] = None
 

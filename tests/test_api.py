@@ -561,3 +561,15 @@ def test_openapi_json():
     assert "/api/v1/subnets" in schema["paths"]
     assert "/api/v1/leaderboard" in schema["paths"]
     assert "/health" in schema["paths"]
+
+
+def test_openapi_marks_label_as_deprecated_compatibility_field():
+    from api.main import app
+    with TestClient(app) as c:
+        resp = c.get("/openapi.json")
+    assert resp.status_code == 200
+    schema = resp.json()
+    summary_props = schema["components"]["schemas"]["SubnetSummaryResponse"]["properties"]
+    detail_props = schema["components"]["schemas"]["SubnetDetailResponse"]["properties"]
+    assert summary_props["label"]["deprecated"] is True
+    assert detail_props["label"]["deprecated"] is True

@@ -46,7 +46,6 @@ function SnapshotColumn({
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-lg font-semibold text-stone-50">{row.rankLabel}</div>
                     <StatusBadge tone="neutral">{row.netuidLabel}</StatusBadge>
-                    <StatusBadge tone="neutral">{row.label}</StatusBadge>
                   </div>
                   <div className="mt-2 text-base font-medium text-stone-200">{row.name}</div>
                   <p className="mt-1 text-sm leading-6 text-stone-400">{row.decisionLine}</p>

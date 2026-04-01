@@ -48,7 +48,6 @@ export interface UniverseRowViewModel {
   href: string
   name: string
   netuidLabel: string
-  label: string
   thesisLine: string
   decisionLine: string
   signals: SignalStat[]
@@ -82,7 +81,6 @@ export interface DetailMemoViewModel {
   name: string
   netuidLabel: string
   href: string
-  label: string
   thesis: string
   decisionLine: string
   updatedLabel: string
@@ -376,7 +374,7 @@ function confidenceRead(subnet: SubnetSummary): string {
 }
 
 function buildStatusFlags(subnet: SubnetSummary): RowFlag[] {
-  const flags: RowFlag[] = [{ label: subnet.label ?? 'Under review', tone: 'neutral' }]
+  const flags: RowFlag[] = []
   if (!subnet.primary_outputs) {
     flags.push({ label: 'Awaiting run', tone: 'warning' })
     return flags
@@ -409,7 +407,6 @@ export function toUniverseRow(subnet: SubnetSummary): UniverseRowViewModel {
     href: `/subnets/${subnet.netuid}`,
     name: toDisplayName(subnet.name, subnet.netuid),
     netuidLabel: `SN${subnet.netuid}`,
-    label: subnet.label ?? 'Under review',
     thesisLine: subnet.thesis ?? 'No concise thesis has been produced for this run yet.',
     decisionLine: decisionLineFromOutputs(subnet.primary_outputs),
     signals: getSignalStats(subnet.primary_outputs),
@@ -614,7 +611,6 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     name: toDisplayName(subnet.name, subnet.netuid),
     netuidLabel: `SN${subnet.netuid}`,
     href: `/subnets/${subnet.netuid}`,
-    label: subnet.label ?? analysis?.label ?? 'Under review',
     thesis: subnet.thesis ?? analysis?.thesis ?? 'No concise thesis generated yet.',
     decisionLine: summary.decisionLine,
     updatedLabel: formatDateTime(subnet.computed_at),

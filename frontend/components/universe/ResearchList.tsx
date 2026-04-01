@@ -43,7 +43,7 @@ export default function ResearchList({ rows, currentLensTitle, emptyMessage, com
         </div>
         <div>
           <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Subnet / thesis / primary signals</div>
-          <div className="mt-1 text-xs text-stone-600">Name, thesis line, label, and the four V2 signals.</div>
+          <div className="mt-1 text-xs text-stone-600">Name, thesis line, and the four V2 signals.</div>
         </div>
         <div>
           <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">Support / risks / confidence</div>
@@ -75,7 +75,6 @@ export default function ResearchList({ rows, currentLensTitle, emptyMessage, com
               <div className="mt-1 text-sm text-stone-500">{row.percentileLabel} percentile</div>
               <div className="mt-4 space-y-2">
                 <StatusBadge tone="neutral">{row.netuidLabel}</StatusBadge>
-                <StatusBadge tone="neutral">{row.label}</StatusBadge>
               </div>
             </div>
 
