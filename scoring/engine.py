@@ -8,6 +8,16 @@ from labels.engine import assign_label
 from regimes.hard_rules import HardRuleResult, apply_rule_caps, evaluate_hard_rules
 from stress.scenarios import run_stress_tests
 
+PRIMARY_SIGNAL_DRIFT_CAPS = {
+    "fundamental_quality": 0.08,
+    "mispricing_signal": 0.10,
+    "fragility_risk": 0.08,
+    "signal_confidence": 0.08,
+}
+
+RANKING_DRIFT_CAP = 0.035
+RANKING_HISTORY_BLEND = 0.70
+
 
 @dataclass
 class ScoreArtifacts:
@@ -175,10 +185,10 @@ def _stabilize_primary_with_history(snapshot: RawSubnetSnapshot, current_primary
     )
 
     return PrimarySignals(
-        fundamental_quality=_limit_signal_drift(current_primary.fundamental_quality, history_primary.fundamental_quality, 0.08),
-        mispricing_signal=_limit_signal_drift(current_primary.mispricing_signal, history_primary.mispricing_signal, 0.10),
-        fragility_risk=_limit_signal_drift(current_primary.fragility_risk, history_primary.fragility_risk, 0.08),
-        signal_confidence=_limit_signal_drift(current_primary.signal_confidence, history_primary.signal_confidence, 0.08),
+        fundamental_quality=_limit_signal_drift(current_primary.fundamental_quality, history_primary.fundamental_quality, PRIMARY_SIGNAL_DRIFT_CAPS["fundamental_quality"]),
+        mispricing_signal=_limit_signal_drift(current_primary.mispricing_signal, history_primary.mispricing_signal, PRIMARY_SIGNAL_DRIFT_CAPS["mispricing_signal"]),
+        fragility_risk=_limit_signal_drift(current_primary.fragility_risk, history_primary.fragility_risk, PRIMARY_SIGNAL_DRIFT_CAPS["fragility_risk"]),
+        signal_confidence=_limit_signal_drift(current_primary.signal_confidence, history_primary.signal_confidence, PRIMARY_SIGNAL_DRIFT_CAPS["signal_confidence"]),
     )
 
 
@@ -214,11 +224,16 @@ def _legacy_axes_from_primary(signals: PrimarySignals, bundle: FeatureBundle, st
 
 
 def _ranking_priority_score(signals: PrimarySignals, bundle: FeatureBundle) -> float:
-    market_relevance = bundle.raw.get("market_relevance_proxy") or bundle.raw.get("cohort_relevance_edge") or 0.0
-    thesis_strength = bundle.raw.get("confidence_adjusted_thesis_strength")
+    ranking_artifacts = bundle.ranking or {}
+    market_relevance = ranking_artifacts.get("market_relevance")
+    if market_relevance is None:
+        market_relevance = bundle.raw.get("market_legitimacy") or bundle.raw.get("market_relevance_proxy") or bundle.raw.get("cohort_relevance_edge") or 0.0
+    thesis_strength = ranking_artifacts.get("thesis_strength")
     adjusted_mispricing = bundle.raw.get("confidence_adjusted_mispricing")
     fragility_headwind = max(0.0, (signals.fragility_risk - 0.55) / 0.45)
-    resilience = max(0.0, 1.0 - fragility_headwind)
+    resilience = ranking_artifacts.get("resilience")
+    if resilience is None:
+        resilience = max(0.0, 1.0 - fragility_headwind)
     mispricing_component = adjusted_mispricing if adjusted_mispricing is not None else signals.mispricing_signal
     thesis_component = thesis_strength if thesis_strength is not None else (
         0.45 * signals.fundamental_quality
@@ -272,8 +287,8 @@ def _stabilize_priority_with_history(snapshot: RawSubnetSnapshot, bundle: Featur
 
     # Damp tiny run-to-run movements at the actual ranking layer so adjacent
     # names with near-identical scores do not keep leapfrogging every few minutes.
-    blended_score = 0.7 * history_score + 0.3 * current_score
-    return _limit_signal_drift(blended_score, history_score, 0.035)
+    blended_score = RANKING_HISTORY_BLEND * history_score + (1.0 - RANKING_HISTORY_BLEND) * current_score
+    return _limit_signal_drift(blended_score, history_score, RANKING_DRIFT_CAP)
 
 
 def _apply_total_cap(score: float, signals: PrimarySignals | AxisScores, rules: HardRuleResult) -> float:

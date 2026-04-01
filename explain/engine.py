@@ -50,6 +50,60 @@ def build_explanation(
     quality_support = _fmt(_sorted_drivers(bundle, "fundamental_quality", positive=True))
     quality_headwinds = _fmt(_sorted_drivers(bundle, "fundamental_quality", positive=False))
 
+    primary_contributors = {
+        key: sorted(
+            bundle.contributions.get(key, []),
+            key=lambda item: abs(item.get("signed_contribution", 0.0)),
+            reverse=True,
+        )
+        for key in ("fundamental_quality", "mispricing_signal", "fragility_risk", "signal_confidence")
+    }
+    block_scores = {
+        name: round(score * 100, 2)
+        for name, score in bundle.core_blocks.items()
+    }
+    uncertainties = []
+    if (bundle.raw.get("data_confidence") or 0.0) < 0.5:
+        uncertainties.append(
+            {
+                "name": "data_confidence",
+                "signed_contribution": round((bundle.raw.get("data_confidence") or 0.0) - 0.5, 4),
+                "direction": "negative",
+                "short_explanation": "Conditioned telemetry is still too thin or too repaired to fully trust the signal.",
+                "source_block": "evidence_confidence",
+            }
+        )
+    if (bundle.raw.get("market_confidence") or 0.0) < 0.5:
+        uncertainties.append(
+            {
+                "name": "market_confidence",
+                "signed_contribution": round((bundle.raw.get("market_confidence") or 0.0) - 0.5, 4),
+                "direction": "negative",
+                "short_explanation": "Market structure remains too weak for a fully investable read-through.",
+                "source_block": "evidence_confidence",
+            }
+        )
+    if (bundle.raw.get("thesis_confidence") or 0.0) < 0.5:
+        uncertainties.append(
+            {
+                "name": "thesis_confidence",
+                "signed_contribution": round((bundle.raw.get("thesis_confidence") or 0.0) - 0.5, 4),
+                "direction": "negative",
+                "short_explanation": "The improvement thesis still has internal contradictions or reflexive dependence.",
+                "source_block": "evidence_confidence",
+            }
+        )
+    top_positive_drivers = sorted(
+        primary_contributors["fundamental_quality"] + primary_contributors["mispricing_signal"],
+        key=lambda item: item.get("signed_contribution", 0.0),
+        reverse=True,
+    )[:5]
+    top_negative_drags = sorted(
+        primary_contributors["fragility_risk"] + primary_contributors["signal_confidence"],
+        key=lambda item: item.get("signed_contribution", 0.0),
+    )
+    top_negative_drags = [item for item in top_negative_drags if item.get("signed_contribution", 0.0) <= 0][:5]
+
     thesis_breakers = []
     if (bundle.raw.get("price_response_lag_to_quality_shift") or 0.0) < 0.02:
         thesis_breakers.append("Price has already largely caught up to the quality improvement.")
@@ -80,8 +134,12 @@ def build_explanation(
             "stress_robustness": round(axes.stress_robustness * 100, 2),
             "opportunity_gap": round(axes.opportunity_gap * 100, 2),
         },
-        "top_positive_drivers": quality_support[:3] + mispricing_support[:2],
-        "top_negative_drivers": fragility_drivers[:2] + quality_headwinds[:2],
+        "top_positive_drivers": top_positive_drivers,
+        "top_negative_drags": top_negative_drags,
+        "top_negative_drivers": top_negative_drags,
+        "block_scores": block_scores,
+        "primary_signal_contributors": primary_contributors,
+        "key_uncertainties": uncertainties,
         "why_mispriced": {
             "supports": mispricing_support,
             "headwinds": mispricing_headwinds,
@@ -95,6 +153,8 @@ def build_explanation(
             "headwinds": confidence_headwinds,
             "evidence_confidence": round((bundle.raw.get("evidence_confidence") or 0.0) * 100, 2),
             "thesis_confidence": round((bundle.raw.get("thesis_confidence") or 0.0) * 100, 2),
+            "data_confidence": round((bundle.raw.get("data_confidence") or 0.0) * 100, 2),
+            "market_confidence": round((bundle.raw.get("market_confidence") or 0.0) * 100, 2),
         },
         "quality_rationale": {
             "supports": quality_support,
@@ -119,6 +179,10 @@ def build_explanation(
                 "contribution": round(metric.contribution, 4),
             }
             for name, metric in bundle.metrics.items()
+        },
+        "conditioning": {
+            "reliability": bundle.conditioned.reliability if bundle.conditioned else {},
+            "visibility": bundle.conditioned.visibility if bundle.conditioned else {},
         },
         "stress_scenarios": [
             {
