@@ -230,6 +230,26 @@ def test_list_subnets_max_score_filter():
         assert s["score"] <= 40
 
 
+def test_list_subnets_sort_by_signal_confidence_desc():
+    with _with_db_mocks():
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets?sort_by=signal_confidence&sort_order=desc")
+    assert resp.status_code == 200
+    values = [row["primary_outputs"]["signal_confidence"] for row in resp.json()["subnets"]]
+    assert values == sorted(values, reverse=True)
+
+
+def test_list_subnets_sort_by_mispricing_signal_desc():
+    with _with_db_mocks():
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets?sort_by=mispricing_signal&sort_order=desc")
+    assert resp.status_code == 200
+    values = [row["primary_outputs"]["mispricing_signal"] for row in resp.json()["subnets"]]
+    assert values == sorted(values, reverse=True)
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/subnets/{netuid}
 # ---------------------------------------------------------------------------

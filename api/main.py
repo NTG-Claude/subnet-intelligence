@@ -13,7 +13,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from functools import wraps
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -213,6 +213,31 @@ def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse
     )
 
 
+def _sort_value(row: dict, sort_by: str, meta_by_netuid: dict[int, dict]) -> Any:
+    raw_data = row.get("raw_data") or {}
+    primary_outputs = raw_data.get("analysis", {}).get("primary_outputs") or raw_data.get("primary_outputs") or {}
+    if sort_by == "score":
+        return row.get("score") or 0.0
+    if sort_by == "netuid":
+        return row.get("netuid") or 0
+    if sort_by == "rank":
+        return -(row.get("rank") or 999999)
+    if sort_by == "fundamental_quality":
+        return primary_outputs.get("fundamental_quality", -1.0)
+    if sort_by == "mispricing_signal":
+        return primary_outputs.get("mispricing_signal", -1.0)
+    if sort_by == "fragility_risk":
+        return primary_outputs.get("fragility_risk", 999.0)
+    if sort_by == "signal_confidence":
+        return primary_outputs.get("signal_confidence", -1.0)
+    if sort_by == "label":
+        return raw_data.get("label") or ""
+    if sort_by == "name":
+        metadata = meta_by_netuid.get(row["netuid"]) or {}
+        return metadata.get("name") or _override_name_map().get(row["netuid"]) or ""
+    return row.get("score") or 0.0
+
+
 def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
     with SessionLocal() as session:
         row = session.get(SubnetMetadataRow, netuid)
@@ -258,10 +283,22 @@ async def list_subnets(
     offset: int = Query(0, ge=0),
     min_score: float = Query(0.0, ge=0, le=100),
     max_score: float = Query(100.0, ge=0, le=100),
+    sort_by: Literal[
+        "score",
+        "rank",
+        "netuid",
+        "name",
+        "label",
+        "fundamental_quality",
+        "mispricing_signal",
+        "fragility_risk",
+        "signal_confidence",
+    ] = Query("score"),
+    sort_order: Literal["asc", "desc"] = Query("desc"),
     _: None = Depends(_check_rate_limit),
 ) -> SubnetListResponse:
     all_rows = get_latest_scores()
-    cache_key = _live_cache_key("list", limit, offset, min_score, max_score, rows=all_rows)
+    cache_key = _live_cache_key("list", limit, offset, min_score, max_score, sort_by, sort_order, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -269,6 +306,12 @@ async def list_subnets(
     all_rows = [r for r in all_rows if _is_investable_row(r)]
     meta_by_netuid = get_all_metadata()
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
+    reverse = sort_order == "desc"
+    filtered = sorted(
+        filtered,
+        key=lambda row: _sort_value(row, sort_by, meta_by_netuid),
+        reverse=reverse,
+    )
     total = len(filtered)
     page = filtered[offset: offset + limit]
 
