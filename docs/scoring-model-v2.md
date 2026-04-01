@@ -217,3 +217,24 @@ New machine-readable fields are additive:
 - `top_negative_drags`
 - `key_uncertainties`
 - `conditioning`
+
+## Current Status Summary
+
+### Done
+
+- explicit conditioning now sits ahead of raw feature construction
+- raw features, base components, core blocks, primary signals, ranking, and explainability are separated
+- ranking prefers V2 artifacts such as `bundle.ranking` and `bundle.core_blocks["opportunity_underreaction"]`
+- explainability exposes machine-readable contributors, drags, uncertainties, and conditioning visibility
+- stress scenarios and labels prefer V2 components and blocks when available
+
+### Intentionally Kept
+
+- `signal_fabrication_risk` remains as a useful confidence and hard-rule hygiene metric
+- a small `bundle.raw` compatibility surface remains for transition safety
+
+### Safe Next Cleanups
+
+- keep shrinking `fragility_block` alias usage in any remaining tooling
+- retire `base_mispricing_signal` and `base_signal_confidence` once no compatibility readers remain
+- remove internal debug breadcrumbs if future tooling no longer needs them
