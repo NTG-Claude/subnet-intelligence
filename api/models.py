@@ -37,6 +37,7 @@ class SubnetSummaryResponse(BaseModel):
     staking_apy: Optional[float] = None
     label: Optional[str] = None
     thesis: Optional[str] = None
+    analysis_preview: Optional[dict] = None
 
 
 class SubnetMetadataResponse(BaseModel):

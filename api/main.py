@@ -193,8 +193,9 @@ def _is_investable_row(row: dict) -> bool:
 
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
+    analysis = raw_data.get("analysis") or {}
     fallback_name = _override_name_map().get(row["netuid"])
-    primary_outputs = raw_data.get("analysis", {}).get("primary_outputs") or raw_data.get("primary_outputs")
+    primary_outputs = analysis.get("primary_outputs") or raw_data.get("primary_outputs")
     return SubnetSummaryResponse(
         netuid=row["netuid"],
         name=(meta.name if meta else None) or fallback_name,
@@ -210,6 +211,15 @@ def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse
         staking_apy=row.get("staking_apy"),
         label=raw_data.get("label"),
         thesis=raw_data.get("thesis"),
+        analysis_preview={
+            "top_positive_drivers": analysis.get("top_positive_drivers") or [],
+            "top_negative_drags": analysis.get("top_negative_drags") or analysis.get("top_negative_drivers") or [],
+            "key_uncertainties": analysis.get("key_uncertainties") or [],
+            "conditioning": analysis.get("conditioning") or {},
+            "block_scores": analysis.get("block_scores") or {},
+        }
+        if analysis
+        else None,
     )
 
 

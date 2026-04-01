@@ -15,6 +15,7 @@ export interface SubnetSummary {
   staking_apy: number | null
   label: string | null
   thesis: string | null
+  analysis_preview?: AnalysisPreview | null
 }
 
 export interface ScoreBreakdown {
@@ -38,6 +39,72 @@ export interface DriverItem {
   value: number | null
   normalized: number
   category: string
+}
+
+export interface ExplanationContributor {
+  metric?: string
+  name?: string
+  category?: string
+  value?: number | null
+  normalized?: number
+  contribution?: number
+  signed_contribution?: number
+  direction?: string
+  short_explanation?: string
+  source_block?: string
+}
+
+export interface KeyUncertainty {
+  name: string
+  signed_contribution?: number
+  direction?: string
+  short_explanation?: string
+  source_block?: string
+}
+
+export interface ConditioningInfo {
+  reliability?: Record<string, number>
+  visibility?: Record<string, string[]>
+}
+
+export interface ConfidenceRationale extends RationaleBucket {
+  evidence_confidence?: number
+  thesis_confidence?: number
+  data_confidence?: number
+  market_confidence?: number
+}
+
+export interface AnalysisPreview {
+  top_positive_drivers?: ExplanationContributor[]
+  top_negative_drags?: ExplanationContributor[]
+  key_uncertainties?: KeyUncertainty[]
+  conditioning?: ConditioningInfo
+  block_scores?: Record<string, number>
+}
+
+export interface SubnetAnalysis {
+  label?: string
+  thesis?: string
+  primary_outputs?: PrimaryOutputs
+  component_scores?: Record<string, number>
+  block_scores?: Record<string, number>
+  top_positive_drivers?: ExplanationContributor[]
+  top_negative_drags?: ExplanationContributor[]
+  top_negative_drivers?: ExplanationContributor[]
+  primary_signal_contributors?: Record<string, ExplanationContributor[]>
+  key_uncertainties?: KeyUncertainty[]
+  why_mispriced?: RationaleBucket
+  risk_drivers?: RationaleBucket
+  confidence_rationale?: ConfidenceRationale
+  quality_rationale?: RationaleBucket
+  thesis_breakers?: string[]
+  activated_hard_rules?: string[]
+  stress_drawdown?: number
+  fragility_class?: string
+  earned_reflexive_fragile?: Record<string, number>
+  debug_metrics?: Record<string, unknown>
+  conditioning?: ConditioningInfo
+  stress_scenarios?: { name: string; score_after: number; drawdown: number }[]
 }
 
 export interface RationaleBucket {
@@ -73,24 +140,7 @@ export interface SubnetDetail {
   score_delta_7d: number | null
   label: string | null
   thesis: string | null
-  analysis: {
-    label?: string
-    thesis?: string
-    primary_outputs?: PrimaryOutputs
-    component_scores?: Record<string, number>
-    top_positive_drivers?: DriverItem[]
-    top_negative_drivers?: DriverItem[]
-    why_mispriced?: RationaleBucket
-    risk_drivers?: RationaleBucket
-    confidence_rationale?: RationaleBucket
-    quality_rationale?: RationaleBucket
-    thesis_breakers?: string[]
-    activated_hard_rules?: string[]
-    stress_drawdown?: number
-    fragility_class?: string
-    earned_reflexive_fragile?: Record<string, number>
-    stress_scenarios?: { name: string; score_after: number; drawdown: number }[]
-  } | null
+  analysis: SubnetAnalysis | null
 }
 
 export interface DistributionBucket {
