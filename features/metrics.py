@@ -291,6 +291,26 @@ def _signal_fabrication_risk(
     )
 
 
+def _mispricing_structural_drag(
+    market_structure_floor: float,
+    market_relevance: float,
+    crowding_proxy: float,
+    overreaction_score: float,
+    signal_fabrication_risk: float,
+    fragility_excess: float,
+    yield_heat: float,
+) -> float:
+    return clamp01(
+        0.26 * (1.0 - market_structure_floor)
+        + 0.16 * (1.0 - market_relevance)
+        + 0.14 * crowding_proxy
+        + 0.14 * overreaction_score
+        + 0.12 * signal_fabrication_risk
+        + 0.10 * fragility_excess
+        + 0.08 * yield_heat
+    )
+
+
 def _cohort_key(bundle: FeatureBundle) -> str:
     reserve_depth = bundle.raw.get("reserve_depth") or 0.0
     active_ratio = bundle.raw.get("active_ratio") or 0.0
@@ -778,52 +798,69 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         base_signal_confidence = clamp01(_weighted_output(bundle, "signal_confidence"))
         fragility_excess = clamp01(max(base_fragility_risk - 0.50, 0.0) / 0.50)
         yield_heat = clamp01(max((bundle.raw.get("staking_apy_proxy") or 0.0) - 60.0, 0.0) / 100.0)
+        signal_fabrication_risk = clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
+        overreaction_score = clamp01(bundle.raw.get("overreaction_score") or 0.0)
+        crowding_proxy = clamp01(bundle.raw.get("crowding_proxy") or 0.0)
+        market_structure_floor = clamp01(bundle.raw.get("market_structure_floor") or 0.0)
+        market_relevance_proxy = clamp01(bundle.raw.get("market_relevance_proxy") or 0.0)
         evidence_confidence = clamp01(
             0.34 * base_signal_confidence
             + 0.20 * clamp01(bundle.raw.get("data_coverage") or 0.0)
             + 0.14 * clamp01(bundle.raw.get("update_freshness") or 0.0)
             + 0.12 * (1.0 - clamp01(bundle.raw.get("proxy_reliance_penalty") or 0.0))
-            + 0.10 * (1.0 - clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0))
+            + 0.10 * (1.0 - signal_fabrication_risk)
             + 0.10 * clamp01(bundle.raw.get("confidence_thesis_coherence") or 0.0)
             - 0.10 * clamp01(bundle.raw.get("low_evidence_high_conviction") or 0.0)
         )
         reflexive_confidence_drag = clamp01(
-            0.38 * clamp01(bundle.raw.get("crowding_proxy") or 0.0)
-            + 0.22 * clamp01(bundle.raw.get("overreaction_score") or 0.0)
-            + 0.20 * clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
+            0.38 * crowding_proxy
+            + 0.22 * overreaction_score
+            + 0.20 * signal_fabrication_risk
             + 0.20 * fragility_excess
         )
         structural_confidence_drag = clamp01(
-            0.30 * (1.0 - clamp01(bundle.raw.get("market_structure_floor") or 0.0))
+            0.30 * (1.0 - market_structure_floor)
             + 0.22 * (1.0 - clamp01(bundle.raw.get("confidence_market_integrity") or 0.0))
-            + 0.20 * clamp01(bundle.raw.get("crowding_proxy") or 0.0)
+            + 0.20 * crowding_proxy
             + 0.16 * yield_heat
             + 0.12 * fragility_excess
         )
         thesis_confidence = clamp01(
-            0.24 * clamp01(bundle.raw.get("market_structure_floor") or 0.0)
+            0.24 * market_structure_floor
             + 0.22 * clamp01(bundle.raw.get("confidence_market_integrity") or 0.0)
             + 0.16 * clamp01(bundle.raw.get("confidence_thesis_coherence") or 0.0)
-            + 0.12 * (1.0 - clamp01(bundle.raw.get("crowding_proxy") or 0.0))
-            + 0.10 * (1.0 - clamp01(bundle.raw.get("overreaction_score") or 0.0))
+            + 0.12 * (1.0 - crowding_proxy)
+            + 0.10 * (1.0 - overreaction_score)
             + 0.08 * (1.0 - fragility_excess)
-            + 0.08 * clamp01(bundle.raw.get("market_relevance_proxy") or 0.0)
+            + 0.08 * market_relevance_proxy
             - 0.12 * yield_heat
         )
         confidence_structural_ceiling = clamp01(
             0.82
-            - 0.30 * clamp01(bundle.raw.get("crowding_proxy") or 0.0)
+            - 0.30 * crowding_proxy
             - 0.14 * yield_heat
             - 0.14 * fragility_excess
-            - 0.12 * (1.0 - clamp01(bundle.raw.get("market_structure_floor") or 0.0))
+            - 0.12 * (1.0 - market_structure_floor)
         )
         adjusted_thesis_confidence = clamp01(
             thesis_confidence * (1.0 - 0.30 * reflexive_confidence_drag - 0.35 * structural_confidence_drag)
         )
         adjusted_signal_confidence = min(evidence_confidence, adjusted_thesis_confidence, confidence_structural_ceiling)
+        mispricing_structural_drag = _mispricing_structural_drag(
+            market_structure_floor=market_structure_floor,
+            market_relevance=market_relevance_proxy,
+            crowding_proxy=crowding_proxy,
+            overreaction_score=overreaction_score,
+            signal_fabrication_risk=signal_fabrication_risk,
+            fragility_excess=fragility_excess,
+            yield_heat=yield_heat,
+        )
         confidence_adjusted_mispricing = clamp01(
-            base_mispricing_signal * (0.35 + 0.65 * adjusted_signal_confidence)
-            - 0.30 * clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
+            base_mispricing_signal
+            * (0.25 + 0.75 * adjusted_signal_confidence)
+            * (1.0 - 0.60 * mispricing_structural_drag)
+            - 0.24 * signal_fabrication_risk
+            - 0.10 * overreaction_score
         )
         confidence_adjusted_thesis_strength = clamp01(
             0.45 * base_fundamental_quality
@@ -839,6 +876,7 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         bundle.raw["confidence_structural_ceiling"] = confidence_structural_ceiling
         bundle.raw["adjusted_thesis_confidence"] = adjusted_thesis_confidence
         bundle.raw["adjusted_signal_confidence"] = adjusted_signal_confidence
+        bundle.raw["mispricing_structural_drag"] = mispricing_structural_drag
         bundle.raw["confidence_adjusted_mispricing"] = confidence_adjusted_mispricing
         bundle.raw["confidence_adjusted_thesis_strength"] = confidence_adjusted_thesis_strength
         primary = PrimarySignals(

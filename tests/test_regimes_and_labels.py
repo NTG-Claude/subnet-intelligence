@@ -143,6 +143,62 @@ def test_elevated_yield_small_pool_caps_confidence_before_extreme_apy():
     assert rules.confidence_cap is not None and rules.confidence_cap <= 0.52
 
 
+def test_extreme_yield_small_pool_caps_mispricing():
+    snapshot = _snapshot(
+        active_neurons_7d=6,
+        tao_in_pool=700.0,
+        emission_per_block_tao=0.04,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.18,
+        participation_breadth=0.14,
+        slippage_10_tao=0.06,
+        slippage_50_tao=0.13,
+        validator_dominance=0.83,
+        incentive_concentration=0.86,
+        market_structure_floor=0.39,
+        validator_weight_entropy=0.46,
+        cross_validator_disagreement=0.20,
+        meaningful_discrimination=0.24,
+        dereg_risk_proxy=0.22,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "extreme_yield_small_pool_caps_mispricing" in rules.activated
+    assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.18
+    assert rules.fragility_floor is not None and rules.fragility_floor >= 0.76
+
+
+def test_fragile_repricing_blocks_top_mispricing():
+    snapshot = _snapshot(
+        active_neurons_7d=6,
+        tao_in_pool=5_500.0,
+        emission_per_block_tao=0.12,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.22,
+        participation_breadth=0.18,
+        slippage_10_tao=0.03,
+        slippage_50_tao=0.08,
+        validator_dominance=0.79,
+        incentive_concentration=0.81,
+        market_structure_floor=0.52,
+        validator_weight_entropy=0.50,
+        cross_validator_disagreement=0.22,
+        meaningful_discrimination=0.28,
+        dereg_risk_proxy=0.18,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "fragile_repricing_blocks_top_mispricing" in rules.activated
+    assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.26
+    assert rules.confidence_cap is not None and rules.confidence_cap <= 0.48
+
+
 def test_inactive_subnet_forces_dereg_candidate():
     snapshot = _snapshot(
         tao_in_pool=5000.0,
@@ -479,7 +535,7 @@ def test_severe_market_structure_breach_caps_microstructure_setups():
 
     assert "market_structure_floor_blocks_top_rank" in rules.activated
     assert rules.quality_cap == 0.34
-    assert rules.mispricing_cap == 0.24
+    assert rules.mispricing_cap == 0.18
     assert rules.fragility_floor == 0.78
     assert rules.total_cap is not None and rules.total_cap <= 0.34
 
@@ -515,8 +571,8 @@ def test_moderate_market_structure_breach_uses_watchlist_caps():
 
     assert "market_structure_floor_watchlist" in rules.activated
     assert rules.quality_cap == 0.42
-    assert rules.mispricing_cap == 0.34
-    assert rules.fragility_floor == 0.70
+    assert rules.mispricing_cap == 0.26
+    assert rules.fragility_floor == 0.72
 
 
 def test_liquid_hyped_subnet_can_be_reflexive_crowded_trade():

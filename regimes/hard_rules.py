@@ -103,6 +103,26 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         mispricing_cap = 0.42 if mispricing_cap is None else min(mispricing_cap, 0.42)
         fragility_floor = 0.68 if fragility_floor is None else max(fragility_floor, 0.68)
 
+    if pool_depth < 2_500 and staking_apy > 180:
+        activated.append("extreme_yield_small_pool_caps_mispricing")
+        mispricing_cap = 0.18 if mispricing_cap is None else min(mispricing_cap, 0.18)
+        confidence_cap = 0.42 if confidence_cap is None else min(confidence_cap, 0.42)
+        fragility_floor = 0.76 if fragility_floor is None else max(fragility_floor, 0.76)
+
+    if (
+        pool_depth < 10_000
+        and staking_apy > 110
+        and (
+            market_structure_floor < 0.58
+            or max_slippage > 0.05
+            or concentration > 0.75
+        )
+    ):
+        activated.append("fragile_repricing_blocks_top_mispricing")
+        mispricing_cap = 0.26 if mispricing_cap is None else min(mispricing_cap, 0.26)
+        confidence_cap = 0.48 if confidence_cap is None else min(confidence_cap, 0.48)
+        fragility_floor = 0.72 if fragility_floor is None else max(fragility_floor, 0.72)
+
     elevated_yield_confidence_breach = (
         pool_depth < 10_000
         and staking_apy > 100

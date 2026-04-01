@@ -226,6 +226,51 @@ def test_confidence_adjusted_mispricing_discounted_by_signal_fabrication_risk():
 
     assert robust_bundle.raw["signal_fabrication_risk"] < noisy_bundle.raw["signal_fabrication_risk"]
     assert robust_bundle.primary_signals.mispricing_signal > noisy_bundle.primary_signals.mispricing_signal
+    assert robust_bundle.raw["mispricing_structural_drag"] < noisy_bundle.raw["mispricing_structural_drag"]
+
+
+def test_mispricing_structural_drag_penalizes_extreme_yield_microstructure():
+    robust_bundle, hype_bundle = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=8,
+                    unique_coldkeys=9,
+                    n_validators=7,
+                    tao_in_pool=55_000.0,
+                    alpha_in_pool=12_500.0,
+                    alpha_price_tao=10.2,
+                    emission_per_block_tao=0.025,
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=48_000.0, active_ratio=0.56, fundamental_quality=0.53),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=51_000.0, active_ratio=0.61, fundamental_quality=0.59),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=53_000.0, active_ratio=0.66, fundamental_quality=0.65),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=3,
+                    unique_coldkeys=2,
+                    n_validators=2,
+                    tao_in_pool=750.0,
+                    alpha_in_pool=4.5,
+                    alpha_price_tao=16.0,
+                    emission_per_block_tao=0.04,
+                    top3_stake_fraction=0.88,
+                    incentive_scores=[0.96, 0.04],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=650.0, active_ratio=0.22, fundamental_quality=0.38),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=12.2, tao_in_pool=680.0, active_ratio=0.22, fundamental_quality=0.38),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=14.5, tao_in_pool=710.0, active_ratio=0.21, fundamental_quality=0.37),
+                    ],
+                )
+            ),
+        ]
+    )
+
+    assert robust_bundle.raw["mispricing_structural_drag"] < hype_bundle.raw["mispricing_structural_drag"]
+    assert robust_bundle.primary_signals.mispricing_signal > hype_bundle.primary_signals.mispricing_signal
 
 
 def test_signal_confidence_is_discounted_for_reflexive_fragile_structures():
