@@ -21,10 +21,14 @@ export default function CompareGrid({ memos }: { memos: DetailMemoViewModel[] })
 
       <div className="grid gap-4 xl:grid-cols-2">
         {memos.map((memo) => (
-          <section key={memo.netuidLabel} className="rounded-3xl border border-white/10 bg-white/[0.035] p-5">
+          <section key={memo.netuidLabel} className="rounded-3xl border border-white/10 bg-[#11161c] p-5">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="neutral">{memo.netuidLabel}</StatusBadge>
-              <StatusBadge tone={memo.awaitingRun ? 'warning' : 'neutral'}>{memo.label}</StatusBadge>
+              {memo.summaryFlags.map((flag) => (
+                <StatusBadge key={flag.label} tone={flag.tone}>
+                  {flag.label}
+                </StatusBadge>
+              ))}
             </div>
             <div className="mt-4 space-y-2">
               <Link href={memo.href} className="text-2xl font-semibold tracking-tight text-stone-50 transition-colors hover:text-sky-200">
@@ -35,7 +39,7 @@ export default function CompareGrid({ memos }: { memos: DetailMemoViewModel[] })
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {memo.signals.map((signal) => (
-                <SignalPill key={signal.key} signal={signal} />
+                <SignalPill key={signal.key} signal={signal} compact />
               ))}
             </div>
 
@@ -53,7 +57,15 @@ export default function CompareGrid({ memos }: { memos: DetailMemoViewModel[] })
             <div className="mt-5 grid gap-5 lg:grid-cols-2">
               <div>
                 <div className="mb-3 text-[11px] uppercase tracking-[0.24em] text-stone-500">Confidence profile</div>
-                <MemoList items={memo.confidenceItems.slice(0, 4)} empty="No confidence readout." />
+                <MemoList
+                  items={memo.confidenceHeadline.map((item) => ({
+                    title: item.label,
+                    body: item.value,
+                    tone: item.tone,
+                    meta: item.meta,
+                  }))}
+                  empty="No confidence readout."
+                />
               </div>
               <div>
                 <div className="mb-3 text-[11px] uppercase tracking-[0.24em] text-stone-500">Stress profile</div>
