@@ -766,9 +766,9 @@ def test_crowded_repricing_discount_penalizes_crowded_large_names():
     )
 
     assert balanced_bundle.raw["crowded_repricing_discount"] < crowded_bundle.raw["crowded_repricing_discount"]
-    assert crowded_bundle.raw["base_mispricing_signal"] >= balanced_bundle.raw["base_mispricing_signal"]
-    balanced_discount = balanced_bundle.raw["base_mispricing_signal"] - balanced_bundle.primary_signals.mispricing_signal
-    crowded_discount = crowded_bundle.raw["base_mispricing_signal"] - crowded_bundle.primary_signals.mispricing_signal
+    assert crowded_bundle.core_blocks["opportunity_underreaction"] >= balanced_bundle.core_blocks["opportunity_underreaction"]
+    balanced_discount = balanced_bundle.core_blocks["opportunity_underreaction"] - balanced_bundle.primary_signals.mispricing_signal
+    crowded_discount = crowded_bundle.core_blocks["opportunity_underreaction"] - crowded_bundle.primary_signals.mispricing_signal
 
     assert crowded_discount > balanced_discount
 
