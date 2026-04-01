@@ -152,6 +152,39 @@ History stabilization, bounded drift, telemetry-gap fallback, and stress integra
   - `crowded_repricing_discount` -> bounded crowding penalty
   - `confidence_adjusted_thesis_strength` -> ranking helper only
 
+## Compatibility Field Status
+
+| Field | V2 Status | Preferred V2 Home |
+| --- | --- | --- |
+| `fundamental_health` | core block | `bundle.core_blocks["fundamental_health"]` |
+| `opportunity_underreaction` | core block | `bundle.core_blocks["opportunity_underreaction"]` |
+| `market_legitimacy` | core block | `bundle.core_blocks["market_legitimacy"]` |
+| `data_confidence` | core component | `bundle.base_components["data_confidence"]` |
+| `market_confidence` | core component | `bundle.base_components["market_confidence"]` |
+| `thesis_confidence` | core component | `bundle.base_components["thesis_confidence"]` |
+| `confidence_adjusted_thesis_strength` | ranking helper | `bundle.ranking["thesis_strength"]` |
+| `confidence_adjusted_mispricing` | compatibility helper | `bundle.primary_signals.mispricing_signal` |
+| `signal_fabrication_risk` | confidence hygiene helper | keep as derived raw/debug field |
+| `mispricing_structural_drag` | compat/debug | `structural_validity_factor` inside primary-signal logic |
+| `crowded_repricing_discount` | compat/debug | small-penalty path inside `mispricing_signal` |
+| `base_mispricing_signal` | compat/debug | `bundle.core_blocks["opportunity_underreaction"]` |
+| `base_signal_confidence` | compat/debug | `bundle.core_blocks["evidence_confidence"]` |
+| `fragility_block` | compat/debug | `bundle.core_blocks["fragility"]` |
+| `adjusted_signal_confidence` | compat/debug | final `signal_confidence` plus ceilings in V2 logic |
+| `adjusted_thesis_confidence` | compat/debug | `bundle.base_components["thesis_confidence"]` plus structural ceiling logic |
+| `evidence_confidence_ceiling` | compat/debug | confidence ceiling inside V2 confidence orchestration |
+| `structural_confidence_drag` | compat/debug | derived from `structural_validity_factor` |
+| `reflexive_confidence_drag` | compat/debug | `bundle.base_components["crowding_level"]` |
+| `crowded_structure_penalty` | compat/debug | bounded structural penalty inside confidence orchestration |
+| `quality_resolution_bonus` | deprecate later | folded into `fundamental_quality` composition |
+| `quality_resolution_drag` | deprecate later | folded into `fundamental_quality` composition |
+
+### Suggested Next Cleanup Order
+
+1. Move tests from `base_mispricing_signal` and `fragility_block` to `opportunity_underreaction` and `fragility`.
+2. Treat `base_signal_confidence`, `quality_resolution_bonus`, and `quality_resolution_drag` as internal-only debug fields.
+3. Remove direct consumers of `confidence_adjusted_mispricing` once ranking exclusively reads V2 ranking artifacts.
+
 ## Explainability Migration
 
 Existing explanation fields remain available, but V2 adds:

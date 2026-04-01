@@ -1129,6 +1129,8 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
                 {"name": "thesis_confidence", "signed_contribution": round((confidence_components["thesis_confidence"] - 0.5) * 0.30, 4), "direction": "positive" if confidence_components["thesis_confidence"] >= 0.5 else "negative", "short_explanation": "The thesis remains stronger when evidence is coherent and not overly reflexive.", "source_block": "core_blocks"},
             ],
         }
+        # Keep a compact compatibility/debug surface on bundle.raw while V1-era
+        # explainers, rules, and tests are still being migrated to V2 blocks.
         bundle.raw.update(
             {
                 "fundamental_health": fundamental_health,
