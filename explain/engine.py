@@ -60,6 +60,19 @@ def _sorted_primary_contributions(bundle: FeatureBundle, signal_name: str, inver
     )
 
 
+def _driver_to_desirability(item: dict, positive: bool) -> dict:
+    signed = abs(float(item.get("effect", 0.0)))
+    if not positive:
+        signed = -signed
+    return {
+        "name": item.get("metric"),
+        "signed_contribution": round(signed, 4),
+        "direction": "positive" if positive else "negative",
+        "short_explanation": f"{item.get('metric')} acts as a {'support' if positive else 'headwind'} in the current signal mix.",
+        "source_block": item.get("category") or "metrics",
+    }
+
+
 def _conditioning_uncertainties(bundle: FeatureBundle) -> list[dict]:
     conditioned = bundle.conditioned
     if conditioned is None:
@@ -170,10 +183,37 @@ def build_explanation(
         item for item in sorted(v2_desirability, key=lambda entry: entry.get("signed_contribution", 0.0))
         if item.get("signed_contribution", 0.0) < 0
     ][:5]
+    if not top_negative_drags:
+        fallback_negatives = (
+            [_driver_to_desirability(item, positive=False) for item in mispricing_headwinds]
+            + [_driver_to_desirability(item, positive=False) for item in quality_headwinds]
+            + [_driver_to_desirability(item, positive=False) for item in fragility_drivers]
+            + [_driver_to_desirability(item, positive=False) for item in confidence_headwinds]
+        )
+        seen_negative_names: set[str] = set()
+        for item in fallback_negatives:
+            name = str(item.get("name") or "")
+            if not name or name in seen_negative_names:
+                continue
+            seen_negative_names.add(name)
+            top_negative_drags.append(item)
+            if len(top_negative_drags) >= 5:
+                break
     uncertainties = _conditioning_uncertainties(bundle)
     for item in _sorted_primary_contributions(bundle, "signal_confidence"):
         if item.get("signed_contribution", 0.0) < 0:
             uncertainties.append(item)
+    if not uncertainties:
+        for item in confidence_headwinds:
+            uncertainties.append(
+                {
+                    "name": item.get("metric"),
+                    "signed_contribution": round(-abs(float(item.get("effect", 0.0))), 4),
+                    "direction": "negative",
+                    "short_explanation": f"{item.get('metric')} weakens confidence in the current read.",
+                    "source_block": item.get("category") or "metrics",
+                }
+            )
     uncertainties = sorted(uncertainties, key=lambda item: item.get("signed_contribution", 0.0))[:5]
 
     thesis_breakers = []

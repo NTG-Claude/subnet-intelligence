@@ -107,6 +107,19 @@ export interface DetailMemoViewModel {
   awaitingRun: boolean
 }
 
+function numericValues(subnets: SubnetSummary[], pick: (subnet: SubnetSummary) => number): number[] {
+  return subnets
+    .map(pick)
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .sort((left, right) => left - right)
+}
+
+function quantile(values: number[], q: number, fallback: number): number {
+  if (!values.length) return fallback
+  const idx = Math.min(values.length - 1, Math.max(0, Math.floor((values.length - 1) * q)))
+  return values[idx]
+}
+
 export const UNIVERSE_LENSES: UniverseLens[] = [
   {
     id: 'all',
@@ -439,22 +452,43 @@ export function sortUniverseRows(rows: UniverseRowViewModel[], sortId: UniverseS
 
 export function applyUniverseLens(subnets: SubnetSummary[], lensId: string): SubnetSummary[] {
   const investable = [...subnets]
+  const qualityCut = quantile(numericValues(investable, qualityValue), 0.7, 65)
+  const mispricingCut = quantile(numericValues(investable, mispricingValue), 0.75, 60)
+  const confidenceCut = quantile(numericValues(investable, confidenceValue), 0.65, 55)
+  const lowConfidenceCut = quantile(numericValues(investable, confidenceValue), 0.35, 45)
+  const resilientCut = quantile(numericValues(investable, fragilityValue), 0.35, 40)
+  const acceptableFragilityCut = quantile(numericValues(investable, fragilityValue), 0.55, 60)
   switch (lensId) {
     case 'high-mispricing-confidence':
       return investable
-        .filter((subnet) => mispricingValue(subnet) >= 60 && confidenceValue(subnet) >= 55 && fragilityValue(subnet) <= 60)
+        .filter(
+          (subnet) =>
+            mispricingValue(subnet) >= mispricingCut &&
+            confidenceValue(subnet) >= confidenceCut &&
+            fragilityValue(subnet) <= acceptableFragilityCut,
+        )
         .sort((a, b) => mispricingValue(b) + confidenceValue(b) - mispricingValue(a) - confidenceValue(a))
     case 'strong-quality':
       return investable
-        .filter((subnet) => qualityValue(subnet) >= 65 && fragilityValue(subnet) <= 60)
+        .filter((subnet) => qualityValue(subnet) >= qualityCut && fragilityValue(subnet) <= acceptableFragilityCut)
         .sort((a, b) => qualityValue(b) - qualityValue(a))
     case 'compounders':
       return investable
-        .filter((subnet) => qualityValue(subnet) >= 55 && fragilityValue(subnet) <= 40 && confidenceValue(subnet) >= 50)
+        .filter(
+          (subnet) =>
+            qualityValue(subnet) >= quantile(numericValues(investable, qualityValue), 0.6, 55) &&
+            fragilityValue(subnet) <= resilientCut &&
+            confidenceValue(subnet) >= quantile(numericValues(investable, confidenceValue), 0.5, 50),
+        )
         .sort((a, b) => fragilityValue(a) - fragilityValue(b) || qualityValue(b) - qualityValue(a))
     case 'low-confidence':
       return investable
-        .filter((subnet) => mispricingValue(subnet) >= 55 && confidenceValue(subnet) > -1 && confidenceValue(subnet) < 50)
+        .filter(
+          (subnet) =>
+            mispricingValue(subnet) >= mispricingCut &&
+            confidenceValue(subnet) > -1 &&
+            confidenceValue(subnet) <= lowConfidenceCut,
+        )
         .sort((a, b) => mispricingValue(b) - mispricingValue(a))
     case 'under-review':
       return investable

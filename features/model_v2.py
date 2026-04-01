@@ -318,7 +318,6 @@ def _incentive_distribution_quality(
 
 def _validator_dominance_score(
     validator_stakes: list[float],
-    top3_stake_fraction: float,
     n_validators: int,
     participation_breadth: float,
     validator_participation: float,
@@ -331,10 +330,11 @@ def _validator_dominance_score(
     total = sum(clean)
     validator_count = max(n_validators, len(clean), 1)
     top1_share = max(clean) / total if total > 0 else 1.0
+    top3_share = sum(sorted(clean, reverse=True)[:3]) / total if total > 0 else 1.0
     baseline_top1 = 1.0 / validator_count
     baseline_top3 = min(1.0, 3.0 / validator_count)
     top1_excess = clamp01((top1_share - baseline_top1) / max(1.0 - baseline_top1, 1e-9))
-    top3_excess = clamp01((top3_stake_fraction - baseline_top3) / max(1.0 - baseline_top3, 1e-9))
+    top3_excess = clamp01((top3_share - baseline_top3) / max(1.0 - baseline_top3, 1e-9))
     raw_dominance = clamp01(0.58 * top1_excess + 0.42 * top3_excess)
     adjusted_dominance = _contextualize_concentration(
         raw_concentration=raw_dominance,
@@ -498,7 +498,6 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     )
     validator_dominance, raw_validator_dominance = _validator_dominance_score(
         c["validator_stakes"],
-        c["top3_stake_fraction"],
         c["n_validators"],
         participation_breadth=participation_breadth,
         validator_participation=validator_participation,
@@ -517,6 +516,13 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     flow_history = _history_values(history, "tao_in_pool")
     concentration_history = _history_values(history, "concentration_proxy")
     liquidity_history = _history_values(history, "liquidity_thinness")
+    price_input_reconstructed = "alpha_price_tao" in conditioned.visibility["reconstructed"]
+    price_input_bounded = "alpha_price_tao" in conditioned.visibility["bounded"]
+    price_signal_reliability = 1.0
+    if price_input_reconstructed:
+        price_signal_reliability = 0.25
+    elif price_input_bounded:
+        price_signal_reliability = 0.60
     quality_current = _current_quality_state(
         active_ratio,
         participation_breadth,
@@ -524,7 +530,8 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         incentive_distribution_quality,
         market_structure_floor,
     )
-    price_change = _change_vs_history(c["alpha_price_tao"], price_history)
+    raw_price_change = _change_vs_history(c["alpha_price_tao"], price_history)
+    price_change = None if raw_price_change is None else raw_price_change * price_signal_reliability
     active_change = _change_vs_history(active_ratio, active_history)
     breadth_change = _change_vs_history(participation_breadth, breadth_history)
     validator_change = _change_vs_history(validator_participation, validator_history)
@@ -544,7 +551,8 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     if reserve_change is not None or liquidity_change is not None:
         liquidity_improvement_rate = (reserve_change or 0.0) - max(liquidity_change or 0.0, 0.0)
     validator_diversity_trend = None if concentration_change is None else -concentration_change
-    price_response_lag_to_quality_shift = max(0.0, max(quality_change or 0.0, quality_acceleration or 0.0) - max(price_change or 0.0, 0.0))
+    realized_price_response = max(price_change or 0.0, 0.0)
+    price_response_lag_to_quality_shift = max(0.0, max(quality_change or 0.0, quality_acceleration or 0.0) - realized_price_response)
     emission_to_sticky_usage_conversion = max(
         0.0,
         0.50 * max(active_change or 0.0, 0.0)
@@ -557,9 +565,9 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         0.45 * emission_to_sticky_usage_conversion
         + 0.30 * max(quality_change or 0.0, 0.0)
         + 0.25 * max(structure_change or 0.0, 0.0)
-        - 0.40 * max(price_change or 0.0, 0.0),
+        - 0.40 * realized_price_response,
     )
-    reserve_growth_without_price = max(0.0, (reserve_change or 0.0) - max(price_change or 0.0, 0.0))
+    reserve_growth_without_price = max(0.0, (reserve_change or 0.0) - realized_price_response)
     participation_without_crowding = max(
         0.0,
         0.50 * max(active_change or 0.0, 0.0)
@@ -641,9 +649,8 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         emission_to_sticky_usage_conversion,
         post_incentive_retention,
     )
-    realized_price_response = max(price_change or 0.0, 0.0)
     realized_reserve_response = max(reserve_change or 0.0, 0.0)
-    expected_price_response_gap = expected_price_response - realized_price_response
+    expected_price_response_gap = (expected_price_response - realized_price_response) * price_signal_reliability
     expected_reserve_response_gap = expected_reserve_response - realized_reserve_response
     fair_value_anchor = clamp01(
         0.40 * market_relevance
@@ -651,7 +658,11 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         + 0.20 * confidence_market_integrity
         + 0.10 * clamp01(_history_anchor(quality_history))
     )
-    realized_price_level = percentile_rank(c["alpha_price_tao"], price_history + [c["alpha_price_tao"]])
+    realized_price_level_raw = percentile_rank(c["alpha_price_tao"], price_history + [c["alpha_price_tao"]])
+    realized_price_level = clamp01(
+        fair_value_anchor * (1.0 - price_signal_reliability)
+        + realized_price_level_raw * price_signal_reliability
+    )
     crowded_expectation_saturation = _crowded_expectation_saturation(
         market_relevance=market_relevance,
         crowding_proxy=crowding_proxy,
@@ -685,12 +696,13 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     )
     proxy_reliance_penalty = clamp01(
         (
-            0.25 * (1.0 - freshness)
-            + 0.20 * (1.0 - history_depth_score)
-            + 0.15 * (1.0 - data_coverage)
-            + 0.15 * (1.0 - market_data_reliability)
-            + 0.15 * (1.0 - validator_data_reliability)
-            + 0.10 * consensus_signal_gap
+            0.23 * (1.0 - freshness)
+            + 0.18 * (1.0 - history_depth_score)
+            + 0.14 * (1.0 - data_coverage)
+            + 0.14 * (1.0 - market_data_reliability)
+            + 0.12 * (1.0 - validator_data_reliability)
+            + 0.09 * consensus_signal_gap
+            + 0.10 * (1.0 - price_signal_reliability)
         )
         * (1.0 - 0.45 * onchain_evidence_support)
     )
@@ -770,6 +782,9 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "quality_change": quality_change,
         "reserve_change": reserve_change,
         "price_change": price_change,
+        "price_signal_reliability": price_signal_reliability,
+        "price_input_reconstructed": 1.0 if price_input_reconstructed else 0.0,
+        "price_input_bounded": 1.0 if price_input_bounded else 0.0,
         "quality_acceleration": quality_acceleration,
         "liquidity_improvement_rate": liquidity_improvement_rate,
         "concentration_delta": concentration_change,

@@ -191,9 +191,33 @@ def _is_investable_row(row: dict) -> bool:
     return raw_data.get("investable", True)
 
 
+def _normalize_analysis_payload(analysis: Optional[dict]) -> Optional[dict]:
+    if not analysis:
+        return None
+    normalized = dict(analysis)
+    schema_stale = False
+    if "top_negative_drags" not in normalized:
+        normalized["top_negative_drags"] = normalized.get("top_negative_drivers") or []
+        schema_stale = schema_stale or "top_negative_drivers" in normalized
+    if "top_negative_drivers" not in normalized:
+        normalized["top_negative_drivers"] = normalized.get("top_negative_drags") or []
+    for key, default in (
+        ("key_uncertainties", []),
+        ("primary_signal_contributors", {}),
+        ("block_scores", {}),
+        ("conditioning", {}),
+    ):
+        if key not in normalized:
+            normalized[key] = default
+            schema_stale = True
+    if schema_stale:
+        normalized["analysis_schema_stale"] = True
+    return normalized
+
+
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
-    analysis = raw_data.get("analysis") or {}
+    analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
     fallback_name = _override_name_map().get(row["netuid"])
     primary_outputs = analysis.get("primary_outputs") or raw_data.get("primary_outputs")
     return SubnetSummaryResponse(
@@ -378,7 +402,8 @@ async def get_subnet(
 
     meta = _get_metadata(netuid)
 
-    detail_primary_outputs = (((row.get("raw_data") or {}).get("analysis", {}) or {}).get("primary_outputs"))
+    analysis_payload = _normalize_analysis_payload((row.get("raw_data") or {}).get("analysis"))
+    detail_primary_outputs = ((analysis_payload or {}).get("primary_outputs"))
 
     result = SubnetDetailResponse(
         netuid=netuid,
@@ -405,7 +430,7 @@ async def get_subnet(
         score_delta_7d=score_delta_7d,
         label=(row.get("raw_data") or {}).get("label"),
         thesis=(row.get("raw_data") or {}).get("thesis"),
-        analysis=(row.get("raw_data") or {}).get("analysis"),
+        analysis=analysis_payload,
     )
     _cache_set(cache_key, result)
     return result

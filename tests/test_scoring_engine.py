@@ -3,6 +3,7 @@ import pytest
 from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from features.types import AxisScores
 from features.types import FeatureBundle, PrimarySignals
+from features.types import ConditionedSnapshot
 from regimes.hard_rules import HardRuleResult
 from scoring.engine import (
     PRIMARY_SIGNAL_DRIFT_CAPS,
@@ -145,6 +146,44 @@ def test_stabilize_primary_with_history_limits_run_to_run_jumps():
     assert stabilized.mispricing_signal == pytest.approx(0.52 + PRIMARY_SIGNAL_DRIFT_CAPS["mispricing_signal"])
     assert stabilized.fragility_risk == pytest.approx(0.48 + PRIMARY_SIGNAL_DRIFT_CAPS["fragility_risk"])
     assert stabilized.signal_confidence == pytest.approx(0.54 + PRIMARY_SIGNAL_DRIFT_CAPS["signal_confidence"])
+
+
+def test_stabilize_primary_with_history_allows_larger_breakaway_when_runtime_is_reliable():
+    snapshot = RawSubnetSnapshot(
+        netuid=17,
+        current_block=1000,
+        history=[
+            HistoricalFeaturePoint(
+                timestamp="2026-03-31T11:46:31+00:00",
+                fundamental_quality=0.22,
+                mispricing_signal=0.18,
+                fragility_risk=0.78,
+                signal_confidence=0.28,
+            )
+        ],
+    )
+    current = PrimarySignals(
+        fundamental_quality=0.62,
+        mispricing_signal=0.48,
+        fragility_risk=0.42,
+        signal_confidence=0.60,
+    )
+    bundle = FeatureBundle(
+        raw={"price_signal_reliability": 1.0},
+        conditioned=ConditionedSnapshot(
+            reliability={
+                "market_data_reliability": 1.0,
+                "validator_data_reliability": 1.0,
+                "external_data_reliability": 0.8,
+            }
+        ),
+    )
+
+    stabilized = _stabilize_primary_with_history(snapshot, current, bundle)
+
+    assert stabilized.fundamental_quality > snapshot.history[0].fundamental_quality + PRIMARY_SIGNAL_DRIFT_CAPS["fundamental_quality"]
+    assert stabilized.mispricing_signal > snapshot.history[0].mispricing_signal + PRIMARY_SIGNAL_DRIFT_CAPS["mispricing_signal"]
+    assert stabilized.fragility_risk < snapshot.history[0].fragility_risk - PRIMARY_SIGNAL_DRIFT_CAPS["fragility_risk"]
 
 
 def test_stabilize_priority_with_history_limits_leaderboard_pressure():

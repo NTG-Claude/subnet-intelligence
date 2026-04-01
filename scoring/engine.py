@@ -162,18 +162,94 @@ def _limit_signal_drift(current_value: float, history_value: float | None, max_s
     return max(lower, min(upper, current_value))
 
 
-def _stabilize_primary_with_history(snapshot: RawSubnetSnapshot, current_primary: PrimarySignals) -> PrimarySignals:
+def _current_runtime_reliability(bundle: FeatureBundle | None, current_primary: PrimarySignals) -> float:
+    if bundle is None:
+        return 0.0
+
+    reliability = (bundle.conditioned.reliability if bundle.conditioned else {}) or {}
+    market = reliability.get("market_data_reliability", 0.0)
+    validator = reliability.get("validator_data_reliability", 0.0)
+    external = reliability.get("external_data_reliability", 0.0)
+    price = bundle.raw.get("price_signal_reliability") or 0.0
+    return max(
+        0.0,
+        min(
+            1.0,
+            0.35 * market
+            + 0.30 * validator
+            + 0.20 * price
+            + 0.05 * external
+            + 0.10 * current_primary.signal_confidence,
+        ),
+    )
+
+
+def _adaptive_history_step(
+    base_step: float,
+    current_value: float,
+    history_value: float,
+    runtime_reliability: float,
+) -> float:
+    delta = abs(current_value - history_value)
+    if delta <= base_step:
+        return base_step
+    expanded_step = base_step * (1.0 + 2.25 * runtime_reliability)
+    return min(max(base_step, expanded_step), 0.30)
+
+
+def _stabilize_primary_with_history(
+    snapshot: RawSubnetSnapshot,
+    current_primary: PrimarySignals,
+    bundle: FeatureBundle | None = None,
+) -> PrimarySignals:
     history_point = _latest_valid_history_point(snapshot)
     if history_point is None:
         return current_primary
 
     history_primary = _history_primary_signals(history_point)
+    runtime_reliability = _current_runtime_reliability(bundle, current_primary)
 
     return PrimarySignals(
-        fundamental_quality=_limit_signal_drift(current_primary.fundamental_quality, history_primary.fundamental_quality, PRIMARY_SIGNAL_DRIFT_CAPS["fundamental_quality"]),
-        mispricing_signal=_limit_signal_drift(current_primary.mispricing_signal, history_primary.mispricing_signal, PRIMARY_SIGNAL_DRIFT_CAPS["mispricing_signal"]),
-        fragility_risk=_limit_signal_drift(current_primary.fragility_risk, history_primary.fragility_risk, PRIMARY_SIGNAL_DRIFT_CAPS["fragility_risk"]),
-        signal_confidence=_limit_signal_drift(current_primary.signal_confidence, history_primary.signal_confidence, PRIMARY_SIGNAL_DRIFT_CAPS["signal_confidence"]),
+        fundamental_quality=_limit_signal_drift(
+            current_primary.fundamental_quality,
+            history_primary.fundamental_quality,
+            _adaptive_history_step(
+                PRIMARY_SIGNAL_DRIFT_CAPS["fundamental_quality"],
+                current_primary.fundamental_quality,
+                history_primary.fundamental_quality,
+                runtime_reliability,
+            ),
+        ),
+        mispricing_signal=_limit_signal_drift(
+            current_primary.mispricing_signal,
+            history_primary.mispricing_signal,
+            _adaptive_history_step(
+                PRIMARY_SIGNAL_DRIFT_CAPS["mispricing_signal"],
+                current_primary.mispricing_signal,
+                history_primary.mispricing_signal,
+                runtime_reliability,
+            ),
+        ),
+        fragility_risk=_limit_signal_drift(
+            current_primary.fragility_risk,
+            history_primary.fragility_risk,
+            _adaptive_history_step(
+                PRIMARY_SIGNAL_DRIFT_CAPS["fragility_risk"],
+                current_primary.fragility_risk,
+                history_primary.fragility_risk,
+                runtime_reliability,
+            ),
+        ),
+        signal_confidence=_limit_signal_drift(
+            current_primary.signal_confidence,
+            history_primary.signal_confidence,
+            _adaptive_history_step(
+                PRIMARY_SIGNAL_DRIFT_CAPS["signal_confidence"],
+                current_primary.signal_confidence,
+                history_primary.signal_confidence,
+                runtime_reliability,
+            ),
+        ),
     )
 
 
@@ -265,10 +341,15 @@ def _stabilize_priority_with_history(snapshot: RawSubnetSnapshot, bundle: Featur
     if history_score is None:
         return current_score
 
+    current_primary = bundle.primary_signals or PrimarySignals(0.0, 0.0, 1.0, 0.0)
+    runtime_reliability = _current_runtime_reliability(bundle, current_primary)
+    adaptive_blend = RANKING_HISTORY_BLEND * max(0.20, 1.0 - 0.85 * runtime_reliability)
+    adaptive_cap = min(0.15, RANKING_DRIFT_CAP * (1.0 + 2.5 * runtime_reliability))
+
     # Damp tiny run-to-run movements at the actual ranking layer so adjacent
     # names with near-identical scores do not keep leapfrogging every few minutes.
-    blended_score = RANKING_HISTORY_BLEND * history_score + (1.0 - RANKING_HISTORY_BLEND) * current_score
-    return _limit_signal_drift(blended_score, history_score, RANKING_DRIFT_CAP)
+    blended_score = adaptive_blend * history_score + (1.0 - adaptive_blend) * current_score
+    return _limit_signal_drift(blended_score, history_score, adaptive_cap)
 
 
 def _apply_total_cap(score: float, signals: PrimarySignals | AxisScores, rules: HardRuleResult) -> float:
@@ -352,7 +433,7 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
             fragility_risk=max(primary.fragility_risk, 0.65 * primary.fragility_risk + 0.35 * (1.0 - stress.robustness)),
             signal_confidence=primary.signal_confidence,
         )
-        primary = _stabilize_primary_with_history(snapshot, primary)
+        primary = _stabilize_primary_with_history(snapshot, primary, bundle)
         axes = _legacy_axes_from_primary(primary, bundle, stress.robustness)
         score = _stabilize_priority_with_history(snapshot, bundle, _ranking_priority_score(primary, bundle))
         score = _apply_total_cap(score, primary, rules)

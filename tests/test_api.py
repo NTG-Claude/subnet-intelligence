@@ -311,6 +311,40 @@ def test_get_root_subnet_detail_still_available():
     assert data["label"] == "Root Infrastructure"
 
 
+def test_get_subnet_normalizes_schema_stale_analysis_fields():
+    stale_row = {
+        **SCORES[0],
+        "raw_data": {
+            "label": "Under Review",
+            "thesis": "test thesis",
+            "analysis": {
+                "primary_outputs": {
+                    "fundamental_quality": 40.0,
+                    "mispricing_signal": 20.0,
+                    "fragility_risk": 70.0,
+                    "signal_confidence": 35.0,
+                },
+                "top_negative_drivers": [{"name": "fragility"}],
+            },
+        },
+    }
+    with patch("api.main.get_latest_scores", return_value=[stale_row]), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=[stale_row]), \
+         patch("api.main._get_metadata", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets/1")
+
+    assert resp.status_code == 200
+    analysis = resp.json()["analysis"]
+    assert analysis["top_negative_drags"] == [{"name": "fragility"}]
+    assert analysis["key_uncertainties"] == []
+    assert analysis["analysis_schema_stale"] is True
+
+
 def test_get_subnet_includes_percentile():
     with _with_db_mocks(meta_netuid=1):
         from api.main import app

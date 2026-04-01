@@ -174,6 +174,88 @@ def test_higher_concentration_does_not_reduce_fragility():
     assert balanced.primary_signals.fragility_risk <= concentrated.primary_signals.fragility_risk
 
 
+def test_validator_dominance_uses_validator_structure_not_coldkey_top3_share():
+    balanced_validators = compute_raw_features(
+        _snapshot(
+            top3_stake_fraction=0.90,
+            validator_stakes=[1000.0] * 6,
+            incentive_scores=[0.2, 0.18, 0.17, 0.16, 0.15, 0.14],
+        )
+    )
+    concentrated_validators = compute_raw_features(
+        _snapshot(
+            top3_stake_fraction=0.40,
+            validator_stakes=[5000.0, 3000.0, 1200.0, 500.0, 200.0, 100.0],
+            incentive_scores=[0.2, 0.18, 0.17, 0.16, 0.15, 0.14],
+        )
+    )
+
+    assert balanced_validators.raw["validator_dominance"] < 0.10
+    assert concentrated_validators.raw["validator_dominance"] > balanced_validators.raw["validator_dominance"]
+
+
+def test_reconstructed_price_input_is_downweighted_in_mispricing_paths():
+    history = [
+        HistoricalFeaturePoint(
+            timestamp="2026-03-29T00:00:00+00:00",
+            alpha_price_tao=7.0,
+            tao_in_pool=42_000.0,
+            emission_per_block_tao=0.03,
+            active_ratio=0.40,
+            participation_breadth=0.36,
+            validator_participation=0.70,
+            incentive_distribution_quality=0.65,
+            market_structure_floor=0.64,
+            fundamental_quality=0.60,
+        ),
+        HistoricalFeaturePoint(
+            timestamp="2026-03-30T00:00:00+00:00",
+            alpha_price_tao=7.1,
+            tao_in_pool=45_000.0,
+            emission_per_block_tao=0.03,
+            active_ratio=0.44,
+            participation_breadth=0.40,
+            validator_participation=0.73,
+            incentive_distribution_quality=0.68,
+            market_structure_floor=0.67,
+            fundamental_quality=0.64,
+        ),
+        HistoricalFeaturePoint(
+            timestamp="2026-03-31T00:00:00+00:00",
+            alpha_price_tao=7.2,
+            tao_in_pool=48_000.0,
+            emission_per_block_tao=0.029,
+            active_ratio=0.48,
+            participation_breadth=0.44,
+            validator_participation=0.76,
+            incentive_distribution_quality=0.71,
+            market_structure_floor=0.70,
+            fundamental_quality=0.68,
+        ),
+    ]
+    explicit = compute_raw_features(
+        _snapshot(
+            alpha_price_tao=7.3,
+            tao_in_pool=50_000.0,
+            alpha_in_pool=7_000.0,
+            history=history,
+        )
+    )
+    reconstructed = compute_raw_features(
+        _snapshot(
+            alpha_price_tao=0.0,
+            tao_in_pool=50_000.0,
+            alpha_in_pool=7_000.0,
+            history=history,
+        )
+    )
+
+    assert reconstructed.raw["price_input_reconstructed"] == 1.0
+    assert reconstructed.raw["price_signal_reliability"] < explicit.raw["price_signal_reliability"]
+    assert reconstructed.raw["underreaction_score"] <= explicit.raw["underreaction_score"]
+    assert reconstructed.raw["overreaction_score"] <= explicit.raw["overreaction_score"]
+
+
 def test_fragility_primary_signal_matches_v2_fragility_core_block():
     bundle = normalize_features(
         [
