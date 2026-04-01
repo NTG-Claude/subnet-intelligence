@@ -3,6 +3,14 @@ from regimes.hard_rules import HardRuleResult
 from stress.scenarios import StressTestResult
 
 
+def _bundle_score(bundle: FeatureBundle, key: str, fallback: float = 0.0) -> float:
+    if key in bundle.core_blocks:
+        return bundle.core_blocks.get(key, fallback)
+    if key in bundle.base_components:
+        return bundle.base_components.get(key, fallback)
+    return bundle.raw.get(key) or fallback
+
+
 def assign_label(
     signals: PrimarySignals | AxisScores,
     bundle: FeatureBundle,
@@ -36,6 +44,12 @@ def assign_label(
     mispricing = signals.mispricing_signal
     fragility = signals.fragility_risk
     confidence = signals.signal_confidence
+    fundamental_health = _bundle_score(bundle, "fundamental_health", fundamental)
+    opportunity_underreaction = _bundle_score(bundle, "opportunity_underreaction", mispricing)
+    market_legitimacy = _bundle_score(bundle, "market_legitimacy", bundle.raw.get("market_legitimacy") or bundle.raw.get("market_relevance_proxy") or 0.0)
+    data_confidence = _bundle_score(bundle, "data_confidence", bundle.raw.get("data_confidence") or confidence)
+    market_confidence = _bundle_score(bundle, "market_confidence", bundle.raw.get("market_confidence") or confidence)
+    thesis_confidence = _bundle_score(bundle, "thesis_confidence", bundle.raw.get("thesis_confidence") or confidence)
     concentration = max(bundle.raw.get("validator_dominance") or 0.0, bundle.raw.get("incentive_concentration") or 0.0)
     price_lag = bundle.raw.get("price_response_lag_to_quality_shift") or 0.0
     sticky_usage = bundle.raw.get("emission_to_sticky_usage_conversion") or 0.0
@@ -60,11 +74,11 @@ def assign_label(
         return "Overrewarded Structure", "Capital is paying for yield optics before the market structure is deep enough to support them."
     if fragility > 0.72 and concentration > 0.55:
         return "Fragile Yield Trap", "Economics may look attractive, but concentration, thin liquidity, and reversal risk make the setup brittle."
-    if fundamental > 0.72 and mispricing > 0.64 and fragility < 0.38 and confidence > 0.58:
+    if fundamental > 0.72 and fundamental_health > 0.70 and mispricing > 0.64 and fragility < 0.38 and confidence > 0.58 and market_confidence > 0.55:
         return "Hidden Compounder", "Quality is compounding faster than price, with enough durability and evidence quality to matter."
-    if fundamental > 0.60 and mispricing > 0.58 and price_lag > 0.10 and confidence > 0.48:
+    if fundamental > 0.60 and opportunity_underreaction > 0.55 and mispricing > 0.58 and price_lag > 0.10 and confidence > 0.48 and market_legitimacy > 0.45:
         return "Underappreciated Infrastructure", "Structural improvement is visible in participation and liquidity, but market recognition is still lagging."
-    if fundamental > 0.56 and sticky_usage > 0.05 and retention > 0.05 and fragility < 0.55:
+    if fundamental > 0.56 and fundamental_health > 0.50 and sticky_usage > 0.05 and retention > 0.05 and fragility < 0.55 and thesis_confidence > 0.45:
         return "Early Quality Build", "Usage and retention are improving in a way that looks earned rather than purely incentive-driven."
     if (
         (crowding > 0.55 and fragility > 0.50 and mispricing < 0.50)
@@ -72,6 +86,6 @@ def assign_label(
         or (concentration > 0.58 and fragility > 0.55 and mispricing < 0.50 and stress.max_drawdown > 0.20)
     ):
         return "Reflexive Crowded Trade", "The trade is increasingly crowded, reflexive, and vulnerable to reversals rather than driven by fresh underpricing."
-    if confidence < 0.40 or confidence_capped:
+    if confidence < 0.40 or data_confidence < 0.35 or thesis_confidence < 0.35 or confidence_capped:
         return "Under Review", "The signal is directionally interesting, but current evidence quality is too thin to treat it as investment-grade."
     return "Under Review", "Quality, valuation gap, fragility, and confidence are mixed, so the thesis remains provisional."

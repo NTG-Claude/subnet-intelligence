@@ -2,6 +2,7 @@ import pytest
 
 from collectors.models import RawSubnetSnapshot
 from features.types import AxisScores, FeatureBundle, PrimarySignals
+from regimes.hard_rules import HardRuleResult
 from labels.engine import assign_label
 from regimes.hard_rules import apply_rule_caps, evaluate_hard_rules
 from stress.scenarios import StressTestResult
@@ -684,3 +685,73 @@ def test_liquid_hyped_subnet_can_be_reflexive_crowded_trade():
     label, thesis = assign_label(axes, bundle, _stress(0.23, robustness=0.57), rules)
     assert label == "Reflexive Crowded Trade"
     assert "crowded" in thesis.lower()
+
+
+def test_label_logic_can_use_v2_blocks_for_hidden_compounder():
+    bundle = FeatureBundle(
+        raw={
+            "validator_dominance": 0.22,
+            "incentive_concentration": 0.24,
+            "price_response_lag_to_quality_shift": 0.18,
+            "emission_to_sticky_usage_conversion": 0.11,
+            "post_incentive_retention": 0.12,
+            "crowding_proxy": 0.18,
+            "dereg_risk_proxy": 0.10,
+        },
+        core_blocks={
+            "fundamental_health": 0.78,
+            "opportunity_underreaction": 0.71,
+            "market_legitimacy": 0.66,
+        },
+        base_components={
+            "data_confidence": 0.64,
+            "market_confidence": 0.67,
+            "thesis_confidence": 0.69,
+        },
+    )
+    signals = PrimarySignals(
+        fundamental_quality=0.78,
+        mispricing_signal=0.70,
+        fragility_risk=0.26,
+        signal_confidence=0.64,
+    )
+
+    label, thesis = assign_label(signals, bundle, _stress(0.08, robustness=0.82), HardRuleResult(activated=[]))
+
+    assert label == "Hidden Compounder"
+    assert "compounding" in thesis.lower()
+
+
+def test_label_logic_uses_v2_confidence_artifacts_for_under_review():
+    bundle = FeatureBundle(
+        raw={
+            "validator_dominance": 0.20,
+            "incentive_concentration": 0.20,
+            "price_response_lag_to_quality_shift": 0.12,
+            "emission_to_sticky_usage_conversion": 0.08,
+            "post_incentive_retention": 0.08,
+            "crowding_proxy": 0.18,
+            "dereg_risk_proxy": 0.18,
+        },
+        core_blocks={
+            "fundamental_health": 0.62,
+            "opportunity_underreaction": 0.60,
+            "market_legitimacy": 0.55,
+        },
+        base_components={
+            "data_confidence": 0.52,
+            "market_confidence": 0.48,
+            "thesis_confidence": 0.22,
+        },
+    )
+    signals = PrimarySignals(
+        fundamental_quality=0.64,
+        mispricing_signal=0.61,
+        fragility_risk=0.30,
+        signal_confidence=0.47,
+    )
+
+    label, thesis = assign_label(signals, bundle, _stress(0.10, robustness=0.74), HardRuleResult(activated=[]))
+
+    assert label == "Under Review"
+    assert "evidence quality" in thesis.lower()
