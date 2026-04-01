@@ -52,7 +52,7 @@ export function ResearchPanel({
   className?: string
 }) {
   return (
-    <section className={cn('rounded-3xl border border-white/10 bg-white/[0.035] p-5 sm:p-6', className)}>
+    <section className={cn('rounded-3xl border border-white/10 bg-[#11161c] p-5 sm:p-6', className)}>
       <div className="mb-4 space-y-1">
         <div className="text-[11px] font-medium uppercase tracking-[0.28em] text-stone-500">{title}</div>
         {subtitle ? <p className="max-w-3xl text-sm leading-6 text-stone-400">{subtitle}</p> : null}
@@ -70,13 +70,13 @@ export function StatusBadge({ children, tone = 'neutral' }: { children: ReactNod
   )
 }
 
-export function SignalPill({ signal }: { signal: SignalStat }) {
+export function SignalPill({ signal, compact = false }: { signal: SignalStat; compact?: boolean }) {
   const rawValue = signal.value
   const display = rawValue == null ? 'n/a' : rawValue.toFixed(1)
   const width = rawValue == null ? 0 : Math.max(5, Math.min(100, signal.invert ? 100 - rawValue : rawValue))
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+    <div className={cn('rounded-2xl border border-white/10 bg-stone-950', compact ? 'p-2.5' : 'p-3')}>
       <div className="flex items-center justify-between gap-3">
         <span className="text-[11px] uppercase tracking-[0.24em] text-stone-500">{signal.label}</span>
         <span className="text-sm font-semibold text-stone-100">{display}</span>
@@ -98,13 +98,15 @@ export function HintBadge({ label, tone }: { label: string; tone: SignalTone }) 
 
 export function MetricGrid({
   items,
+  dense = false,
 }: {
   items: { label: string; value: string; tone?: SignalTone; meta?: string }[]
+  dense?: boolean
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className={cn('grid gap-3', dense ? 'sm:grid-cols-2 xl:grid-cols-5' : 'sm:grid-cols-2 xl:grid-cols-4')}>
       {items.map((item) => (
-        <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+        <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-white/10 bg-stone-950 p-4">
           <div className="text-[11px] uppercase tracking-[0.24em] text-stone-500">{item.label}</div>
           <div className="mt-2 text-lg font-semibold text-stone-100">{item.value}</div>
           {item.meta ? <div className="mt-1 text-xs text-stone-500">{item.meta}</div> : null}
@@ -122,13 +124,13 @@ export function MemoList({
   empty: string
 }) {
   if (!items.length) {
-    return <div className="rounded-2xl border border-dashed border-white/10 bg-black/10 p-4 text-sm text-stone-500">{empty}</div>
+    return <div className="rounded-2xl border border-dashed border-white/10 bg-stone-950 p-4 text-sm text-stone-500">{empty}</div>
   }
 
   return (
     <div className="space-y-3">
       {items.map((item, index) => (
-        <div key={`${item.title}-${index}`} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+        <div key={`${item.title}-${index}`} className="rounded-2xl border border-white/10 bg-stone-950 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="text-sm font-medium text-stone-100">{item.title}</div>
