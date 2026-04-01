@@ -181,7 +181,8 @@ History stabilization, bounded drift, telemetry-gap fallback, and stress integra
 
 ### Suggested Next Cleanup Order
 
-1. Move tests from `base_mispricing_signal` and `fragility_block` to `opportunity_underreaction` and `fragility`.
+1. Continue moving remaining tests from `fragility_block` aliases to `bundle.core_blocks["fragility"]`.
+   The first `base_mispricing_signal` cleanup has already been migrated to `opportunity_underreaction`.
 2. Treat `base_signal_confidence`, `quality_resolution_bonus`, and `quality_resolution_drag` as internal-only debug fields.
 3. Remove direct consumers of `confidence_adjusted_mispricing` once ranking exclusively reads V2 ranking artifacts.
 

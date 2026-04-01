@@ -174,6 +174,16 @@ def test_higher_concentration_does_not_reduce_fragility():
     assert balanced.primary_signals.fragility_risk <= concentrated.primary_signals.fragility_risk
 
 
+def test_fragility_primary_signal_matches_v2_fragility_core_block():
+    bundle = normalize_features(
+        [
+            compute_raw_features(_snapshot(top3_stake_fraction=0.78, incentive_scores=[0.88, 0.08, 0.04]))
+        ]
+    )[0]
+
+    assert bundle.core_blocks["fragility"] == bundle.primary_signals.fragility_risk
+
+
 def test_small_input_changes_do_not_create_large_score_jumps():
     base, tweaked = normalize_features(
         [
