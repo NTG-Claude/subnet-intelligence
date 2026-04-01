@@ -322,6 +322,52 @@ def test_crowded_repricing_discount_penalizes_crowded_large_names():
     assert crowded_discount > balanced_discount
 
 
+def test_crowded_expectation_saturation_reduces_underreaction_for_popular_large_names():
+    balanced = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=7,
+            unique_coldkeys=8,
+            n_validators=6,
+            tao_in_pool=52_000.0,
+            alpha_in_pool=12_000.0,
+            alpha_price_tao=10.2,
+            emission_per_block_tao=0.025,
+            top3_stake_fraction=0.42,
+            history=[
+                HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=47_000.0, active_ratio=0.49, fundamental_quality=0.48),
+                HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=49_000.0, active_ratio=0.56, fundamental_quality=0.56),
+                HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=51_000.0, active_ratio=0.62, fundamental_quality=0.63),
+            ],
+        )
+    )
+    crowded = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=7,
+            unique_coldkeys=8,
+            n_validators=6,
+            tao_in_pool=210_000.0,
+            alpha_in_pool=18_000.0,
+            alpha_price_tao=16.0,
+            emission_per_block_tao=0.06,
+            top3_stake_fraction=0.78,
+            incentive_scores=[0.92, 0.08],
+            history=[
+                HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=12.0, tao_in_pool=195_000.0, active_ratio=0.50, fundamental_quality=0.50),
+                HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=13.8, tao_in_pool=202_000.0, active_ratio=0.51, fundamental_quality=0.51),
+                HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=15.0, tao_in_pool=207_000.0, active_ratio=0.52, fundamental_quality=0.52),
+            ],
+        )
+    )
+
+    assert balanced.raw["crowded_expectation_saturation"] < crowded.raw["crowded_expectation_saturation"]
+    assert balanced.raw["underreaction_score"] >= balanced.raw["raw_underreaction_score"] * 0.6
+    assert crowded.raw["underreaction_score"] < crowded.raw["raw_underreaction_score"]
+    if crowded.raw["raw_cohort_implied_fair_value_gap"] > 0:
+        assert crowded.raw["cohort_implied_fair_value_gap"] < crowded.raw["raw_cohort_implied_fair_value_gap"]
+    else:
+        assert crowded.raw["cohort_implied_fair_value_gap"] == crowded.raw["raw_cohort_implied_fair_value_gap"]
+
+
 def test_signal_confidence_is_discounted_for_reflexive_fragile_structures():
     robust_bundle, crowded_bundle = normalize_features(
         [
@@ -362,6 +408,54 @@ def test_signal_confidence_is_discounted_for_reflexive_fragile_structures():
 
     assert robust_bundle.raw["reflexive_confidence_drag"] < crowded_bundle.raw["reflexive_confidence_drag"]
     assert robust_bundle.primary_signals.signal_confidence > crowded_bundle.primary_signals.signal_confidence
+
+
+def test_evidence_confidence_respects_large_onchain_structure_even_when_freshness_is_thin():
+    robust_bundle, reflexive_bundle = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=8,
+                    unique_coldkeys=9,
+                    n_validators=7,
+                    tao_in_pool=185_000.0,
+                    alpha_in_pool=21_000.0,
+                    alpha_price_tao=12.8,
+                    top3_stake_fraction=0.48,
+                    last_update_blocks=[1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=12.0, tao_in_pool=170_000.0, active_ratio=0.55, fundamental_quality=0.56),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=12.2, tao_in_pool=176_000.0, active_ratio=0.58, fundamental_quality=0.60),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=12.4, tao_in_pool=181_000.0, active_ratio=0.61, fundamental_quality=0.64),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=3,
+                    unique_coldkeys=2,
+                    n_validators=2,
+                    tao_in_pool=5_800.0,
+                    alpha_in_pool=95.0,
+                    alpha_price_tao=13.1,
+                    top3_stake_fraction=0.84,
+                    incentive_scores=[0.9, 0.1],
+                    last_update_blocks=[1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=9.5, tao_in_pool=5_300.0, active_ratio=0.27, fundamental_quality=0.42),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=11.2, tao_in_pool=5_450.0, active_ratio=0.26, fundamental_quality=0.41),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=12.4, tao_in_pool=5_600.0, active_ratio=0.25, fundamental_quality=0.40),
+                    ],
+                )
+            ),
+        ]
+    )
+
+    assert robust_bundle.raw["update_freshness"] == reflexive_bundle.raw["update_freshness"]
+    assert robust_bundle.raw["proxy_reliance_penalty"] < reflexive_bundle.raw["proxy_reliance_penalty"]
+    assert robust_bundle.raw["low_manipulation_signal_share"] > reflexive_bundle.raw["low_manipulation_signal_share"]
+    assert robust_bundle.raw["signal_fabrication_risk"] < reflexive_bundle.raw["signal_fabrication_risk"]
+    assert robust_bundle.raw["evidence_confidence"] > reflexive_bundle.raw["evidence_confidence"]
 
 
 def test_signal_confidence_uses_structural_ceiling_for_crowded_yield_setups():

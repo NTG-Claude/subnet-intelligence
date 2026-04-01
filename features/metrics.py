@@ -281,6 +281,9 @@ def _signal_fabrication_risk(
     confidence_thesis_coherence: float,
     overreaction_score: float,
     crowding_proxy: float,
+    low_manipulation_signal_share: float,
+    market_structure_floor: float,
+    market_relevance: float,
 ) -> float:
     return clamp01(
         0.35 * proxy_reliance_penalty
@@ -288,6 +291,9 @@ def _signal_fabrication_risk(
         + 0.20 * (1.0 - confidence_thesis_coherence)
         + 0.15 * overreaction_score
         + 0.10 * crowding_proxy
+        - 0.12 * low_manipulation_signal_share
+        - 0.10 * market_structure_floor
+        - 0.08 * market_relevance
     )
 
 
@@ -333,6 +339,18 @@ def _crowded_repricing_discount(
             + 0.18 * fragility_excess
             + 0.10 * overreaction_score
         )
+    )
+
+
+def _crowded_expectation_saturation(
+    market_relevance: float,
+    crowding_proxy: float,
+    realized_price_level: float,
+) -> float:
+    return clamp01(
+        0.45 * market_relevance
+        + 0.35 * crowding_proxy
+        + 0.20 * realized_price_level
     )
 
 
@@ -527,27 +545,61 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         + 0.10 * clamp01(_history_anchor(quality_history))
     )
     realized_price_level = percentile_rank(snapshot.alpha_price_tao, price_history + [snapshot.alpha_price_tao])
-    cohort_implied_fair_value_gap = fair_value_anchor - realized_price_level
-    underreaction_score = clamp01(
+    crowded_expectation_saturation = _crowded_expectation_saturation(
+        market_relevance=market_relevance,
+        crowding_proxy=crowding_proxy,
+        realized_price_level=realized_price_level,
+    )
+    raw_cohort_implied_fair_value_gap = fair_value_anchor - realized_price_level
+    cohort_implied_fair_value_gap = (
+        max(raw_cohort_implied_fair_value_gap, 0.0) * (1.0 - 0.55 * crowded_expectation_saturation)
+        - max(-raw_cohort_implied_fair_value_gap, 0.0)
+    )
+    raw_underreaction_score = clamp01(
         0.45 * max(expected_price_response_gap, 0.0)
         + 0.30 * max(expected_reserve_response_gap, 0.0)
         + 0.25 * max(cohort_implied_fair_value_gap, 0.0)
     )
+    underreaction_score = clamp01(raw_underreaction_score * (1.0 - 0.45 * crowded_expectation_saturation))
     overreaction_score = clamp01(
         0.50 * max(realized_price_response - expected_price_response, 0.0)
         + 0.30 * max(realized_price_level - fair_value_anchor, 0.0)
         + 0.20 * reversal_risk
     )
+    freshness = _freshness(snapshot, lookback_blocks=7200)
+    history_depth_score = clamp01(len(history) / 6.0)
+    onchain_evidence_support = clamp01(
+        0.40 * market_structure_floor
+        + 0.30 * market_relevance
+        + 0.20 * (1.0 - concentration_now)
+        + 0.10 * active_ratio
+    )
+    proxy_reliance_penalty = clamp01(
+        (
+            0.36 * (1.0 - freshness)
+            + 0.24 * (1.0 - history_depth_score)
+            + 0.16 * (1.0 if snapshot.github else 0.0)
+            + 0.12 * (1.0 - data_coverage)
+            + 0.12 * crowding_proxy
+        )
+        * (1.0 - 0.45 * onchain_evidence_support)
+    )
+    low_manipulation_signal_share = clamp01(
+        0.24 * freshness
+        + 0.22 * (1.0 - concentration_now)
+        + 0.22 * market_structure_floor
+        + 0.20 * market_relevance
+        + 0.12 * data_coverage
+    )
     signal_fabrication_risk = _signal_fabrication_risk(
-        clamp01(
-            0.45 * (1.0 - _freshness(snapshot, lookback_blocks=7200))
-            + 0.35 * (1.0 - clamp01(len(history) / 6.0))
-            + 0.20 * (1.0 if snapshot.github else 0.0)
-        ),
+        proxy_reliance_penalty,
         data_coverage,
         confidence_thesis_coherence,
         overreaction_score,
         crowding_proxy,
+        low_manipulation_signal_share,
+        market_structure_floor,
+        market_relevance,
     )
     low_evidence_high_conviction = clamp01(
         0.55 * signal_fabrication_risk
@@ -559,7 +611,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "participation_breadth": participation_breadth,
         "validator_participation": validator_participation,
         "incentive_distribution_quality": incentive_distribution_quality,
-        "update_freshness": _freshness(snapshot, lookback_blocks=7200),
+        "update_freshness": freshness,
         "validator_weight_entropy": validator_weight_entropy,
         "cross_validator_disagreement": cross_validator_disagreement,
         "meaningful_discrimination": meaningful_discrimination,
@@ -609,17 +661,10 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "reserve_growth_without_price": reserve_growth_without_price,
         "participation_without_crowding": participation_without_crowding,
         "data_coverage": data_coverage,
-        "history_depth_score": clamp01(len(history) / 6.0),
-        "proxy_reliance_penalty": clamp01(
-            0.45 * (1.0 - _freshness(snapshot, lookback_blocks=7200))
-            + 0.35 * (1.0 - clamp01(len(history) / 6.0))
-            + 0.20 * (1.0 if snapshot.github else 0.0)
-        ),
-        "low_manipulation_signal_share": clamp01(
-            0.55 * _freshness(snapshot, lookback_blocks=7200)
-            + 0.25 * (1.0 - concentration_now)
-            + 0.20 * clamp01(1.0 - (0.5 if snapshot.github else 0.0))
-        ),
+        "history_depth_score": history_depth_score,
+        "onchain_evidence_support": onchain_evidence_support,
+        "proxy_reliance_penalty": proxy_reliance_penalty,
+        "low_manipulation_signal_share": low_manipulation_signal_share,
         "quality_history_anchor": _history_anchor(quality_history),
         "price_history_anchor": _history_anchor(price_history),
         "expected_price_response": expected_price_response,
@@ -628,7 +673,10 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "expected_reserve_response": expected_reserve_response,
         "realized_reserve_response": realized_reserve_response,
         "expected_reserve_response_gap": expected_reserve_response_gap,
+        "crowded_expectation_saturation": crowded_expectation_saturation,
+        "raw_cohort_implied_fair_value_gap": raw_cohort_implied_fair_value_gap,
         "cohort_implied_fair_value_gap": cohort_implied_fair_value_gap,
+        "raw_underreaction_score": raw_underreaction_score,
         "underreaction_score": underreaction_score,
         "overreaction_score": overreaction_score,
         "signal_fabrication_risk": signal_fabrication_risk,
@@ -830,13 +878,16 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         market_structure_floor = clamp01(bundle.raw.get("market_structure_floor") or 0.0)
         market_relevance_proxy = clamp01(bundle.raw.get("market_relevance_proxy") or 0.0)
         evidence_confidence = clamp01(
-            0.34 * base_signal_confidence
-            + 0.20 * clamp01(bundle.raw.get("data_coverage") or 0.0)
-            + 0.14 * clamp01(bundle.raw.get("update_freshness") or 0.0)
-            + 0.12 * (1.0 - clamp01(bundle.raw.get("proxy_reliance_penalty") or 0.0))
-            + 0.10 * (1.0 - signal_fabrication_risk)
-            + 0.10 * clamp01(bundle.raw.get("confidence_thesis_coherence") or 0.0)
-            - 0.10 * clamp01(bundle.raw.get("low_evidence_high_conviction") or 0.0)
+            0.24 * base_signal_confidence
+            + 0.16 * clamp01(bundle.raw.get("data_coverage") or 0.0)
+            + 0.10 * clamp01(bundle.raw.get("update_freshness") or 0.0)
+            + 0.10 * (1.0 - clamp01(bundle.raw.get("proxy_reliance_penalty") or 0.0))
+            + 0.08 * (1.0 - signal_fabrication_risk)
+            + 0.08 * clamp01(bundle.raw.get("confidence_thesis_coherence") or 0.0)
+            + 0.08 * clamp01(bundle.raw.get("low_manipulation_signal_share") or 0.0)
+            + 0.08 * market_structure_floor
+            + 0.08 * market_relevance_proxy
+            - 0.08 * clamp01(bundle.raw.get("low_evidence_high_conviction") or 0.0)
         )
         reflexive_confidence_drag = clamp01(
             0.38 * crowding_proxy
