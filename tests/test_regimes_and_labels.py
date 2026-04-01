@@ -324,6 +324,43 @@ def test_consensus_hollow_forces_consensus_hollow_label():
     assert label == "Consensus Hollow"
 
 
+def test_high_quality_resilient_case_can_escape_under_review():
+    bundle = FeatureBundle(
+        raw={
+            "market_relevance_proxy": 0.48,
+            "thesis_confidence": 0.46,
+            "market_confidence": 0.50,
+            "data_confidence": 0.48,
+            "crowding_proxy": 0.18,
+            "validator_dominance": 0.28,
+            "incentive_concentration": 0.30,
+            "price_response_lag_to_quality_shift": 0.02,
+            "emission_to_sticky_usage_conversion": 0.0,
+            "post_incentive_retention": 0.0,
+        },
+        core_blocks={
+            "fundamental_health": 0.63,
+            "market_legitimacy": 0.48,
+        },
+    )
+    signals = PrimarySignals(
+        fundamental_quality=0.68,
+        mispricing_signal=0.24,
+        fragility_risk=0.30,
+        signal_confidence=0.49,
+    )
+
+    label, thesis = assign_label(
+        signals,
+        bundle,
+        _stress(0.12, robustness=0.72),
+        HardRuleResult(activated=[]),
+    )
+
+    assert label == "Early Quality Build"
+    assert "Quality and resilience" in thesis
+
+
 def test_deep_liquid_concentration_uses_watchlist_caps_not_harsh_cap():
     snapshot = _snapshot(
         tao_in_pool=150000.0,
@@ -351,8 +388,8 @@ def test_deep_liquid_concentration_uses_watchlist_caps_not_harsh_cap():
 
     assert "concentration_caps_fundamental_quality" in rules.activated
     assert "liquid_flagship_concentration_watchlist" in rules.activated
-    assert rules.quality_cap == 0.52
-    assert rules.fragility_floor == 0.58
+    assert rules.quality_cap == 0.60
+    assert rules.fragility_floor == 0.52
 
 
 def test_market_relevant_concentration_uses_watchlist_caps():
@@ -368,6 +405,11 @@ def test_market_relevant_concentration_uses_watchlist_caps():
         active_ratio=0.35,
         participation_breadth=0.34,
         market_relevance_proxy=0.66,
+        market_structure_floor=0.74,
+        crowding_proxy=0.18,
+        overreaction_score=0.04,
+        data_coverage=0.62,
+        update_freshness=0.72,
         slippage_10_tao=0.02,
         slippage_50_tao=0.05,
         validator_dominance=0.82,
@@ -383,8 +425,8 @@ def test_market_relevant_concentration_uses_watchlist_caps():
 
     assert "concentration_caps_fundamental_quality" in rules.activated
     assert "market_relevant_concentration_watchlist" in rules.activated
-    assert rules.quality_cap == 0.56
-    assert rules.fragility_floor >= 0.60
+    assert rules.quality_cap == 0.58
+    assert rules.fragility_floor == 0.56
 
 
 def test_resilient_midcap_concentration_uses_softer_watchlist_cap():
@@ -401,11 +443,13 @@ def test_resilient_midcap_concentration_uses_softer_watchlist_cap():
         participation_breadth=0.28,
         market_relevance_proxy=0.48,
         market_structure_floor=0.60,
+        data_coverage=0.64,
+        update_freshness=0.70,
         slippage_10_tao=0.025,
         slippage_50_tao=0.06,
         validator_dominance=0.76,
         incentive_concentration=0.73,
-        structural_concentration_risk=0.66,
+        structural_concentration_risk=0.72,
         concentration_delta=0.01,
         validator_weight_entropy=0.48,
         cross_validator_disagreement=0.21,
@@ -417,8 +461,37 @@ def test_resilient_midcap_concentration_uses_softer_watchlist_cap():
 
     assert "concentration_caps_fundamental_quality" in rules.activated
     assert "resilient_midcap_concentration_watchlist" in rules.activated
-    assert rules.quality_cap == 0.48
-    assert rules.fragility_floor == 0.62
+    assert rules.quality_cap == 0.54
+    assert rules.fragility_floor == 0.58
+
+
+def test_moderate_concentration_without_other_stress_no_longer_triggers_cap():
+    snapshot = _snapshot(
+        tao_in_pool=18_000.0,
+        emission_per_block_tao=0.03,
+        active_neurons_7d=9,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.42,
+        participation_breadth=0.34,
+        market_relevance_proxy=0.52,
+        market_structure_floor=0.62,
+        crowding_proxy=0.22,
+        slippage_10_tao=0.02,
+        slippage_50_tao=0.05,
+        validator_dominance=0.64,
+        incentive_concentration=0.63,
+        concentration_delta=0.0,
+        validator_weight_entropy=0.52,
+        cross_validator_disagreement=0.18,
+        meaningful_discrimination=0.31,
+        dereg_risk_proxy=0.15,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "concentration_caps_fundamental_quality" not in rules.activated
 
 
 def test_signal_fabrication_risk_caps_mispricing_and_confidence():

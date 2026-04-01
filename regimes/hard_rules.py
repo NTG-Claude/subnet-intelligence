@@ -231,22 +231,38 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     )
 
     if concentration > 0.60:
+        concentration_breach = (
+            concentration > 0.70
+            or (
+                concentration > 0.62
+                and (
+                    (concentration_delta is not None and concentration_delta > 0.02)
+                    or market_structure_floor < 0.58
+                    or crowding_proxy > 0.35
+                    or max_slippage > 0.06
+                )
+            )
+        )
+    else:
+        concentration_breach = False
+
+    if concentration_breach:
         activated.append("concentration_caps_fundamental_quality")
         if liquid_flagship_concentration:
             activated.append("liquid_flagship_concentration_watchlist")
-            quality_cap = 0.52 if quality_cap is None else min(quality_cap, 0.52)
-            fragility_floor = 0.58 if fragility_floor is None else max(fragility_floor, 0.58)
+            quality_cap = 0.60 if quality_cap is None else min(quality_cap, 0.60)
+            fragility_floor = 0.52 if fragility_floor is None else max(fragility_floor, 0.52)
         elif market_relevant_concentration:
             activated.append("market_relevant_concentration_watchlist")
-            quality_cap = 0.56 if quality_cap is None else min(quality_cap, 0.56)
-            fragility_floor = 0.60 if fragility_floor is None else max(fragility_floor, 0.60)
+            quality_cap = 0.58 if quality_cap is None else min(quality_cap, 0.58)
+            fragility_floor = 0.56 if fragility_floor is None else max(fragility_floor, 0.56)
         elif resilient_midcap_concentration:
             activated.append("resilient_midcap_concentration_watchlist")
+            quality_cap = 0.54 if quality_cap is None else min(quality_cap, 0.54)
+            fragility_floor = 0.58 if fragility_floor is None else max(fragility_floor, 0.58)
+        else:
             quality_cap = 0.48 if quality_cap is None else min(quality_cap, 0.48)
             fragility_floor = 0.62 if fragility_floor is None else max(fragility_floor, 0.62)
-        else:
-            quality_cap = 0.42 if quality_cap is None else min(quality_cap, 0.42)
-            fragility_floor = 0.65 if fragility_floor is None else max(fragility_floor, 0.65)
 
     if consensus_hollow:
         activated.append("uninformative_consensus_caps_confidence")

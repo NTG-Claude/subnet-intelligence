@@ -78,6 +78,17 @@ def assign_label(
         return "Hidden Compounder", "Quality is compounding faster than price, with enough durability and evidence quality to matter."
     if fundamental > 0.60 and opportunity_underreaction > 0.55 and mispricing > 0.58 and price_lag > 0.10 and confidence > 0.48 and market_legitimacy > 0.45:
         return "Underappreciated Infrastructure", "Structural improvement is visible in participation and liquidity, but market recognition is still lagging."
+    if (
+        fundamental > 0.62
+        and fundamental_health > 0.58
+        and fragility < 0.35
+        and confidence > 0.45
+        and thesis_confidence > 0.42
+        and market_legitimacy > 0.40
+        and concentration < 0.55
+        and crowding < 0.35
+    ):
+        return "Early Quality Build", "Quality and resilience are already visible, even if the valuation gap is still modest and the thesis is early."
     if fundamental > 0.56 and fundamental_health > 0.50 and sticky_usage > 0.05 and retention > 0.05 and fragility < 0.55 and thesis_confidence > 0.45:
         return "Early Quality Build", "Usage and retention are improving in a way that looks earned rather than purely incentive-driven."
     if (
