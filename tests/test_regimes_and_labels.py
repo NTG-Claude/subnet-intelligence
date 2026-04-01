@@ -413,8 +413,39 @@ def test_reflexive_market_structure_caps_confidence():
     rules = evaluate_hard_rules(snapshot, bundle)
 
     assert "reflexive_market_structure_caps_confidence" in rules.activated
-    assert rules.confidence_cap is not None and rules.confidence_cap <= 0.50
-    assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.40
+    assert rules.confidence_cap is not None and rules.confidence_cap <= 0.44
+    assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.36
+
+
+def test_crowded_repricing_discount_caps_confidence():
+    snapshot = _snapshot(
+        tao_in_pool=12_000.0,
+        emission_per_block_tao=0.05,
+        active_neurons_7d=6,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.31,
+        participation_breadth=0.24,
+        slippage_10_tao=0.025,
+        slippage_50_tao=0.045,
+        validator_dominance=0.66,
+        incentive_concentration=0.63,
+        crowding_proxy=0.61,
+        overreaction_score=0.21,
+        data_coverage=0.78,
+        proxy_reliance_penalty=0.28,
+        confidence_thesis_coherence=0.76,
+        market_structure_floor=0.60,
+        signal_fabrication_risk=0.44,
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "crowded_repricing_discount_caps_confidence" in rules.activated
+    assert rules.confidence_cap is not None and rules.confidence_cap <= 0.40
+    assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.34
+    assert rules.fragility_floor is not None and rules.fragility_floor >= 0.68
 
 
 def test_severe_market_structure_breach_caps_microstructure_setups():

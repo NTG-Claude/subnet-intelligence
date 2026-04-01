@@ -225,17 +225,36 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         legacy_score_cap = 0.40 if legacy_score_cap is None else min(legacy_score_cap, 0.40)
 
     if (
-        crowding_proxy > 0.52
-        and overreaction_score > 0.24
+        crowding_proxy > 0.48
+        and overreaction_score > 0.18
         and (
-            concentration > 0.58
-            or max_slippage > 0.04
-            or staking_apy > 90
+            concentration > 0.56
+            or max_slippage > 0.035
+            or staking_apy > 75
+            or market_structure_floor < 0.68
         )
     ):
         activated.append("reflexive_market_structure_caps_confidence")
-        confidence_cap = 0.50 if confidence_cap is None else min(confidence_cap, 0.50)
-        mispricing_cap = 0.40 if mispricing_cap is None else min(mispricing_cap, 0.40)
+        confidence_cap = 0.44 if confidence_cap is None else min(confidence_cap, 0.44)
+        mispricing_cap = 0.36 if mispricing_cap is None else min(mispricing_cap, 0.36)
+
+    if (
+        crowding_proxy > 0.55
+        and (
+            staking_apy > 85
+            or market_structure_floor < 0.62
+            or pool_depth < 25_000
+        )
+        and (
+            concentration > 0.60
+            or max_slippage > 0.04
+            or signal_fabrication_risk > 0.42
+        )
+    ):
+        activated.append("crowded_repricing_discount_caps_confidence")
+        confidence_cap = 0.40 if confidence_cap is None else min(confidence_cap, 0.40)
+        mispricing_cap = 0.34 if mispricing_cap is None else min(mispricing_cap, 0.34)
+        fragility_floor = 0.68 if fragility_floor is None else max(fragility_floor, 0.68)
 
     return HardRuleResult(
         activated=activated,
