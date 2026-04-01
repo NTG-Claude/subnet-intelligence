@@ -8,6 +8,9 @@ export interface SignalView {
   subnets: SubnetSummary[]
 }
 
+const HIGH_CONFIDENCE_MIN = 55
+const LOW_CONFIDENCE_MAX = 50
+
 function outputsOf(subnet: SubnetSummary) {
   return subnet.primary_outputs
 }
@@ -30,8 +33,21 @@ function confidenceAdjustedMispricing(subnet: SubnetSummary): number {
   return outputs.mispricing_signal * (0.55 + 0.45 * (outputs.signal_confidence / 100))
 }
 
+function confidenceOf(subnet: SubnetSummary): number {
+  return outputsOf(subnet)?.signal_confidence ?? 0
+}
+
 export function buildSignalViews(subnets: SubnetSummary[], limit = 5): SignalView[] {
   const candidates = withSignals(subnets)
+  const highConfidenceMispricing = sortByScore(
+    candidates.filter((subnet) => confidenceOf(subnet) >= HIGH_CONFIDENCE_MIN),
+    (subnet) => {
+      const outputs = outputsOf(subnet)!
+      return confidenceAdjustedMispricing(subnet) - 0.12 * outputs.fragility_risk
+    },
+    limit,
+  )
+  const highConfidenceIds = new Set(highConfidenceMispricing.map((subnet) => subnet.netuid))
 
   return [
     {
@@ -39,14 +55,7 @@ export function buildSignalViews(subnets: SubnetSummary[], limit = 5): SignalVie
       title: 'Highest Mispricing, High Confidence',
       subtitle: 'Expectation gaps with cleaner evidence quality.',
       accent: 'from-sky-400 to-cyan-300',
-      subnets: sortByScore(
-        candidates,
-        (subnet) => {
-          const outputs = outputsOf(subnet)!
-          return confidenceAdjustedMispricing(subnet) - 0.12 * outputs.fragility_risk
-        },
-        limit,
-      ),
+      subnets: highConfidenceMispricing,
     },
     {
       id: 'quality-resilience',
@@ -68,7 +77,10 @@ export function buildSignalViews(subnets: SubnetSummary[], limit = 5): SignalVie
       subtitle: 'Potentially interesting, but evidence quality is weaker.',
       accent: 'from-violet-400 to-fuchsia-300',
       subnets: sortByScore(
-        candidates.filter((subnet) => (outputsOf(subnet)?.signal_confidence ?? 0) < 55),
+        candidates.filter(
+          (subnet) =>
+            confidenceOf(subnet) < LOW_CONFIDENCE_MAX && !highConfidenceIds.has(subnet.netuid),
+        ),
         (subnet) => {
           const outputs = outputsOf(subnet)!
           return outputs.mispricing_signal - 0.35 * outputs.signal_confidence
