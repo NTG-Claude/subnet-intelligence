@@ -27,7 +27,11 @@ export default function SecondaryResearchLenses({ subnets }: { subnets: SubnetSu
               <Link key={row.id} href={row.href} className="block rounded-2xl border border-white/10 bg-stone-950 p-4 transition-colors hover:bg-[#161c23]">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge tone="neutral">{row.netuidLabel}</StatusBadge>
-                  <StatusBadge tone="neutral">{row.label}</StatusBadge>
+                  {row.statusFlags.slice(0, 1).map((flag) => (
+                    <StatusBadge key={flag.label} tone={flag.tone}>
+                      {flag.label}
+                    </StatusBadge>
+                  ))}
                 </div>
 
                 <div className="mt-3 flex items-start justify-between gap-4">

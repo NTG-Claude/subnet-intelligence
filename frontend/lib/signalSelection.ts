@@ -37,6 +37,12 @@ function confidenceOf(subnet: SubnetSummary): number {
   return outputsOf(subnet)?.signal_confidence ?? 0
 }
 
+function qualityResilienceScore(subnet: SubnetSummary): number {
+  const outputs = outputsOf(subnet)
+  if (!outputs) return 0
+  return 0.7 * outputs.fundamental_quality + 0.3 * outputs.signal_confidence - 0.45 * outputs.fragility_risk
+}
+
 export function buildSignalViews(subnets: SubnetSummary[], limit = 5): SignalView[] {
   const candidates = withSignals(subnets)
   const highConfidenceMispricing = sortByScore(
@@ -105,13 +111,16 @@ export function buildSignalViews(subnets: SubnetSummary[], limit = 5): SignalVie
     {
       id: 'crowded-quality',
       title: 'Crowded Quality Names',
-      subtitle: 'Quality that may already be heavily owned or reflexive.',
+      subtitle: 'Quality reads where fragility and crowding-like stress still deserve caution.',
       accent: 'from-rose-300 to-fuchsia-400',
       subnets: sortByScore(
-        candidates.filter((subnet) => (subnet.label ?? '').includes('Reflexive Crowded Trade')),
+        candidates.filter((subnet) => {
+          const outputs = outputsOf(subnet)
+          if (!outputs) return false
+          return outputs.fundamental_quality >= 55 && outputs.fragility_risk >= 60
+        }),
         (subnet) => {
-          const outputs = outputsOf(subnet)!
-          return 0.65 * outputs.fundamental_quality + 0.35 * outputs.signal_confidence
+          return qualityResilienceScore(subnet)
         },
         limit,
       ),
