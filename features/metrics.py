@@ -778,6 +778,15 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         base_signal_confidence = clamp01(_weighted_output(bundle, "signal_confidence"))
         fragility_excess = clamp01(max(base_fragility_risk - 0.50, 0.0) / 0.50)
         yield_heat = clamp01(max((bundle.raw.get("staking_apy_proxy") or 0.0) - 60.0, 0.0) / 100.0)
+        evidence_confidence = clamp01(
+            0.34 * base_signal_confidence
+            + 0.20 * clamp01(bundle.raw.get("data_coverage") or 0.0)
+            + 0.14 * clamp01(bundle.raw.get("update_freshness") or 0.0)
+            + 0.12 * (1.0 - clamp01(bundle.raw.get("proxy_reliance_penalty") or 0.0))
+            + 0.10 * (1.0 - clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0))
+            + 0.10 * clamp01(bundle.raw.get("confidence_thesis_coherence") or 0.0)
+            - 0.10 * clamp01(bundle.raw.get("low_evidence_high_conviction") or 0.0)
+        )
         reflexive_confidence_drag = clamp01(
             0.38 * clamp01(bundle.raw.get("crowding_proxy") or 0.0)
             + 0.22 * clamp01(bundle.raw.get("overreaction_score") or 0.0)
@@ -791,10 +800,15 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             + 0.16 * yield_heat
             + 0.12 * fragility_excess
         )
-        adjusted_signal_confidence = clamp01(
-            base_signal_confidence
-            * (1.0 - 0.42 * reflexive_confidence_drag - 0.30 * structural_confidence_drag)
-            - 0.10 * clamp01(bundle.raw.get("low_evidence_high_conviction") or 0.0)
+        thesis_confidence = clamp01(
+            0.24 * clamp01(bundle.raw.get("market_structure_floor") or 0.0)
+            + 0.22 * clamp01(bundle.raw.get("confidence_market_integrity") or 0.0)
+            + 0.16 * clamp01(bundle.raw.get("confidence_thesis_coherence") or 0.0)
+            + 0.12 * (1.0 - clamp01(bundle.raw.get("crowding_proxy") or 0.0))
+            + 0.10 * (1.0 - clamp01(bundle.raw.get("overreaction_score") or 0.0))
+            + 0.08 * (1.0 - fragility_excess)
+            + 0.08 * clamp01(bundle.raw.get("market_relevance_proxy") or 0.0)
+            - 0.12 * yield_heat
         )
         confidence_structural_ceiling = clamp01(
             0.82
@@ -803,10 +817,13 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             - 0.14 * fragility_excess
             - 0.12 * (1.0 - clamp01(bundle.raw.get("market_structure_floor") or 0.0))
         )
-        adjusted_signal_confidence = min(adjusted_signal_confidence, confidence_structural_ceiling)
+        adjusted_thesis_confidence = clamp01(
+            thesis_confidence * (1.0 - 0.30 * reflexive_confidence_drag - 0.35 * structural_confidence_drag)
+        )
+        adjusted_signal_confidence = min(evidence_confidence, adjusted_thesis_confidence, confidence_structural_ceiling)
         confidence_adjusted_mispricing = clamp01(
-            base_mispricing_signal * (0.45 + 0.55 * adjusted_signal_confidence)
-            - 0.25 * clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
+            base_mispricing_signal * (0.35 + 0.65 * adjusted_signal_confidence)
+            - 0.30 * clamp01(bundle.raw.get("signal_fabrication_risk") or 0.0)
         )
         confidence_adjusted_thesis_strength = clamp01(
             0.45 * base_fundamental_quality
@@ -815,9 +832,12 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         )
         bundle.raw["base_mispricing_signal"] = base_mispricing_signal
         bundle.raw["base_signal_confidence"] = base_signal_confidence
+        bundle.raw["evidence_confidence"] = evidence_confidence
+        bundle.raw["thesis_confidence"] = thesis_confidence
         bundle.raw["reflexive_confidence_drag"] = reflexive_confidence_drag
         bundle.raw["structural_confidence_drag"] = structural_confidence_drag
         bundle.raw["confidence_structural_ceiling"] = confidence_structural_ceiling
+        bundle.raw["adjusted_thesis_confidence"] = adjusted_thesis_confidence
         bundle.raw["adjusted_signal_confidence"] = adjusted_signal_confidence
         bundle.raw["confidence_adjusted_mispricing"] = confidence_adjusted_mispricing
         bundle.raw["confidence_adjusted_thesis_strength"] = confidence_adjusted_thesis_strength

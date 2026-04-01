@@ -314,3 +314,50 @@ def test_signal_confidence_uses_structural_ceiling_for_crowded_yield_setups():
     assert crowded_bundle.primary_signals.signal_confidence <= crowded_bundle.raw["confidence_structural_ceiling"]
     assert robust_bundle.primary_signals.signal_confidence > crowded_bundle.primary_signals.signal_confidence
 
+
+def test_signal_confidence_is_bounded_by_lower_of_evidence_and_thesis_confidence():
+    robust_bundle, structurally_weak_bundle = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=8,
+                    unique_coldkeys=9,
+                    n_validators=7,
+                    tao_in_pool=70_000.0,
+                    alpha_in_pool=12_500.0,
+                    alpha_price_tao=10.4,
+                    emission_per_block_tao=0.03,
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=10.0, tao_in_pool=62_000.0, active_ratio=0.57, fundamental_quality=0.55),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=10.1, tao_in_pool=65_000.0, active_ratio=0.60, fundamental_quality=0.58),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=10.2, tao_in_pool=68_000.0, active_ratio=0.63, fundamental_quality=0.62),
+                    ],
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    active_neurons_7d=7,
+                    unique_coldkeys=7,
+                    n_validators=6,
+                    tao_in_pool=22_000.0,
+                    alpha_in_pool=280.0,
+                    alpha_price_tao=14.2,
+                    emission_per_block_tao=0.055,
+                    top3_stake_fraction=0.75,
+                    incentive_scores=[0.86, 0.08, 0.06],
+                    history=[
+                        HistoricalFeaturePoint(timestamp="2026-03-29T00:00:00+00:00", alpha_price_tao=11.5, tao_in_pool=20_800.0, active_ratio=0.40, fundamental_quality=0.49),
+                        HistoricalFeaturePoint(timestamp="2026-03-30T00:00:00+00:00", alpha_price_tao=12.8, tao_in_pool=21_200.0, active_ratio=0.39, fundamental_quality=0.48),
+                        HistoricalFeaturePoint(timestamp="2026-03-31T00:00:00+00:00", alpha_price_tao=13.8, tao_in_pool=21_700.0, active_ratio=0.38, fundamental_quality=0.47),
+                    ],
+                )
+            ),
+        ]
+    )
+
+    assert robust_bundle.primary_signals.signal_confidence <= robust_bundle.raw["evidence_confidence"]
+    assert robust_bundle.primary_signals.signal_confidence <= robust_bundle.raw["adjusted_thesis_confidence"]
+    assert structurally_weak_bundle.primary_signals.signal_confidence <= structurally_weak_bundle.raw["evidence_confidence"]
+    assert structurally_weak_bundle.primary_signals.signal_confidence <= structurally_weak_bundle.raw["adjusted_thesis_confidence"]
+    assert robust_bundle.primary_signals.signal_confidence > structurally_weak_bundle.primary_signals.signal_confidence
+

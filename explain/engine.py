@@ -57,6 +57,8 @@ def build_explanation(
         thesis_breakers.append("Fragility is already high; any outflow shock would likely dominate the upside thesis.")
     if signals.signal_confidence < 0.45:
         thesis_breakers.append("Evidence quality is too weak or stale to rely on the current signal mix.")
+    if (bundle.raw.get("thesis_confidence") or 0.0) < 0.45:
+        thesis_breakers.append("Market structure and crowding still make the thesis too fragile to treat as high-conviction.")
     if (bundle.raw.get("post_incentive_retention") or 0.0) <= 0.0:
         thesis_breakers.append("Usage is not retaining once incentives normalize, which weakens the structural thesis.")
     if (bundle.raw.get("market_structure_floor") or 0.0) < 0.45:
@@ -91,6 +93,8 @@ def build_explanation(
         "confidence_rationale": {
             "supports": confidence_support,
             "headwinds": confidence_headwinds,
+            "evidence_confidence": round((bundle.raw.get("evidence_confidence") or 0.0) * 100, 2),
+            "thesis_confidence": round((bundle.raw.get("thesis_confidence") or 0.0) * 100, 2),
         },
         "quality_rationale": {
             "supports": quality_support,
