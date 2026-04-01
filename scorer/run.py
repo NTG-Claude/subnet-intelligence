@@ -29,7 +29,6 @@ import scorer.bittensor_client as _bt_client
 from scorer.bittensor_client import clear_caches, get_all_netuids, get_subnet_identity, prefetch_all_identities
 from scorer.composite import compute_all_subnets
 from scorer.database import create_tables, save_scores, upsert_metadata
-from scorer.name_resolver import canonical_name_key as _canonical_name_key_impl
 from scorer.name_resolver import looks_low_confidence_subnet_name as _looks_low_confidence_subnet_name_impl
 from scorer.name_resolver import resolve_subnet_name
 from scorer.taostats_client import TaostatsClient, _normalize_public_subnet_name
@@ -103,44 +102,6 @@ def _cache_is_fresh(fetched_at: Optional[datetime]) -> bool:
     return age_seconds < _NAMES_MAX_AGE_SECONDS
 
 
-def _canonical_name_key(value: Optional[str]) -> str:
-    return _canonical_name_key_impl(value)
-
-
-def _choose_preferred_subnet_name(
-    identity_name: Optional[str],
-    taostats_name: Optional[str],
-    seed_name: Optional[str],
-) -> Optional[str]:
-    candidates = [name for name in (identity_name, taostats_name, seed_name) if name]
-    if not candidates:
-        return None
-
-    best = candidates[0]
-    best_key = _canonical_name_key(best)
-
-    for candidate in candidates[1:]:
-        candidate_key = _canonical_name_key(candidate)
-        if not candidate_key:
-            continue
-
-        if candidate_key == best_key and len(candidate) > len(best):
-            best = candidate
-            best_key = candidate_key
-            continue
-
-        if best_key and candidate_key.startswith(best_key) and len(candidate_key) > len(best_key):
-            best = candidate
-            best_key = candidate_key
-            continue
-
-        if not best_key:
-            best = candidate
-            best_key = candidate_key
-
-    return best
-
-
 def _looks_low_confidence_subnet_name(name: Optional[str]) -> bool:
     return _looks_low_confidence_subnet_name_impl(name)
 
@@ -165,15 +126,7 @@ async def _load_subnet_name_candidates(netuids: list[int]) -> dict[int, dict[str
     cached_names = await _load_subnet_names(netuids)
     seed_names = _read_seed_names()
     override_names = _read_name_overrides()
-    public_candidates: dict[int, dict[str, str]] = {}
-
-    try:
-        async with TaostatsClient() as tc:
-            public_candidates = await tc.scrape_public_subnet_name_candidates(netuids)
-    except Exception as exc:
-        logger.warning("Public subnet name candidate refresh failed: %s", exc)
-
-    all_netuids = sorted(set(netuids) | set(cached_names) | set(seed_names) | set(override_names) | set(public_candidates))
+    all_netuids = sorted(set(netuids) | set(cached_names) | set(seed_names) | set(override_names))
     result: dict[int, dict[str, str]] = {}
     for netuid in all_netuids:
         candidates: dict[str, str] = {}
@@ -183,42 +136,15 @@ async def _load_subnet_name_candidates(netuids: list[int]) -> dict[int, dict[str
             candidates["cached_consensus"] = cached_names[netuid]
         if seed_names.get(netuid):
             candidates["seed_name"] = seed_names[netuid]
-        for source, name in public_candidates.get(netuid, {}).items():
-            if name:
-                candidates[source] = name
         if candidates:
             result[netuid] = candidates
     return result
 
 
-async def _refresh_names_from_public_sources(
-    base_names: dict[int, str],
-    target_netuids: list[int],
-) -> dict[int, str]:
-    if not target_netuids:
-        return base_names
-
-    refreshed = dict(base_names)
-    try:
-        async with TaostatsClient() as tc:
-            scraped_names = await tc.scrape_public_subnet_names(target_netuids)
-        for netuid, scraped_name in scraped_names.items():
-            refreshed[netuid] = _choose_preferred_subnet_name(
-                refreshed.get(netuid),
-                _normalize_public_subnet_name(scraped_name),
-                None,
-            ) or refreshed.get(netuid) or _normalize_public_subnet_name(scraped_name)
-    except Exception as exc:
-        logger.warning("Public subnet name refresh failed: %s", exc)
-
-    return refreshed
-
-
 async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, str]:
     """
-    Return {netuid: name} dict from Taostats, using a disk cache.
-    The cache file (data/subnet_names.json) is refreshed at most once per day,
-    keeping API usage minimal regardless of how many score runs happen.
+    Return {netuid: name} from a daily cache populated by a single bulk scrape
+    of taostats.io/subnets page source.
     """
     target_netuids = sorted(set(netuids or []))
 
@@ -226,66 +152,46 @@ async def _load_subnet_names(netuids: Optional[list[int]] = None) -> dict[int, s
         if _NAMES_CACHE_FILE.exists():
             names, fetched_at = _read_cached_names()
             if _cache_is_fresh(fetched_at):
-                names = await _refresh_names_from_public_sources(names, target_netuids)
                 age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600 if fetched_at else 0.0
                 logger.info("Subnet names loaded from disk cache (%d subnets, %.0fh old)",
                             len(names), age_hours)
-                out = {str(k): v for k, v in names.items()}
-                out["_fetched_at"] = datetime.now(timezone.utc).isoformat()
-                _NAMES_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-                _NAMES_CACHE_FILE.write_text(json.dumps(out, indent=2))
+                if target_netuids:
+                    return {k: v for k, v in names.items() if k in target_netuids}
                 return names
     except Exception as exc:
         logger.warning("Could not read names cache: %s", exc)
 
-    # Cache stale or missing — fetch from Taostats API first, then reconcile
-    # with public-page scraping because the API occasionally serves truncated
-    # display names while the public subnet pages expose the fuller label.
+    # Cache stale or missing -> single bulk scrape from taostats.io/subnets source.
     names: dict[int, str] = {}
     try:
         async with TaostatsClient() as tc:
-            subnets = await tc.get_all_subnets()
-            if subnets:
-                names = {s.netuid: _normalize_public_subnet_name(s.name) for s in subnets if s.name}
-                scrape_targets = target_netuids or sorted(names.keys())
-                if scrape_targets:
-                    scraped_names = await tc.scrape_public_subnet_names(scrape_targets)
-                    for netuid, scraped_name in scraped_names.items():
-                        names[netuid] = _choose_preferred_subnet_name(
-                            names.get(netuid),
-                            _normalize_public_subnet_name(scraped_name),
-                            None,
-                        ) or names.get(netuid) or _normalize_public_subnet_name(scraped_name)
-        logger.info("Taostats: fetched names for %d subnets", len(names))
+            scraped = await tc.scrape_all_subnet_names_from_subnets_page()
+            names = {
+                netuid: _normalize_public_subnet_name(name)
+                for netuid, name in scraped.items()
+                if name
+            }
+        logger.info("Taostats subnets-page scrape: fetched names for %d subnets", len(names))
         if names:
             out = {str(k): v for k, v in names.items()}
             out["_fetched_at"] = datetime.now(timezone.utc).isoformat()
             _NAMES_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
             _NAMES_CACHE_FILE.write_text(json.dumps(out, indent=2))
+            if target_netuids:
+                return {k: v for k, v in names.items() if k in target_netuids}
             return names
     except Exception as exc:
-        logger.warning("Taostats name fetch failed: %s", exc)
+        logger.warning("Taostats subnets-page scrape failed: %s", exc)
 
     fallback_names = _read_seed_names()
-    scrape_targets = sorted(set(netuids or fallback_names.keys()))
-    if scrape_targets:
-        try:
-            async with TaostatsClient() as tc:
-                scraped_names = await tc.scrape_public_subnet_names(scrape_targets)
-            if scraped_names:
-                fallback_names.update({netuid: _normalize_public_subnet_name(name) for netuid, name in scraped_names.items()})
-                logger.info("Taostats public scrape: fetched names for %d subnets", len(scraped_names))
-        except Exception as exc:
-            logger.warning("Taostats public name scrape failed: %s", exc)
-
-    # Negative-cache the fallback result for one day so repeated score runs
-    # do not keep re-hitting Taostats when the API is unavailable.
     out = {str(k): v for k, v in fallback_names.items()}
     out["_fetched_at"] = datetime.now(timezone.utc).isoformat()
-    out["_note"] = "Cached subnet names from seed data plus public Taostats scraping fallback"
+    out["_note"] = "Cached subnet names from seed data (subnets-page scrape unavailable)"
     _NAMES_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     _NAMES_CACHE_FILE.write_text(json.dumps(out, indent=2))
-    logger.info("Subnet names fallback cached for 24h after Taostats fetch miss (%d subnets)", len(fallback_names))
+    logger.info("Subnet names fallback cached for 24h (%d subnets)", len(fallback_names))
+    if target_netuids:
+        return {k: v for k, v in fallback_names.items() if k in target_netuids}
     return fallback_names
 
 

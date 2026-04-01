@@ -2,7 +2,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from scorer.taostats_client import _extract_public_subnet_name, _extract_tao_app_subnet_name, _get
+from scorer.taostats_client import (
+    _extract_public_subnet_name,
+    _extract_subnet_names_from_subnets_page,
+    _extract_tao_app_subnet_name,
+    _get,
+)
 
 
 @pytest.mark.asyncio
@@ -62,3 +67,25 @@ def test_extract_tao_app_subnet_name_from_heading():
         "<div>Price τ 0.003794|$1.24</div></body></html>"
     )
     assert _extract_tao_app_subnet_name(html, 20) == "GroundLayer"
+
+
+def test_extract_subnet_names_from_subnets_page_prefers_subnet_name():
+    html = (
+        '<script>'
+        '{\\"netuid\\":20,\\"name\\":\\"GroundLa\\",\\"subnet_name\\":\\"GroundLayer\\"},'
+        '{\\"netuid\\":64,\\"name\\":\\"Chutes\\",\\"subnet_name\\":\\"Chutes\\"}'
+        '</script>'
+    )
+    names = _extract_subnet_names_from_subnets_page(html)
+    assert names[20] == "GroundLayer"
+    assert names[64] == "Chutes"
+
+
+def test_extract_subnet_names_from_subnets_page_normalizes_templar():
+    html = (
+        '<script>'
+        '{\\"netuid\\":3,\\"name\\":\\"τemplar\\",\\"subnet_name\\":\\"τemplar\\"}'
+        '</script>'
+    )
+    names = _extract_subnet_names_from_subnets_page(html)
+    assert names[3] == "Templar"

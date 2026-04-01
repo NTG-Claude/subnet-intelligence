@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from scorer.bittensor_client import SubnetIdentity
 from scorer.composite import ScoreBreakdown, SubnetScore
-from scorer.run import _choose_preferred_subnet_name, _looks_low_confidence_subnet_name, _resolve_canonical_subnet_name, run
+from scorer.run import _looks_low_confidence_subnet_name, _resolve_canonical_subnet_name, run
 
 
 def _make_score(netuid: int, score: float) -> SubnetScore:
@@ -31,19 +31,6 @@ def _make_score(netuid: int, score: float) -> SubnetScore:
 
 def _mock_identity(netuid: int = 1) -> SubnetIdentity:
     return SubnetIdentity(netuid=netuid, name="test", github_url=None, website=None)
-
-
-def test_choose_preferred_subnet_name_prefers_richer_prefix_match():
-    assert _choose_preferred_subnet_name("GroundLa", "GroundLayer", None) == "GroundLayer"
-    assert _choose_preferred_subnet_name("Bitsec.a", "Bitsec.ai", None) == "Bitsec.ai"
-
-
-def test_choose_preferred_subnet_name_keeps_primary_when_not_related():
-    assert _choose_preferred_subnet_name("Apex", "Omron", None) == "Apex"
-
-
-def test_choose_preferred_subnet_name_uses_longer_equivalent_variant():
-    assert _choose_preferred_subnet_name("OpenKaito", "Open Kaito", None) == "Open Kaito"
 
 
 def test_low_confidence_subnet_name_flags_truncated_patterns():
@@ -180,9 +167,7 @@ async def test_load_subnet_names_ignores_metadata_keys():
         )
 
         with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
-             patch("scorer.run._SEED_NAMES_FILE", seed_file), \
-             patch("scorer.run.TaostatsClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={})
+             patch("scorer.run._SEED_NAMES_FILE", seed_file):
             names = await _load_subnet_names()
 
         assert names == {4: "Targon", 64: "Chutes"}
@@ -194,7 +179,7 @@ async def test_load_subnet_names_ignores_metadata_keys():
 
 
 @pytest.mark.asyncio
-async def test_load_subnet_names_refreshes_fresh_cache_with_richer_public_names():
+async def test_load_subnet_names_uses_fresh_cache_without_network_refresh():
     from scorer.run import _load_subnet_names
 
     cache_file = Path("data/test_subnet_names_cache.json")
@@ -210,17 +195,13 @@ async def test_load_subnet_names_refreshes_fresh_cache_with_richer_public_names(
         )
         seed_file.write_text('{"20":"GroundLayer"}', encoding="utf-8")
 
-        mock_client = AsyncMock()
-        mock_client.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={20: "GroundLayer"})
-
         with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
              patch("scorer.run._SEED_NAMES_FILE", seed_file), \
-             patch("scorer.run.TaostatsClient", return_value=mock_client):
+             patch("scorer.run.TaostatsClient") as mock_client:
             names = await _load_subnet_names([20])
 
-        assert names[20] == "GroundLayer"
-        rewritten = cache_file.read_text(encoding="utf-8")
-        assert "GroundLayer" in rewritten
+        assert names[20] == "GroundLa"
+        mock_client.assert_not_called()
     finally:
         if cache_file.exists():
             cache_file.unlink()
@@ -295,18 +276,16 @@ async def test_load_subnet_names_negative_caches_failed_taostats_fetch():
         )
 
         mock_client = AsyncMock()
-        mock_client.__aenter__.return_value.get_all_subnets = AsyncMock(return_value=None)
-        mock_client.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={4: "Targon", 64: "Chutes"})
+        mock_client.__aenter__.return_value.scrape_all_subnet_names_from_subnets_page = AsyncMock(return_value={})
 
         with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
              patch("scorer.run._SEED_NAMES_FILE", seed_file), \
              patch("scorer.run.TaostatsClient", return_value=mock_client):
             names = await _load_subnet_names([4, 64])
 
-        assert names == {4: "Targon", 64: "Chutes"}
+        assert names == {4: "Targon"}
         rewritten = cache_file.read_text(encoding="utf-8")
         assert "Targon" in rewritten
-        assert "Chutes" in rewritten
     finally:
         if cache_file.exists():
             cache_file.unlink()
@@ -315,7 +294,7 @@ async def test_load_subnet_names_negative_caches_failed_taostats_fetch():
 
 
 @pytest.mark.asyncio
-async def test_load_subnet_names_reconciles_api_names_with_richer_public_names():
+async def test_load_subnet_names_uses_bulk_subnets_page_names():
     from scorer.run import _load_subnet_names
 
     cache_file = Path("data/test_subnet_names_cache.json")
@@ -330,10 +309,8 @@ async def test_load_subnet_names_reconciles_api_names_with_richer_public_names()
             encoding="utf-8",
         )
 
-        api_subnets = [type("Subnet", (), {"netuid": 20, "name": "GroundLa"})()]
         mock_client = AsyncMock()
-        mock_client.__aenter__.return_value.get_all_subnets = AsyncMock(return_value=api_subnets)
-        mock_client.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={20: "GroundLayer"})
+        mock_client.__aenter__.return_value.scrape_all_subnet_names_from_subnets_page = AsyncMock(return_value={20: "GroundLayer"})
 
         with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
              patch("scorer.run._SEED_NAMES_FILE", seed_file), \
@@ -367,8 +344,7 @@ async def test_load_subnet_names_uses_fetched_at_not_file_mtime():
         os.utime(cache_file, None)
 
         mock_client = AsyncMock()
-        mock_client.__aenter__.return_value.get_all_subnets = AsyncMock(return_value=None)
-        mock_client.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={3: "τemplar"})
+        mock_client.__aenter__.return_value.scrape_all_subnet_names_from_subnets_page = AsyncMock(return_value={3: "τemplar"})
 
         with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
              patch("scorer.run._SEED_NAMES_FILE", seed_file), \

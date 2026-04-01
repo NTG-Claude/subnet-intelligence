@@ -38,6 +38,7 @@ _PUBLIC_NAME_PATHS = (
     "/subnets/{netuid}/metagraph",
     "/subnets/{netuid}",
 )
+_SUBNETS_PAGE_PATH = "/subnets"
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +409,19 @@ class TaostatsClient:
                 names[netuid] = name
         return names
 
+    async def scrape_all_subnet_names_from_subnets_page(self) -> dict[int, str]:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        url = f"{PUBLIC_BASE_URL}{_SUBNETS_PAGE_PATH}"
+        response = await self._c.get(url, timeout=30.0, headers=headers)
+        response.raise_for_status()
+        return _extract_subnet_names_from_subnets_page(response.text)
+
     async def scrape_public_subnet_name_candidates(self, netuids: list[int]) -> dict[int, dict[str, str]]:
         names: dict[int, dict[str, str]] = {}
         if not netuids:
@@ -523,6 +537,57 @@ def _extract_public_subnet_name_from_json(html_text: str, netuid: int) -> Option
             if _is_valid_public_subnet_name(candidate):
                 return candidate
     return None
+
+
+def _extract_subnet_names_from_subnets_page(page_html: str) -> dict[int, str]:
+    # The subnets page embeds large escaped JSON payloads in script tags.
+    # Decode common escape sequences first, then scan object windows by netuid.
+    decoded = (
+        page_html
+        .replace('\\"', '"')
+        .replace("\\/", "/")
+        .replace("\\n", " ")
+        .replace("\\t", " ")
+        .replace("\\u002F", "/")
+    )
+    names: dict[int, str] = {}
+    netuid_matches = list(_NETUID_RE.finditer(decoded))
+    for index, netuid_match in enumerate(netuid_matches):
+        netuid = int(netuid_match.group("netuid"))
+        start = netuid_match.start()
+        end = netuid_matches[index + 1].start() if index + 1 < len(netuid_matches) else min(len(decoded), start + 5000)
+        window = decoded[start:end]
+
+        candidate: Optional[str] = None
+        subnet_name_match = re.search(r'"subnet_name"\s*:\s*"(?P<name>[^"]+)"', window, re.IGNORECASE)
+        if subnet_name_match:
+            normalized = _normalize_public_subnet_name(subnet_name_match.group("name"))
+            if _is_valid_public_subnet_name(normalized):
+                candidate = normalized
+
+        if candidate is None:
+            name_match = re.search(r'"name"\s*:\s*"(?P<name>[^"]+)"', window, re.IGNORECASE)
+            if name_match:
+                normalized = _normalize_public_subnet_name(name_match.group("name"))
+                if _is_valid_public_subnet_name(normalized):
+                    candidate = normalized
+
+        if candidate is None:
+            continue
+        previous = names.get(netuid)
+        if previous is None:
+            names[netuid] = candidate
+        else:
+            names[netuid] = _prefer_richer_public_name(previous, candidate) or previous
+
+    # Normalize mojibake and tau-prefixed names into canonical display labels.
+    for netuid, name in list(names.items()):
+        value = _normalize_public_subnet_name(name)
+        if _canonical_public_name_key(value) in {"templar", "tauemplar"}:
+            value = "Templar"
+        names[netuid] = value
+
+    return names
 
 
 def _extract_tao_app_subnet_name(page_html: str, netuid: int) -> Optional[str]:
