@@ -354,6 +354,23 @@ def _crowded_expectation_saturation(
     )
 
 
+def _crowded_structure_penalty(
+    market_relevance: float,
+    market_structure_floor: float,
+    crowding_proxy: float,
+    concentration: float,
+    staking_apy: float,
+) -> float:
+    yield_heat = clamp01(max(staking_apy - 70.0, 0.0) / 100.0)
+    return clamp01(
+        0.28 * market_relevance
+        + 0.26 * crowding_proxy
+        + 0.22 * concentration
+        + 0.14 * yield_heat
+        + 0.10 * max(market_structure_floor - 0.55, 0.0)
+    )
+
+
 def _cohort_key(bundle: FeatureBundle) -> str:
     reserve_depth = bundle.raw.get("reserve_depth") or 0.0
     active_ratio = bundle.raw.get("active_ratio") or 0.0
@@ -877,6 +894,39 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         crowding_proxy = clamp01(bundle.raw.get("crowding_proxy") or 0.0)
         market_structure_floor = clamp01(bundle.raw.get("market_structure_floor") or 0.0)
         market_relevance_proxy = clamp01(bundle.raw.get("market_relevance_proxy") or 0.0)
+        concentration_penalty = clamp01(
+            max(
+                bundle.raw.get("validator_dominance") or 0.0,
+                bundle.raw.get("incentive_concentration") or 0.0,
+            )
+        )
+        staking_apy_proxy = max(0.0, bundle.raw.get("staking_apy_proxy") or 0.0)
+        crowded_structure_penalty = _crowded_structure_penalty(
+            market_relevance=market_relevance_proxy,
+            market_structure_floor=market_structure_floor,
+            crowding_proxy=crowding_proxy,
+            concentration=concentration_penalty,
+            staking_apy=staking_apy_proxy,
+        )
+        quality_resolution_bonus = clamp01(
+            0.45 * market_structure_floor
+            + 0.30 * clamp01(bundle.raw.get("participation_breadth") or 0.0)
+            + 0.25 * clamp01(bundle.raw.get("validator_participation") or 0.0)
+        )
+        quality_resolution_drag = clamp01(
+            0.45 * concentration_penalty
+            + 0.30 * crowding_proxy
+            + 0.25 * yield_heat
+        )
+        base_fundamental_quality = clamp01(
+            base_fundamental_quality
+            + 0.06 * (quality_resolution_bonus - 0.50)
+            - 0.05 * quality_resolution_drag
+        )
+        base_fragility_risk = clamp01(
+            base_fragility_risk
+            + 0.18 * crowded_structure_penalty
+        )
         evidence_confidence = clamp01(
             0.24 * base_signal_confidence
             + 0.16 * clamp01(bundle.raw.get("data_coverage") or 0.0)
@@ -920,7 +970,13 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             - 0.12 * (1.0 - market_structure_floor)
         )
         adjusted_thesis_confidence = clamp01(
-            thesis_confidence * (1.0 - 0.30 * reflexive_confidence_drag - 0.35 * structural_confidence_drag)
+            thesis_confidence
+            * (
+                1.0
+                - 0.30 * reflexive_confidence_drag
+                - 0.35 * structural_confidence_drag
+                - 0.18 * crowded_structure_penalty
+            )
         )
         adjusted_signal_confidence = min(evidence_confidence, adjusted_thesis_confidence, confidence_structural_ceiling)
         mispricing_structural_drag = _mispricing_structural_drag(
@@ -956,6 +1012,9 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         )
         bundle.raw["base_mispricing_signal"] = base_mispricing_signal
         bundle.raw["base_signal_confidence"] = base_signal_confidence
+        bundle.raw["crowded_structure_penalty"] = crowded_structure_penalty
+        bundle.raw["quality_resolution_bonus"] = quality_resolution_bonus
+        bundle.raw["quality_resolution_drag"] = quality_resolution_drag
         bundle.raw["evidence_confidence"] = evidence_confidence
         bundle.raw["thesis_confidence"] = thesis_confidence
         bundle.raw["reflexive_confidence_drag"] = reflexive_confidence_drag

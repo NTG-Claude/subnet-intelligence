@@ -50,6 +50,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     underreaction_score = bundle.raw.get("underreaction_score") or 0.0
     crowding_proxy = bundle.raw.get("crowding_proxy") or 0.0
     overreaction_score = bundle.raw.get("overreaction_score") or 0.0
+    crowded_structure_penalty = bundle.raw.get("crowded_structure_penalty") or 0.0
     staking_apy = 0.0
     if pool_depth > 0:
         staking_apy = max(0.0, snapshot.emission_per_block_tao * 7200 * 365 / pool_depth * 100)
@@ -275,6 +276,19 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         confidence_cap = 0.40 if confidence_cap is None else min(confidence_cap, 0.40)
         mispricing_cap = 0.34 if mispricing_cap is None else min(mispricing_cap, 0.34)
         fragility_floor = 0.68 if fragility_floor is None else max(fragility_floor, 0.68)
+
+    if (
+        crowded_structure_penalty > 0.52
+        and market_relevance >= 0.50
+        and (
+            staking_apy > 80
+            or concentration > 0.58
+            or overreaction_score > 0.12
+        )
+    ):
+        activated.append("crowded_structure_evidence_watchlist")
+        confidence_cap = 0.54 if confidence_cap is None else min(confidence_cap, 0.54)
+        fragility_floor = 0.66 if fragility_floor is None else max(fragility_floor, 0.66)
 
     return HardRuleResult(
         activated=activated,

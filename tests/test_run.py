@@ -171,7 +171,7 @@ async def test_load_subnet_names_ignores_metadata_keys():
     try:
         cache_file.write_text(
             '{\n'
-            '  "_fetched_at": "2026-03-31T00:00:00+00:00",\n'
+            '  "_fetched_at": "3026-03-31T00:00:00+00:00",\n'
             '  "_note": "seed names",\n'
             '  "4": "Targon",\n'
             '  "64": "Chutes"\n'
@@ -180,7 +180,9 @@ async def test_load_subnet_names_ignores_metadata_keys():
         )
 
         with patch("scorer.run._NAMES_CACHE_FILE", cache_file), \
-             patch("scorer.run._SEED_NAMES_FILE", seed_file):
+             patch("scorer.run._SEED_NAMES_FILE", seed_file), \
+             patch("scorer.run.TaostatsClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.scrape_public_subnet_names = AsyncMock(return_value={})
             names = await _load_subnet_names()
 
         assert names == {4: "Targon", 64: "Chutes"}

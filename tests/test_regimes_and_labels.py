@@ -1,7 +1,9 @@
+import pytest
+
 from collectors.models import RawSubnetSnapshot
-from features.types import AxisScores, FeatureBundle
+from features.types import AxisScores, FeatureBundle, PrimarySignals
 from labels.engine import assign_label
-from regimes.hard_rules import evaluate_hard_rules
+from regimes.hard_rules import apply_rule_caps, evaluate_hard_rules
 from stress.scenarios import StressTestResult
 
 
@@ -502,6 +504,48 @@ def test_crowded_repricing_discount_caps_confidence():
     assert rules.confidence_cap is not None and rules.confidence_cap <= 0.40
     assert rules.mispricing_cap is not None and rules.mispricing_cap <= 0.34
     assert rules.fragility_floor is not None and rules.fragility_floor >= 0.68
+
+
+def test_crowded_structure_evidence_watchlist_caps_confidence_and_sets_fragility_floor():
+    snapshot = _snapshot(
+        tao_in_pool=120_000.0,
+        emission_per_block_tao=0.032,
+        active_neurons_7d=7,
+        immunity_period=10,
+    )
+    bundle = _bundle(
+        active_ratio=0.52,
+        participation_breadth=0.58,
+        slippage_10_tao=0.015,
+        slippage_50_tao=0.02,
+        validator_dominance=0.64,
+        incentive_concentration=0.62,
+        crowding_proxy=0.66,
+        overreaction_score=0.16,
+        market_relevance_proxy=0.78,
+        market_structure_floor=0.74,
+        data_coverage=0.72,
+        proxy_reliance_penalty=0.24,
+        confidence_thesis_coherence=0.84,
+        signal_fabrication_risk=0.20,
+        low_evidence_high_conviction=0.12,
+        underreaction_score=0.18,
+        crowded_structure_penalty=0.64,
+    )
+    rules = evaluate_hard_rules(snapshot, bundle)
+    adjusted = apply_rule_caps(
+        PrimarySignals(
+            fundamental_quality=0.58,
+            mispricing_signal=0.40,
+            fragility_risk=0.55,
+            signal_confidence=0.63,
+        ),
+        rules,
+    )
+
+    assert "crowded_structure_evidence_watchlist" in rules.activated
+    assert adjusted.signal_confidence <= 0.54
+    assert adjusted.fragility_risk >= 0.66
 
 
 def test_severe_market_structure_breach_caps_microstructure_setups():
