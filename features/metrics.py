@@ -146,6 +146,20 @@ def _history_values(history: list[HistoricalFeaturePoint], attr: str) -> list[fl
 def _quality_history_series(history: list[HistoricalFeaturePoint]) -> list[float]:
     series: list[float] = []
     for point in history:
+        direct_components = [
+            value
+            for value in (
+                point.active_ratio,
+                point.participation_breadth,
+                point.validator_participation,
+                point.incentive_distribution_quality,
+                point.market_structure_floor,
+            )
+            if value is not None
+        ]
+        if len(direct_components) >= 3:
+            series.append(clamp01(fmean(direct_components)))
+            continue
         if point.fundamental_quality is not None:
             series.append(float(point.fundamental_quality))
             continue
@@ -193,6 +207,15 @@ def _acceleration(history: list[float]) -> float | None:
     first = history[-2] - history[-3]
     second = history[-1] - history[-2]
     return second - first
+
+
+def _latest_trend_change(history: list[float], periods: int = 4) -> float | None:
+    slope = _trend_slope(history, periods=periods)
+    if slope is None:
+        return None
+    anchor = history[-1] if history else 0.0
+    scale = max(abs(anchor), 0.05)
+    return slope / scale
 
 
 def _change_vs_history(current: float, history: list[float]) -> float | None:
@@ -492,6 +515,9 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     price_history = _history_values(history, "alpha_price_tao")
     quality_history = _quality_history_series(history)
     active_history = _history_values(history, "active_ratio")
+    breadth_history = _history_values(history, "participation_breadth")
+    validator_history = _history_values(history, "validator_participation")
+    structure_history = _history_values(history, "market_structure_floor")
     emission_history = _history_values(history, "emission_per_block_tao")
     flow_history = _history_values(history, "tao_in_pool")
     concentration_history = _history_values(history, "concentration_proxy")
@@ -499,6 +525,15 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
 
     price_change = _change_vs_history(snapshot.alpha_price_tao, price_history)
     active_change = _change_vs_history(active_ratio, active_history)
+    breadth_change = _change_vs_history(participation_breadth, breadth_history)
+    validator_change = _change_vs_history(validator_participation, validator_history)
+    structure_change = _change_vs_history(market_structure_floor := _market_structure_floor(
+        snapshot.tao_in_pool,
+        avg_slippage,
+        active_ratio,
+        participation_breadth,
+        validator_participation,
+    ), structure_history)
     quality_change = _change_vs_history(
         _current_quality_state(
             active_ratio,
@@ -514,18 +549,45 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     concentration_change = _change_vs_history(concentration_now, concentration_history)
     liquidity_change = _change_vs_history(avg_slippage or 0.0, liquidity_history) if avg_slippage is not None else None
 
+    quality_level_change = _latest_trend_change(quality_history)
     quality_acceleration = _acceleration(quality_history)
+    if quality_acceleration is None:
+        quality_acceleration = quality_level_change
+    elif quality_level_change is not None:
+        quality_acceleration = 0.6 * quality_acceleration + 0.4 * quality_level_change
     liquidity_improvement_rate = None
     if reserve_change is not None or liquidity_change is not None:
         liquidity_improvement_rate = (reserve_change or 0.0) - max(liquidity_change or 0.0, 0.0)
     validator_diversity_trend = None
     if concentration_change is not None:
         validator_diversity_trend = -concentration_change
-    price_response_lag_to_quality_shift = max(0.0, (quality_change or 0.0) - max(price_change or 0.0, 0.0))
-    emission_to_sticky_usage_conversion = max(0.0, (active_change or quality_change or 0.0) - max(emission_change or 0.0, 0.0))
+    quality_shift = max(
+        0.0,
+        0.45 * max(quality_change or 0.0, 0.0)
+        + 0.20 * max(breadth_change or 0.0, 0.0)
+        + 0.15 * max(validator_change or 0.0, 0.0)
+        + 0.20 * max(structure_change or 0.0, 0.0),
+    )
+    usage_stickiness_shift = max(
+        0.0,
+        0.40 * max(active_change or 0.0, 0.0)
+        + 0.25 * max(breadth_change or 0.0, 0.0)
+        + 0.20 * max(structure_change or 0.0, 0.0)
+        + 0.15 * max(quality_acceleration or 0.0, 0.0),
+    )
+    price_response_lag_to_quality_shift = max(0.0, quality_shift - max(price_change or 0.0, 0.0))
+    emission_to_sticky_usage_conversion = max(0.0, usage_stickiness_shift - max(emission_change or 0.0, 0.0))
     post_incentive_retention = max(
         0.0,
-        (active_change or 0.0) - max(emission_change or 0.0, 0.0) + 0.5 * (quality_acceleration or 0.0),
+        0.55 * usage_stickiness_shift
+        + 0.25 * max(quality_shift - max(emission_change or 0.0, 0.0), 0.0)
+        + 0.20 * max(structure_change or 0.0, 0.0),
+    )
+    post_incentive_retention = max(
+        0.0,
+        post_incentive_retention
+        - 0.50 * max(price_change or 0.0, 0.0)
+        - 0.35 * max((emission_change or 0.0) - usage_stickiness_shift, 0.0),
     )
     reserve_growth_without_price = max(0.0, (reserve_change or 0.0) - max(price_change or 0.0, 0.0))
     participation_without_crowding = max(
@@ -536,13 +598,6 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     crowding_proxy = fmean([concentration_now, clamp01(avg_slippage or 0.0), clamp01(max(price_change or 0.0, 0.0))])
     market_relevance = _market_relevance_proxy(
         snapshot.tao_in_pool,
-        active_ratio,
-        participation_breadth,
-        validator_participation,
-    )
-    market_structure_floor = _market_structure_floor(
-        snapshot.tao_in_pool,
-        avg_slippage,
         active_ratio,
         participation_breadth,
         validator_participation,

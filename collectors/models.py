@@ -19,8 +19,13 @@ class HistoricalFeaturePoint:
     tao_in_pool: Optional[float] = None
     emission_per_block_tao: Optional[float] = None
     active_ratio: Optional[float] = None
+    participation_breadth: Optional[float] = None
+    validator_participation: Optional[float] = None
+    incentive_distribution_quality: Optional[float] = None
     concentration_proxy: Optional[float] = None
     liquidity_thinness: Optional[float] = None
+    market_relevance_proxy: Optional[float] = None
+    market_structure_floor: Optional[float] = None
     intrinsic_quality: Optional[float] = None
     economic_sustainability: Optional[float] = None
     reflexivity: Optional[float] = None

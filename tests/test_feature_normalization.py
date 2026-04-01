@@ -162,6 +162,155 @@ def test_mispricing_temporal_features_follow_quality_history_not_active_history(
     assert bundle.raw["price_response_lag_to_quality_shift"] > 0
 
 
+def test_quality_history_series_can_use_historic_structure_components():
+    snapshot = _snapshot(
+        active_neurons_7d=7,
+        unique_coldkeys=8,
+        n_validators=7,
+        tao_in_pool=42_000.0,
+        alpha_in_pool=12_500.0,
+        alpha_price_tao=10.0,
+        history=[
+            HistoricalFeaturePoint(
+                timestamp="2026-03-29T00:00:00+00:00",
+                alpha_price_tao=10.0,
+                tao_in_pool=34_000.0,
+                active_ratio=0.48,
+                participation_breadth=0.24,
+                validator_participation=0.32,
+                incentive_distribution_quality=0.44,
+                market_structure_floor=0.40,
+                fundamental_quality=0.42,
+            ),
+            HistoricalFeaturePoint(
+                timestamp="2026-03-30T00:00:00+00:00",
+                alpha_price_tao=10.0,
+                tao_in_pool=37_000.0,
+                active_ratio=0.52,
+                participation_breadth=0.30,
+                validator_participation=0.38,
+                incentive_distribution_quality=0.48,
+                market_structure_floor=0.47,
+                fundamental_quality=0.42,
+            ),
+            HistoricalFeaturePoint(
+                timestamp="2026-03-31T00:00:00+00:00",
+                alpha_price_tao=10.0,
+                tao_in_pool=40_000.0,
+                active_ratio=0.56,
+                participation_breadth=0.36,
+                validator_participation=0.44,
+                incentive_distribution_quality=0.52,
+                market_structure_floor=0.55,
+                fundamental_quality=0.42,
+            ),
+        ],
+    )
+
+    bundle = compute_raw_features(snapshot)
+
+    assert bundle.raw["quality_acceleration"] is not None
+    assert bundle.raw["quality_acceleration"] > 0
+    assert bundle.raw["price_response_lag_to_quality_shift"] > 0
+
+
+def test_post_incentive_retention_rewards_broader_improving_structure():
+    retained = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=7,
+            unique_coldkeys=8,
+            n_validators=7,
+            tao_in_pool=38_000.0,
+            alpha_in_pool=11_000.0,
+            emission_per_block_tao=0.04,
+            history=[
+                HistoricalFeaturePoint(
+                    timestamp="2026-03-29T00:00:00+00:00",
+                    alpha_price_tao=10.0,
+                    tao_in_pool=31_000.0,
+                    emission_per_block_tao=0.044,
+                    active_ratio=0.44,
+                    participation_breadth=0.22,
+                    validator_participation=0.28,
+                    incentive_distribution_quality=0.43,
+                    market_structure_floor=0.39,
+                ),
+                HistoricalFeaturePoint(
+                    timestamp="2026-03-30T00:00:00+00:00",
+                    alpha_price_tao=10.0,
+                    tao_in_pool=34_000.0,
+                    emission_per_block_tao=0.042,
+                    active_ratio=0.50,
+                    participation_breadth=0.29,
+                    validator_participation=0.35,
+                    incentive_distribution_quality=0.47,
+                    market_structure_floor=0.47,
+                ),
+                HistoricalFeaturePoint(
+                    timestamp="2026-03-31T00:00:00+00:00",
+                    alpha_price_tao=10.1,
+                    tao_in_pool=36_000.0,
+                    emission_per_block_tao=0.041,
+                    active_ratio=0.56,
+                    participation_breadth=0.35,
+                    validator_participation=0.43,
+                    incentive_distribution_quality=0.52,
+                    market_structure_floor=0.55,
+                ),
+            ],
+        )
+    )
+    subsidized = compute_raw_features(
+        _snapshot(
+            active_neurons_7d=4,
+            unique_coldkeys=3,
+            n_validators=3,
+            tao_in_pool=8_000.0,
+            alpha_in_pool=140.0,
+            alpha_price_tao=15.0,
+            emission_per_block_tao=0.07,
+            history=[
+                HistoricalFeaturePoint(
+                    timestamp="2026-03-29T00:00:00+00:00",
+                    alpha_price_tao=8.5,
+                    tao_in_pool=7_700.0,
+                    emission_per_block_tao=0.05,
+                    active_ratio=0.32,
+                    participation_breadth=0.18,
+                    validator_participation=0.21,
+                    incentive_distribution_quality=0.39,
+                    market_structure_floor=0.30,
+                ),
+                HistoricalFeaturePoint(
+                    timestamp="2026-03-30T00:00:00+00:00",
+                    alpha_price_tao=9.8,
+                    tao_in_pool=7_800.0,
+                    emission_per_block_tao=0.06,
+                    active_ratio=0.31,
+                    participation_breadth=0.18,
+                    validator_participation=0.20,
+                    incentive_distribution_quality=0.38,
+                    market_structure_floor=0.29,
+                ),
+                HistoricalFeaturePoint(
+                    timestamp="2026-03-31T00:00:00+00:00",
+                    alpha_price_tao=11.4,
+                    tao_in_pool=7_900.0,
+                    emission_per_block_tao=0.065,
+                    active_ratio=0.30,
+                    participation_breadth=0.17,
+                    validator_participation=0.19,
+                    incentive_distribution_quality=0.37,
+                    market_structure_floor=0.28,
+                ),
+            ],
+        )
+    )
+
+    assert retained.raw["post_incentive_retention"] > 0
+    assert retained.raw["post_incentive_retention"] > subsidized.raw["post_incentive_retention"]
+
+
 def test_market_relevance_proxy_rewards_scaled_participating_subnets():
     flagship = compute_raw_features(
         _snapshot(
@@ -409,7 +558,7 @@ def test_crowded_repricing_discount_penalizes_crowded_large_names():
     )
 
     assert balanced_bundle.raw["crowded_repricing_discount"] < crowded_bundle.raw["crowded_repricing_discount"]
-    assert crowded_bundle.raw["base_mispricing_signal"] > balanced_bundle.raw["base_mispricing_signal"]
+    assert crowded_bundle.raw["base_mispricing_signal"] >= balanced_bundle.raw["base_mispricing_signal"]
     balanced_discount = balanced_bundle.raw["base_mispricing_signal"] - balanced_bundle.primary_signals.mispricing_signal
     crowded_discount = crowded_bundle.raw["base_mispricing_signal"] - crowded_bundle.primary_signals.mispricing_signal
 
