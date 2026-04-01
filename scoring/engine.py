@@ -229,12 +229,12 @@ def _ranking_priority_score(signals: PrimarySignals, bundle: FeatureBundle) -> f
     if market_relevance is None:
         market_relevance = bundle.raw.get("market_legitimacy") or bundle.raw.get("market_relevance_proxy") or bundle.raw.get("cohort_relevance_edge") or 0.0
     thesis_strength = ranking_artifacts.get("thesis_strength")
-    adjusted_mispricing = bundle.raw.get("confidence_adjusted_mispricing")
+    base_opportunity = bundle.core_blocks.get("opportunity_underreaction")
     fragility_headwind = max(0.0, (signals.fragility_risk - 0.55) / 0.45)
     resilience = ranking_artifacts.get("resilience")
     if resilience is None:
         resilience = max(0.0, 1.0 - fragility_headwind)
-    mispricing_component = adjusted_mispricing if adjusted_mispricing is not None else signals.mispricing_signal
+    mispricing_component = base_opportunity if base_opportunity is not None else signals.mispricing_signal
     thesis_component = thesis_strength if thesis_strength is not None else (
         0.45 * signals.fundamental_quality
         + 0.35 * mispricing_component
