@@ -27,11 +27,7 @@ export default function SecondaryResearchLenses({ subnets }: { subnets: SubnetSu
               <Link key={row.id} href={row.href} className="block rounded-2xl border border-white/10 bg-stone-950 p-4 transition-colors hover:bg-[#161c23]">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge tone="neutral">{row.netuidLabel}</StatusBadge>
-                  {row.statusFlags.slice(0, 1).map((flag) => (
-                    <StatusBadge key={flag.label} tone={flag.tone}>
-                      {flag.label}
-                    </StatusBadge>
-                  ))}
+                  <StatusBadge tone={row.modelLabelTone}>{row.modelLabel}</StatusBadge>
                 </div>
 
                 <div className="mt-3 flex items-start justify-between gap-4">
@@ -39,9 +35,9 @@ export default function SecondaryResearchLenses({ subnets }: { subnets: SubnetSu
                     <div className="text-base font-semibold text-stone-100">{row.rankLabel} {row.name}</div>
                     <p className="mt-1 text-sm leading-6 text-stone-400">{row.thesisLine}</p>
                   </div>
-                  <div className="min-w-[120px] text-right">
-                    <div className="text-xs uppercase tracking-[0.2em] text-stone-500">Trust</div>
-                    <div className="mt-1 text-sm text-stone-100">{row.trustLabel}</div>
+                  <div className="min-w-[150px] text-right">
+                    <div className="text-xs uppercase tracking-[0.2em] text-stone-500">Model label</div>
+                    <div className="mt-1 text-sm text-stone-100">{row.modelLabel}</div>
                   </div>
                 </div>
 
