@@ -2,96 +2,59 @@
 
 import Link from 'next/link'
 
-import SignalBar from '@/components/ui/SignalBar'
 import StatusChip from '@/components/ui/StatusChip'
 import TrustBadge from '@/components/ui/TrustBadge'
 import { cn } from '@/lib/formatting'
 import { UniverseRowViewModel } from '@/lib/view-models/research'
+
+function signalValue(row: UniverseRowViewModel, key: UniverseRowViewModel['signals'][number]['key']): string {
+  const signal = row.signals.find((item) => item.key === key)
+  return signal?.value == null ? 'n/a' : signal.value.toFixed(1)
+}
 
 export default function DecisionRow({
   row,
   selected,
   focused,
   onFocus,
-  onToggleCompare,
 }: {
   row: UniverseRowViewModel
   selected: boolean
   focused: boolean
   onFocus: () => void
-  onToggleCompare: (id: number) => void
 }) {
   return (
     <article
       className={cn(
-        'grid gap-5 border-t border-[color:var(--border-subtle)] px-5 py-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]',
-        focused && 'bg-[color:rgba(19,32,44,0.52)]',
+        'grid cursor-default grid-cols-[74px_minmax(0,1.5fr)_88px_88px_88px_88px] items-center gap-3 border-t border-[color:var(--border-subtle)] px-4 py-3 transition-colors sm:px-5',
+        focused && 'bg-[color:rgba(19,32,44,0.6)]',
+        selected && 'ring-1 ring-inset ring-[color:var(--mispricing-border)]',
       )}
       tabIndex={0}
       onMouseEnter={onFocus}
       onFocus={onFocus}
     >
       <div className="min-w-0">
-        <div className="flex items-start justify-between gap-4">
+        <div className="text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
+        <div className="mt-1 text-xs text-[color:var(--text-tertiary)]">{row.percentileLabel}</div>
+      </div>
+
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
-              <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
-              <StatusChip tone={row.modelLabelTone}>{row.modelLabel}</StatusChip>
-            </div>
-            <Link href={row.href} className="mt-3 block text-xl font-semibold tracking-tight text-[color:var(--text-primary)] hover:text-[color:var(--mispricing-strong)]">
-              {row.name}
-            </Link>
+            <div className="truncate text-base font-medium text-[color:var(--text-primary)]">{row.name}</div>
+            <div className="mt-1 text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
           </div>
-
-          <button
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onToggleCompare(row.id)}
-            className={cn(
-              'flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-[var(--radius-md)] border text-sm',
-              selected
-                ? 'border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] text-[color:var(--mispricing-strong)]'
-                : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] text-[color:var(--text-secondary)]',
-            )}
-          >
-            {selected ? 'x' : '+'}
-          </button>
-        </div>
-
-        <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-          <div className="space-y-3">
-            <div>
-              <div className="eyebrow">Why It Ranks Here</div>
-              <p className="mt-2 max-w-[34ch] text-sm leading-7 text-[color:var(--text-secondary)]">
-                {row.thesisLine}
-              </p>
-            </div>
-
-            <div>
-              <div className="eyebrow">What Is Driving It</div>
-              <p className="mt-2 max-w-[32ch] text-sm leading-7 text-[color:var(--text-secondary)]">
-                {row.decisionLine}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-end">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs text-[color:var(--text-tertiary)]">{row.updatedLabel}</div>
-              <Link href={row.href} className="button-secondary">
-                Research
-              </Link>
-            </div>
-          </div>
+          <StatusChip tone={row.modelLabelTone} className="shrink-0">
+            {row.modelLabel}
+          </StatusChip>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {row.signals.map((signal) => (
-          <SignalBar key={signal.key} signal={signal} compact />
-        ))}
-      </div>
+      <div className="text-sm font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
+      <div className="text-sm font-medium text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
+      <div className="text-sm font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
+      <div className="text-sm font-medium text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
     </article>
   )
 }
@@ -111,49 +74,56 @@ export function MobileDecisionCard({
 }) {
   return (
     <article
-      className={cn(
-        'surface-panel space-y-4 p-4',
-        focused && 'ring-1 ring-[color:var(--mispricing-border)]',
-      )}
+      className={cn('surface-panel space-y-4 p-4', focused && 'ring-1 ring-[color:var(--mispricing-border)]')}
       tabIndex={0}
       onFocus={onFocus}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
             <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
+            <StatusChip tone={row.modelLabelTone}>{row.modelLabel}</StatusChip>
           </div>
-          <Link href={row.href} className="mt-3 block text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">
-            {row.name}
-          </Link>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{row.thesisLine}</p>
+          <div className="mt-3 text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</div>
+          <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">{row.thesisLine}</p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => onToggleCompare(row.id)}
-          className={cn(
-            'min-h-11 rounded-[var(--radius-md)] border px-4 text-sm',
-            selected
-              ? 'border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] text-[color:var(--mispricing-strong)]'
-              : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] text-[color:var(--text-secondary)]',
-          )}
-        >
-          {selected ? 'Selected' : 'Compare'}
-        </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {row.signals.map((signal) => (
-          <SignalBar key={signal.key} signal={signal} compact />
-        ))}
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="surface-subtle p-3">
+          <div className="eyebrow">Quality</div>
+          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
+        </div>
+        <div className="surface-subtle p-3">
+          <div className="eyebrow">Mispricing</div>
+          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
+        </div>
+        <div className="surface-subtle p-3">
+          <div className="eyebrow">Fragility</div>
+          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
+        </div>
+        <div className="surface-subtle p-3">
+          <div className="eyebrow">Confidence</div>
+          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
+        </div>
       </div>
 
       <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
 
-      <div className="flex items-center justify-between gap-3 text-sm text-[color:var(--text-secondary)]">
-        <span>{row.updatedLabel}</span>
-        <Link href={row.href} className="button-secondary">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onToggleCompare(row.id)}
+          className={cn(
+            'button-secondary',
+            selected && 'border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] text-[color:var(--mispricing-strong)]',
+          )}
+        >
+          {selected ? 'Remove from compare' : 'Add to compare'}
+        </button>
+        <Link href={row.href} className="button-primary">
           Open research
         </Link>
       </div>
