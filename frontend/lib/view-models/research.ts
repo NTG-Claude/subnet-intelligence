@@ -7,6 +7,7 @@ import {
   SubnetDetail,
   SubnetSummary,
 } from '@/lib/api'
+import { formatCompactNumber, formatDateTime, formatPercent, formatPrice, isStale, parseTimestamp } from '@/lib/formatting'
 
 export type SignalTone = 'quality' | 'mispricing' | 'fragility' | 'confidence' | 'warning' | 'neutral'
 
@@ -202,37 +203,6 @@ function toDisplayName(name: string | null | undefined, netuid: number): string 
   return name?.trim() || `Subnet ${netuid}`
 }
 
-export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return 'No completed run'
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'UTC',
-    timeZoneName: 'short',
-  })
-}
-
-export function formatCompactNumber(value: number | null | undefined, digits = 0): string {
-  if (value == null) return 'n/a'
-  return value.toLocaleString('en-US', {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  })
-}
-
-export function formatPrice(value: number | null | undefined): string {
-  if (value == null) return 'n/a'
-  return value < 0.001 ? `t${value.toExponential(2)}` : `t${value.toFixed(4)}`
-}
-
-export function formatPercent(value: number | null | undefined): string {
-  if (value == null) return 'n/a'
-  return `${value.toFixed(1)}%`
-}
-
 function clipHints(items: ResearchHint[], limit: number): ResearchHint[] {
   return items.filter((item) => item.label).slice(0, limit)
 }
@@ -251,17 +221,6 @@ function uncertaintyLabel(item: KeyUncertainty): string {
 
 function visibilityCount(conditioning: ConditioningInfo | undefined, bucket: string): number {
   return conditioning?.visibility?.[bucket]?.length ?? 0
-}
-
-function parseTimestamp(iso: string | null | undefined): number {
-  const parsed = iso ? Date.parse(iso) : Number.NaN
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-function isStale(iso: string | null | undefined, staleHours = 36): boolean {
-  const timestamp = parseTimestamp(iso)
-  if (!timestamp) return false
-  return Date.now() - timestamp > staleHours * 60 * 60 * 1000
 }
 
 export function getSignalStats(outputs: PrimaryOutputs | null | undefined): SignalStat[] {

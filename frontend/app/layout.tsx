@@ -1,38 +1,20 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 
+import AppShell from '@/components/layout/AppShell'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Subnet Intelligence',
-  description: 'V2-first subnet research terminal for signal screening, thesis review, confidence, and conditioning.',
+  description: 'Subnet screening, compare workflows, and research memos for Bittensor subnets.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-stone-950 text-stone-100 antialiased">
-        <div className="fixed inset-0 -z-10 bg-[linear-gradient(180deg,_#090b0f,_#0b1015_42%,_#090b0f)]" />
-        <div className="fixed inset-0 -z-10 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:40px_40px]" />
-        <header className="sticky top-0 z-50 border-b border-white/10 bg-stone-950/90 backdrop-blur-xl">
-          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-            <div>
-              <Link href="/" className="text-lg font-semibold tracking-tight text-stone-50">
-                Subnet Intelligence
-              </Link>
-              <div className="text-[11px] uppercase tracking-[0.2em] text-stone-500">Research workspace</div>
-            </div>
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-stone-500">
-              <Link href="/" className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-stone-300 transition-colors hover:bg-white/[0.08]">
-                Universe
-              </Link>
-              <Link href="/compare" className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-stone-300 transition-colors hover:bg-white/[0.08]">
-                Compare
-              </Link>
-            </div>
-          </div>
-        </header>
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      <body className="min-h-screen bg-[color:var(--bg)] text-[color:var(--text-primary)] antialiased">
+        <AppShell>
+          {children}
+        </AppShell>
       </body>
     </html>
   )

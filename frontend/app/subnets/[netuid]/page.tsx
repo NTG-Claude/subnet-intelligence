@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 
-import SubnetResearchMemo from '@/components/subnet-detail/SubnetResearchMemo'
+import ResearchWorkspace from '@/features/research/components/ResearchWorkspace'
 import { fetchSubnet } from '@/lib/api'
 import { buildDetailMemo } from '@/lib/view-models/research'
 
@@ -22,5 +22,5 @@ export default async function SubnetPage({ params }: Props) {
     notFound()
   }
 
-  return <SubnetResearchMemo memo={buildDetailMemo(subnet)} />
+  return <ResearchWorkspace memo={buildDetailMemo(subnet)} />
 }

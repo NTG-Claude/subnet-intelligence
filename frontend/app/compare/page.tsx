@@ -1,4 +1,4 @@
-import CompareGrid from '@/components/compare/CompareGrid'
+import CompareWorkspace from '@/features/compare/components/CompareWorkspace'
 import { fetchSubnet } from '@/lib/api'
 import { buildDetailMemo } from '@/lib/view-models/research'
 
@@ -31,5 +31,5 @@ export default async function ComparePage({ searchParams }: Props) {
     )
   }
 
-  return <CompareGrid memos={memos} />
+  return <CompareWorkspace memos={memos} />
 }
