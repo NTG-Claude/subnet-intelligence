@@ -288,39 +288,33 @@ export default function DiscoverWorkspace({
 
             {rows.length ? (
               <>
-                <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full table-fixed border-collapse">
-                    <colgroup>
-                      <col className="w-[72px]" />
-                      <col className="w-[31%]" />
-                      <col className="w-[22%]" />
-                      <col className="w-[11.75%]" />
-                      <col className="w-[11.75%]" />
-                      <col className="w-[11.75%]" />
-                      <col className="w-[11.75%]" />
-                    </colgroup>
-                    <thead className="sticky top-0 z-20 bg-[color:rgba(8,16,23,0.96)] shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur">
-                      <tr className="border-b border-[color:var(--border-subtle)] text-left align-top">
-                        {['', 'Subnet', 'Thesis', 'Quality', 'Mispricing', 'Fragility', 'Confidence'].map((label) => (
-                          <th key={label} className="px-4 py-3 text-[11px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)]">
-                            {label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row) => (
-                        <DecisionRow
-                          key={row.id}
-                          row={row}
-                          selected={compareIds.includes(row.id)}
-                          focused={focusedId === row.id}
-                          onFocus={() => setFocusedId(row.id)}
-                          onToggleCompare={toggleCompare}
-                        />
+                <div className="hidden md:block">
+                  <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)] gap-5 border-b border-[color:var(--border-subtle)] px-5 py-3">
+                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                      <div className="eyebrow">Subnet and thesis</div>
+                      <div className="eyebrow">Trust and action</div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {['Quality', 'Mispricing', 'Fragility', 'Confidence'].map((label) => (
+                        <div key={label} className="eyebrow">
+                          {label}
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
+                  <div>
+                    {rows.map((row) => (
+                      <DecisionRow
+                        key={row.id}
+                        row={row}
+                        selected={compareIds.includes(row.id)}
+                        focused={focusedId === row.id}
+                        onFocus={() => setFocusedId(row.id)}
+                        onToggleCompare={toggleCompare}
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-4 p-4 md:hidden">

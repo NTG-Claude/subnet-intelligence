@@ -22,63 +22,84 @@ export default function DecisionRow({
   onToggleCompare: (id: number) => void
 }) {
   return (
-    <tr
+    <article
       className={cn(
-        'border-t border-[color:var(--border-subtle)] align-top',
+        'grid gap-5 border-t border-[color:var(--border-subtle)] px-5 py-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]',
         focused && 'bg-[color:rgba(19,32,44,0.52)]',
       )}
       tabIndex={0}
       onMouseEnter={onFocus}
       onFocus={onFocus}
     >
-      <td className="px-4 py-4 align-top">
-        <button
-          type="button"
-          aria-pressed={selected}
-          onClick={() => onToggleCompare(row.id)}
-          className={cn(
-            'flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-md)] border text-sm',
-            selected
-              ? 'border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] text-[color:var(--mispricing-strong)]'
-              : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] text-[color:var(--text-secondary)]',
-          )}
-        >
-          {selected ? 'x' : '+'}
-        </button>
-      </td>
-      <td className="px-4 py-4 align-top">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
-          <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
-          <StatusChip tone={row.modelLabelTone}>{row.modelLabel}</StatusChip>
+      <div className="min-w-0">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
+              <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
+              <StatusChip tone={row.modelLabelTone}>{row.modelLabel}</StatusChip>
+            </div>
+            <Link href={row.href} className="mt-3 block text-xl font-semibold tracking-tight text-[color:var(--text-primary)] hover:text-[color:var(--mispricing-strong)]">
+              {row.name}
+            </Link>
+          </div>
+
+          <button
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onToggleCompare(row.id)}
+            className={cn(
+              'flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-[var(--radius-md)] border text-sm',
+              selected
+                ? 'border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] text-[color:var(--mispricing-strong)]'
+                : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] text-[color:var(--text-secondary)]',
+            )}
+          >
+            {selected ? 'x' : '+'}
+          </button>
         </div>
-        <Link href={row.href} className="mt-3 block text-lg font-semibold tracking-tight text-[color:var(--text-primary)] hover:text-[color:var(--mispricing-strong)]">
-          {row.name}
-        </Link>
-        <p className="mt-2 max-w-[26ch] text-sm leading-6 text-[color:var(--text-secondary)] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:4] overflow-hidden">
-          {row.thesisLine}
-        </p>
-        <div className="mt-3">
-          <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
+
+        <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <div className="space-y-3">
+            <div>
+              <div className="eyebrow">Subnet thesis</div>
+              <p className="mt-2 max-w-[34ch] text-sm leading-7 text-[color:var(--text-secondary)]">
+                {row.thesisLine}
+              </p>
+            </div>
+
+            <div>
+              <div className="eyebrow">Decision read</div>
+              <p className="mt-2 max-w-[32ch] text-sm leading-7 text-[color:var(--text-secondary)]">
+                {row.decisionLine}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <div className="eyebrow">Trust</div>
+              <div className="mt-2">
+                <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs text-[color:var(--text-tertiary)]">{row.updatedLabel}</div>
+              <Link href={row.href} className="button-secondary">
+                Research
+              </Link>
+            </div>
+          </div>
         </div>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="text-xs text-[color:var(--text-tertiary)]">{row.updatedLabel}</div>
-          <Link href={row.href} className="button-secondary">
-            Research
-          </Link>
-        </div>
-      </td>
-      <td className="px-4 py-4 align-top">
-        <p className="max-w-[24ch] text-sm leading-6 text-[color:var(--text-secondary)] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:4] overflow-hidden">
-          {row.decisionLine}
-        </p>
-      </td>
-      {row.signals.map((signal) => (
-        <td key={signal.key} className="px-4 py-4 align-top">
-          <SignalBar signal={signal} compact />
-        </td>
-      ))}
-    </tr>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {row.signals.map((signal) => (
+          <SignalBar key={signal.key} signal={signal} compact />
+        ))}
+      </div>
+    </article>
   )
 }
 
