@@ -5,19 +5,18 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import PageHeader from '@/components/ui/PageHeader'
 import { SubnetSummary } from '@/lib/api'
-import { cn } from '@/lib/formatting'
-import { toUniverseRow } from '@/lib/view-models/research'
+import { UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
 
 import CompareDock from './CompareDock'
 import DecisionRow, { MobileDecisionCard } from './DecisionRow'
 import SidePreviewPanel from './SidePreviewPanel'
 
-type DiscoverFilterId = 'top-ranks' | 'undervalued' | 'overvalued'
-
-const FILTER_OPTIONS: { id: DiscoverFilterId; label: string }[] = [
-  { id: 'top-ranks', label: 'Top ranks' },
-  { id: 'undervalued', label: 'Undervalued' },
-  { id: 'overvalued', label: 'Overvalued' },
+const SORT_COLUMNS: { id: UniverseSortId; label: string; align?: 'left' | 'right' }[] = [
+  { id: 'rank', label: 'Rank' },
+  { id: 'quality', label: 'Quality', align: 'right' },
+  { id: 'mispricing', label: 'Mispricing', align: 'right' },
+  { id: 'fragility', label: 'Fragility', align: 'right' },
+  { id: 'confidence', label: 'Confidence', align: 'right' },
 ]
 
 function queryMatches(subnet: SubnetSummary, query: string): boolean {
@@ -31,31 +30,6 @@ function parseIds(value: string | null): number[] {
     .map((part) => Number.parseInt(part, 10))
     .filter((item, index, all) => Number.isFinite(item) && all.indexOf(item) === index)
     .slice(0, 4)
-}
-
-function sortSubnets(subnets: SubnetSummary[], filter: DiscoverFilterId): SubnetSummary[] {
-  const next = [...subnets]
-
-  switch (filter) {
-    case 'undervalued':
-      return next.sort((left, right) => {
-        const a = left.primary_outputs?.mispricing_signal ?? -1
-        const b = right.primary_outputs?.mispricing_signal ?? -1
-        const aq = left.primary_outputs?.fundamental_quality ?? -1
-        const bq = right.primary_outputs?.fundamental_quality ?? -1
-        return b - a || bq - aq || (left.rank ?? 9999) - (right.rank ?? 9999)
-      })
-    case 'overvalued':
-      return next.sort((left, right) => {
-        const a = left.primary_outputs?.mispricing_signal ?? 101
-        const b = right.primary_outputs?.mispricing_signal ?? 101
-        const af = left.primary_outputs?.fragility_risk ?? -1
-        const bf = right.primary_outputs?.fragility_risk ?? -1
-        return a - b || bf - af || (left.rank ?? 9999) - (right.rank ?? 9999)
-      })
-    default:
-      return next.sort((left, right) => (left.rank ?? 9999) - (right.rank ?? 9999))
-  }
 }
 
 export default function DiscoverWorkspace({
@@ -73,23 +47,23 @@ export default function DiscoverWorkspace({
   const searchParams = useSearchParams()
 
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
-  const [filter, setFilter] = useState<DiscoverFilterId>((searchParams.get('filter') as DiscoverFilterId) ?? 'top-ranks')
+  const [sort, setSort] = useState<UniverseSortId>((searchParams.get('sort') as UniverseSortId) ?? 'rank')
   const [compareIds, setCompareIds] = useState<number[]>(parseIds(searchParams.get('ids')))
   const [focusedId, setFocusedId] = useState<number | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams()
     if (search.trim()) params.set('q', search.trim())
-    if (filter !== 'top-ranks') params.set('filter', filter)
+    if (sort !== 'rank') params.set('sort', sort)
     if (compareIds.length) params.set('ids', compareIds.join(','))
     const next = params.toString()
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
-  }, [compareIds, filter, pathname, router, search])
+  }, [compareIds, pathname, router, search, sort])
 
   const rows = useMemo(() => {
     const searched = search.trim() ? subnets.filter((subnet) => queryMatches(subnet, search)) : subnets
-    return sortSubnets(searched, filter).map(toUniverseRow)
-  }, [filter, search, subnets])
+    return sortUniverseRows(searched.map(toUniverseRow), sort)
+  }, [search, sort, subnets])
 
   useEffect(() => {
     if (!rows.length) {
@@ -158,36 +132,18 @@ export default function DiscoverWorkspace({
       />
 
       <section className="surface-panel p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="w-full max-w-xl">
-            <label htmlFor="discover-search" className="eyebrow">
-              Search
-            </label>
-            <input
-              id="discover-search"
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search subnet or netuid"
-              className="mt-2 min-h-11 w-full rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-4 text-sm text-[color:var(--text-primary)] outline-none placeholder:text-[color:var(--text-tertiary)]"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {FILTER_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setFilter(option.id)}
-                className={cn(
-                  'button-secondary',
-                  filter === option.id && 'border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] text-[color:var(--mispricing-strong)]',
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+        <div className="w-full max-w-xl">
+          <label htmlFor="discover-search" className="eyebrow">
+            Search
+          </label>
+          <input
+            id="discover-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search subnet or netuid"
+            className="mt-2 min-h-11 w-full rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-4 text-sm text-[color:var(--text-primary)] outline-none placeholder:text-[color:var(--text-tertiary)]"
+          />
         </div>
       </section>
 
@@ -197,7 +153,7 @@ export default function DiscoverWorkspace({
             <div>
               <div className="section-title">Ranked subnets</div>
               <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
-                Hover a row to inspect why it ranks there and what the trust caveats are.
+                Click any column to sort. Hover a row to inspect why it ranks there and what the trust caveats are.
               </p>
             </div>
             <div className="text-sm text-[color:var(--text-secondary)]">{rows.length} results</div>
@@ -207,12 +163,22 @@ export default function DiscoverWorkspace({
             <>
               <div className="hidden md:block">
                 <div className="grid grid-cols-[64px_minmax(0,1.75fr)_76px_76px_76px_88px] gap-3 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
-                  <div>Rank</div>
+                  <button type="button" onClick={() => setSort('rank')} className="text-left transition-colors hover:text-[color:var(--text-primary)]">
+                    Rank
+                  </button>
                   <div>Subnet</div>
-                  <div className="text-right">Quality</div>
-                  <div className="text-right">Mispricing</div>
-                  <div className="text-right">Fragility</div>
-                  <div className="text-right">Confidence</div>
+                  <button type="button" onClick={() => setSort('quality')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
+                    Quality
+                  </button>
+                  <button type="button" onClick={() => setSort('mispricing')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
+                    Mispricing
+                  </button>
+                  <button type="button" onClick={() => setSort('fragility')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
+                    Fragility
+                  </button>
+                  <button type="button" onClick={() => setSort('confidence')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
+                    Confidence
+                  </button>
                 </div>
 
                 <div>
