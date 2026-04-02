@@ -17,7 +17,7 @@ import httpx
 
 from collectors.models import RepoActivitySnapshot
 from scorer.bittensor_client import get_all_netuids
-from scorer.database import upsert_external_data_snapshot
+from scorer.database import create_tables, upsert_external_data_snapshot
 from scorer.github_client import get_commits_last_30d, get_repo_stats
 from scorer.subnet_github_mapper import get_github_coords
 
@@ -65,6 +65,7 @@ async def _snapshot_for_netuid(
 async def refresh_external_data_snapshots(
     netuids: Optional[list[int]] = None,
 ) -> dict[int, RepoActivitySnapshot]:
+    create_tables()
     if netuids is None:
         netuids = await get_all_netuids()
     if not netuids:
