@@ -85,6 +85,23 @@ class SubnetMetadataRow(Base):
     last_updated = Column(DateTime(timezone=True), nullable=False)
 
 
+class ExternalDataSnapshotRow(Base):
+    __tablename__ = "external_data_snapshots"
+
+    netuid = Column(Integer, primary_key=True)
+    github_url = Column(String(512), nullable=True)
+    owner = Column(String(256), nullable=True)
+    repo = Column(String(256), nullable=True)
+    source_status = Column(String(64), nullable=False, default="unavailable")
+    fetched_at = Column(DateTime(timezone=True), nullable=False)
+    commits_30d = Column(Integer, nullable=False, default=0)
+    contributors_30d = Column(Integer, nullable=False, default=0)
+    stars = Column(Integer, nullable=False, default=0)
+    forks = Column(Integer, nullable=False, default=0)
+    open_issues = Column(Integer, nullable=False, default=0)
+    last_push = Column(String(64), nullable=True)
+
+
 def create_tables() -> None:
     """Create all tables and run additive migrations (idempotent)."""
     Base.metadata.create_all(bind=engine)
@@ -180,6 +197,41 @@ def upsert_metadata(netuid: int, name: Optional[str], github_url: Optional[str],
         row.github_url = github_url
         row.website = website
         row.last_updated = now
+        session.commit()
+
+
+def upsert_external_data_snapshot(
+    *,
+    netuid: int,
+    github_url: Optional[str],
+    owner: Optional[str],
+    repo: Optional[str],
+    source_status: str,
+    fetched_at: datetime,
+    commits_30d: int,
+    contributors_30d: int,
+    stars: int,
+    forks: int,
+    open_issues: int,
+    last_push: Optional[str],
+) -> None:
+    """Insert or update the latest external evidence snapshot for a subnet."""
+    with SessionLocal() as session:
+        row = session.get(ExternalDataSnapshotRow, netuid)
+        if row is None:
+            row = ExternalDataSnapshotRow(netuid=netuid)
+            session.add(row)
+        row.github_url = github_url
+        row.owner = owner
+        row.repo = repo
+        row.source_status = source_status
+        row.fetched_at = fetched_at
+        row.commits_30d = commits_30d
+        row.contributors_30d = contributors_30d
+        row.stars = stars
+        row.forks = forks
+        row.open_issues = open_issues
+        row.last_push = last_push
         session.commit()
 
 
@@ -320,6 +372,28 @@ def _row_to_dict(row: SubnetScoreRow) -> dict:
         "market_cap_tao": row.market_cap_tao,
         "staking_apy": row.staking_apy,
         "raw_data": row.raw_data,
+    }
+
+
+def get_external_data_snapshot_map() -> dict[int, dict]:
+    """Return the latest external evidence snapshot keyed by netuid."""
+    with SessionLocal() as session:
+        rows = session.execute(select(ExternalDataSnapshotRow)).scalars().all()
+    return {
+        row.netuid: {
+            "github_url": row.github_url,
+            "owner": row.owner,
+            "repo": row.repo,
+            "source_status": row.source_status,
+            "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+            "commits_30d": row.commits_30d,
+            "contributors_30d": row.contributors_30d,
+            "stars": row.stars,
+            "forks": row.forks,
+            "open_issues": row.open_issues,
+            "last_push": row.last_push,
+        }
+        for row in rows
     }
 
 

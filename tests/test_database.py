@@ -11,9 +11,11 @@ from sqlalchemy.orm import sessionmaker
 
 from scorer.database import (
     Base,
+    ExternalDataSnapshotRow,
     SubnetScoreRow,
     SubnetMetadataRow,
     _row_to_dict,
+    get_external_data_snapshot_map,
     get_latest_scores,
     get_scores_since,
     get_score_at,
@@ -21,6 +23,7 @@ from scorer.database import (
     get_score_history,
     get_top_subnets,
     save_scores,
+    upsert_external_data_snapshot,
     upsert_metadata,
 )
 from scorer.composite import ScoreBreakdown, SubnetScore
@@ -282,3 +285,31 @@ def test_upsert_metadata_insert_and_update():
         assert row.name == "mysubnet-v2"
         assert row.github_url is None
         assert row.first_seen == first_seen  # first_seen unchanged
+
+
+def test_upsert_and_read_external_data_snapshot():
+    import scorer.database as db_module
+
+    fetched_at = datetime(2025, 6, 1, tzinfo=timezone.utc)
+    upsert_external_data_snapshot(
+        netuid=64,
+        github_url="https://github.com/chutesai/chutes",
+        owner="chutesai",
+        repo="chutes",
+        source_status="active_repo",
+        fetched_at=fetched_at,
+        commits_30d=24,
+        contributors_30d=3,
+        stars=100,
+        forks=20,
+        open_issues=4,
+        last_push="2025-06-01T00:00:00+00:00",
+    )
+
+    snapshots = get_external_data_snapshot_map()
+    assert snapshots[64]["repo"] == "chutes"
+    assert snapshots[64]["commits_30d"] == 24
+
+    with db_module.SessionLocal() as session:
+        row = session.get(ExternalDataSnapshotRow, 64)
+        assert row.source_status == "active_repo"

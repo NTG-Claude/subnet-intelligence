@@ -29,6 +29,7 @@ import scorer.bittensor_client as _bt_client
 from scorer.bittensor_client import clear_caches, get_all_netuids, get_subnet_identity, prefetch_all_identities
 from scorer.composite import compute_all_subnets
 from scorer.database import create_tables, save_scores, upsert_metadata
+from scorer.external_data_snapshot import refresh_external_data_snapshots
 from scorer.name_resolver import looks_low_confidence_subnet_name as _looks_low_confidence_subnet_name_impl
 from scorer.name_resolver import resolve_subnet_name
 from scorer.taostats_client import TaostatsClient, _normalize_public_subnet_name
@@ -229,6 +230,11 @@ async def run(
     logger.info("Identity pre-fetch complete (%d cached)", len(_bt_client._identity_cache))
 
     # 2. Compute scores (uses pre-cached identities for GitHub URL discovery)
+    logger.info("Refreshing external data snapshots...")
+    external_data_by_netuid = await refresh_external_data_snapshots(netuids=netuids)
+    logger.info("External data snapshot refresh complete (%d subnets)", len(external_data_by_netuid))
+
+    # 3. Compute scores (uses cached external snapshots instead of live GitHub calls)
     scores = await compute_all_subnets(netuids=netuids)
 
     if not scores:
@@ -238,7 +244,7 @@ async def run(
     elapsed_fetch = time.monotonic() - start
     logger.info("Computed %d scores in %.1fs", len(scores), elapsed_fetch)
 
-    # 3. Summary log: Top 3
+    # 4. Summary log: Top 3
     top3 = sorted(
         [score for score in scores if score.analysis.get("investable", True)],
         key=lambda score: score.score,
@@ -247,7 +253,7 @@ async def run(
     top3_str = ", ".join(f"SN{s.netuid}({s.score:.0f})" for s in top3)
     logger.info("Top 3: %s", top3_str)
 
-    # 4. Persist
+    # 5. Persist
     if dry_run:
         logger.info("--dry-run: skipping database write")
     else:
@@ -255,11 +261,11 @@ async def run(
         save_scores(scores)
         logger.info("Scores saved to database")
 
-        # 5. Resolve subnet names from multiple sources instead of trusting a
+        # 6. Resolve subnet names from multiple sources instead of trusting a
         # single public display label.
         name_candidates = await _load_subnet_name_candidates([score.netuid for score in scores])
 
-        # 6. Update metadata — chain identity first, taostats name as fallback.
+        # 7. Update metadata — external snapshot GitHub URL first, identity second.
         identities = await asyncio.gather(
             *[get_subnet_identity(s.netuid) for s in scores]
         )
@@ -268,10 +274,11 @@ async def run(
             candidates = dict(name_candidates.get(nid, {}))
             if identity.name:
                 candidates["onchain_identity"] = identity.name
+            external_snapshot = external_data_by_netuid.get(nid)
             upsert_metadata(
                 netuid=nid,
                 name=resolve_subnet_name(nid, candidates),
-                github_url=identity.github_url,
+                github_url=(external_snapshot.github_url if external_snapshot else None) or identity.github_url,
                 website=identity.website,
             )
 

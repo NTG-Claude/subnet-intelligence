@@ -4,6 +4,11 @@ from typing import Optional
 
 @dataclass
 class RepoActivitySnapshot:
+    github_url: Optional[str] = None
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+    source_status: str = "unavailable"
+    fetched_at: Optional[str] = None
     commits_30d: int = 0
     contributors_30d: int = 0
     stars: int = 0

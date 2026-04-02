@@ -55,6 +55,7 @@ async def test_run_dry_run_does_not_save():
     scores = [_make_score(1, 80.0), _make_score(4, 65.0)]
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={})), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.save_scores") as mock_save, \
          patch("scorer.run.create_tables"):
@@ -70,6 +71,7 @@ async def test_run_saves_when_not_dry_run():
     scores = [_make_score(1, 80.0)]
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={})), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity())), \
          patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={})), \
@@ -89,6 +91,7 @@ async def test_run_prefers_richer_metadata_name_when_identity_is_truncated():
     identity = SubnetIdentity(netuid=20, name="GroundLa", github_url=None, website=None)
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={})), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=identity)), \
          patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={20: {"cached_consensus": "GroundLayer"}})), \
@@ -104,6 +107,7 @@ async def test_run_prefers_richer_metadata_name_when_identity_is_truncated():
 @pytest.mark.asyncio
 async def test_run_returns_empty_when_no_scores():
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={})), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=[])):
         result = await run()
 
@@ -115,6 +119,7 @@ async def test_run_specific_netuids():
     scores = [_make_score(4, 72.0)]
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={})), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)) as mock_compute, \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity(4))), \
          patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={})), \
@@ -135,6 +140,7 @@ async def test_run_force_refresh_is_accepted():
 
     with patch("scorer.run.clear_caches") as mock_clear, \
          patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={})), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
          patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity())), \
          patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={})), \
@@ -219,6 +225,7 @@ async def test_run_logs_top3_sorted_by_score():
     c.analysis = {"investable": True}
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={})), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=[a, b, c])), \
          patch("scorer.run.save_scores"), \
          patch("scorer.run.create_tables"), \
@@ -239,6 +246,7 @@ async def test_run_logs_top3_from_investable_subnets():
     investable = [_make_score(1, 80.0), _make_score(2, 70.0), _make_score(3, 60.0)]
 
     with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={})), \
          patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=[root, *investable])), \
          patch("scorer.run.save_scores"), \
          patch("scorer.run.create_tables"), \
@@ -250,6 +258,24 @@ async def test_run_logs_top3_from_investable_subnets():
 
     top3_logs = [call.args[1] for call in mock_logger.info.call_args_list if call.args and call.args[0] == "Top 3: %s"]
     assert top3_logs == ["SN1(80), SN2(70), SN3(60)"]
+
+
+@pytest.mark.asyncio
+async def test_run_prefers_external_snapshot_github_url_for_metadata():
+    scores = [_make_score(4, 72.0)]
+    external = MagicMock(github_url="https://github.com/manifold-inc/targon")
+
+    with patch("scorer.run.prefetch_all_identities", new=AsyncMock()), \
+         patch("scorer.run.refresh_external_data_snapshots", new=AsyncMock(return_value={4: external})), \
+         patch("scorer.run.compute_all_subnets", new=AsyncMock(return_value=scores)), \
+         patch("scorer.run.get_subnet_identity", new=AsyncMock(return_value=_mock_identity(4))), \
+         patch("scorer.run._load_subnet_name_candidates", new=AsyncMock(return_value={})), \
+         patch("scorer.run.save_scores"), \
+         patch("scorer.run.create_tables"), \
+         patch("scorer.run.upsert_metadata") as mock_upsert:
+        await run(netuids=[4], dry_run=False)
+
+    assert mock_upsert.call_args.kwargs["github_url"] == "https://github.com/manifold-inc/targon"
 
 
 @pytest.mark.asyncio

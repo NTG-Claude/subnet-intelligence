@@ -16,8 +16,7 @@ from pydantic import BaseModel, Field
 
 from collectors.models import RawSubnetSnapshot, RepoActivitySnapshot
 from scorer.bittensor_client import SubnetMetrics, get_all_netuids, get_current_block, get_subnet_metrics
-from scorer.github_client import get_commits_last_30d, get_repo_stats
-from scorer.subnet_github_mapper import get_github_coords
+from scorer.database import get_external_data_snapshot_map
 from scoring.engine import build_scores
 from storage.history import load_recent_analysis_history
 
@@ -55,7 +54,25 @@ class _SubnetData:
         self.repo_activity: Optional[RepoActivitySnapshot] = None
 
 
-async def _fetch_data(netuid: int, current_block: int, progress: list) -> _SubnetData:
+def _repo_activity_from_snapshot(snapshot: Optional[dict]) -> Optional[RepoActivitySnapshot]:
+    if not snapshot:
+        return None
+    return RepoActivitySnapshot(
+        github_url=snapshot.get("github_url"),
+        owner=snapshot.get("owner"),
+        repo=snapshot.get("repo"),
+        source_status=snapshot.get("source_status") or "unavailable",
+        fetched_at=snapshot.get("fetched_at"),
+        commits_30d=int(snapshot.get("commits_30d") or 0),
+        contributors_30d=int(snapshot.get("contributors_30d") or 0),
+        stars=int(snapshot.get("stars") or 0),
+        forks=int(snapshot.get("forks") or 0),
+        open_issues=int(snapshot.get("open_issues") or 0),
+        last_push=snapshot.get("last_push"),
+    )
+
+
+async def _fetch_data(netuid: int, current_block: int, progress: list, external_data_by_netuid: dict[int, dict]) -> _SubnetData:
     d = _SubnetData(netuid)
     d.metrics = await get_subnet_metrics(netuid, current_block)
 
@@ -70,23 +87,7 @@ async def _fetch_data(netuid: int, current_block: int, progress: list) -> _Subne
     else:
         logger.warning("[%d/%d] SN%d - no on-chain data", progress[0], progress[1], netuid)
 
-    coords = await get_github_coords(netuid, live_fetch=True)
-    if coords:
-        try:
-            commits, repo = await asyncio.gather(
-                get_commits_last_30d(coords.owner, coords.repo),
-                get_repo_stats(coords.owner, coords.repo),
-            )
-            d.repo_activity = RepoActivitySnapshot(
-                commits_30d=commits.commits_30d if commits else 0,
-                contributors_30d=commits.unique_contributors_30d if commits else 0,
-                stars=repo.stars if repo else 0,
-                forks=repo.forks if repo else 0,
-                open_issues=repo.open_issues if repo else 0,
-                last_push=repo.last_push if repo else None,
-            )
-        except Exception as exc:
-            logger.warning("GitHub fetch failed for SN%d: %s", netuid, exc)
+    d.repo_activity = _repo_activity_from_snapshot(external_data_by_netuid.get(netuid))
     return d
 
 
@@ -180,9 +181,10 @@ async def compute_all_subnets(netuids: Optional[list[int]] = None) -> list[Subne
         return []
 
     logger.info("Fetching data for %d subnets (block=%d)", len(netuids), current_block)
+    external_data_by_netuid = get_external_data_snapshot_map()
     progress = [0, len(netuids)]
     results = await asyncio.gather(
-        *[_fetch_data(netuid, current_block, progress) for netuid in netuids],
+        *[_fetch_data(netuid, current_block, progress, external_data_by_netuid) for netuid in netuids],
         return_exceptions=True,
     )
 

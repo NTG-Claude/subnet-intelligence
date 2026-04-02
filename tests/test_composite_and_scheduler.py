@@ -116,7 +116,7 @@ def test_build_scores_penalizes_closed_registration_without_paths():
 
 @pytest.mark.asyncio
 async def test_compute_all_subnets_ranks_correctly():
-    async def mock_fetch_data(netuid, block, progress):
+    async def mock_fetch_data(netuid, block, progress, external_data_by_netuid):
         progress[0] += 1
         data = MagicMock()
         data.netuid = netuid
@@ -126,6 +126,7 @@ async def test_compute_all_subnets_ranks_correctly():
 
     with patch("scorer.composite.get_current_block", new=AsyncMock(return_value=5_000_000)), \
          patch("scorer.composite.get_all_netuids", new=AsyncMock(return_value=[1, 2, 3])), \
+         patch("scorer.composite.get_external_data_snapshot_map", return_value={}), \
          patch("scorer.composite._fetch_data", side_effect=mock_fetch_data), \
          patch("scorer.composite.load_recent_analysis_history", return_value={}):
         scores = await compute_all_subnets(netuids=[1, 2, 3])
@@ -138,7 +139,7 @@ async def test_compute_all_subnets_ranks_correctly():
 
 @pytest.mark.asyncio
 async def test_compute_all_subnets_marks_root_as_non_investable():
-    async def mock_fetch_data(netuid, block, progress):
+    async def mock_fetch_data(netuid, block, progress, external_data_by_netuid):
         progress[0] += 1
         data = MagicMock()
         data.netuid = netuid
@@ -147,6 +148,7 @@ async def test_compute_all_subnets_marks_root_as_non_investable():
         return data
 
     with patch("scorer.composite.get_current_block", new=AsyncMock(return_value=5_000_000)), \
+         patch("scorer.composite.get_external_data_snapshot_map", return_value={}), \
          patch("scorer.composite._fetch_data", side_effect=mock_fetch_data), \
          patch("scorer.composite.load_recent_analysis_history", return_value={}):
         scores = await compute_all_subnets(netuids=[0, 1, 2])
