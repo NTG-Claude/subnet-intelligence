@@ -1,33 +1,61 @@
 import Link from 'next/link'
 
-import CollapsibleSection from '@/components/ui/CollapsibleSection'
 import MetricCard from '@/components/ui/MetricCard'
 import PageHeader from '@/components/ui/PageHeader'
 import SignalBar from '@/components/ui/SignalBar'
 import StatusChip from '@/components/ui/StatusChip'
-import TrustBadge from '@/components/ui/TrustBadge'
 import { DetailMemoViewModel, MemoSectionItem } from '@/lib/view-models/research'
 
-function InsightList({ items, empty }: { items: MemoSectionItem[]; empty: string }) {
-  if (!items.length) {
+function CompactInsightList({
+  items,
+  empty,
+  limit = 3,
+}: {
+  items: MemoSectionItem[]
+  empty: string
+  limit?: number
+}) {
+  const visible = items.slice(0, limit)
+
+  if (!visible.length) {
     return <div className="surface-subtle p-4 text-sm text-[color:var(--text-tertiary)]">{empty}</div>
   }
 
   return (
     <div className="space-y-3">
-      {items.map((item, index) => (
+      {visible.map((item, index) => (
         <div key={`${item.title}-${index}`} className="surface-subtle p-4">
           <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
           <p className="mt-1 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
-          {item.meta ? <div className="mt-2 text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{item.meta}</div> : null}
         </div>
       ))}
     </div>
   )
 }
 
+function pickMetric(
+  memo: DetailMemoViewModel,
+  label: string,
+): { label: string; value: string; tone?: string; meta?: string } | null {
+  return memo.summaryMetrics.find((item) => item.label === label) ?? null
+}
+
+function toHeaderTone(tone: string | undefined): 'default' | 'warning' | 'success' {
+  if (tone === 'warning' || tone === 'fragility') return 'warning'
+  if (tone === 'quality' || tone === 'confidence') return 'success'
+  return 'default'
+}
+
 export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel }) {
-  const trustWarning = memo.summaryFlags.length > 0
+  const rankMetric = pickMetric(memo, 'Rank')
+  const updatedMetric = pickMetric(memo, 'Updated')
+  const confidenceMetric = memo.confidenceHeadline.find((item) => item.label === 'Signal confidence') ?? null
+  const dataMetric = memo.confidenceHeadline.find((item) => item.label === 'Data confidence') ?? null
+  const thesisMetric = memo.confidenceHeadline.find((item) => item.label === 'Thesis confidence') ?? null
+
+  const topStressItems = memo.stressItems.filter((item) =>
+    ['Fragility class', 'Stress drawdown', 'Market cap', 'Pool depth'].includes(item.title),
+  )
 
   return (
     <div className="space-y-6 pb-12">
@@ -42,21 +70,20 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
         actions={
           <div className="flex flex-wrap gap-2">
             <StatusChip tone="neutral">{memo.netuidLabel}</StatusChip>
-            <StatusChip tone={memo.modelLabelTone}>{memo.modelLabel}</StatusChip>
+            {rankMetric ? <StatusChip tone="neutral">{rankMetric.value}</StatusChip> : null}
           </div>
         }
         stats={[
-          { label: 'Rank', value: memo.rankLabel },
-          { label: 'Percentile', value: memo.percentileLabel },
-          { label: 'Updated', value: memo.updatedLabel, tone: trustWarning ? 'warning' : 'default' },
+          ...(updatedMetric ? [{ label: 'Updated', value: updatedMetric.value }] : []),
+          ...(confidenceMetric ? [{ label: 'Evidence quality', value: confidenceMetric.value, tone: toHeaderTone(confidenceMetric.tone) }] : []),
         ]}
       />
 
       <section className="surface-panel p-5 sm:p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_340px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
           <div className="space-y-5">
             <div className="surface-subtle p-4">
-              <div className="eyebrow text-[color:var(--mispricing-strong)]">Decision framing</div>
+              <div className="eyebrow text-[color:var(--mispricing-strong)]">Investment read</div>
               <p className="mt-2 text-base leading-7 text-[color:var(--text-secondary)]">{memo.decisionLine}</p>
             </div>
 
@@ -67,121 +94,74 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="surface-subtle p-4">
-              <div className="section-title text-base">Trust state</div>
-              <div className="mt-3">
-                <TrustBadge flags={memo.summaryFlags} awaitingRun={memo.awaitingRun} />
-              </div>
-            </div>
-
-            {memo.summaryFlags.length ? (
-              <div className="surface-subtle p-4 ring-1 ring-[color:var(--warning-border)]">
-                <div className="eyebrow text-[color:var(--warning-strong)]">Trust alert</div>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">
-                  Telemetry repairs, discarded inputs, stale runs, or weak confidence can materially change the memo. Check the trust section before underwriting the thesis.
-                </p>
-              </div>
+          <div className="grid gap-3">
+            {dataMetric ? (
+              <MetricCard label="Data confidence" value={dataMetric.value} accent={dataMetric.tone === 'neutral' || !dataMetric.tone ? 'default' : dataMetric.tone} />
             ) : null}
+            {thesisMetric ? (
+              <MetricCard label="Thesis confidence" value={thesisMetric.value} accent={thesisMetric.tone === 'neutral' || !thesisMetric.tone ? 'default' : thesisMetric.tone} />
+            ) : null}
+            {topStressItems.slice(0, 2).map((item, index) => (
+              <MetricCard
+                key={`${item.title}-${index}`}
+                label={item.title}
+                value={item.body}
+                meta={item.meta}
+                accent={item.tone === 'neutral' || !item.tone ? 'default' : item.tone}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
 
-            <div className="grid gap-3">
-              {memo.summaryMetrics.map((item) => (
-                <MetricCard key={item.label} label={item.label} value={item.value} meta={item.meta} accent={item.tone === 'neutral' || !item.tone ? 'default' : item.tone} />
+      <section className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-3">
+          <div className="section-title">Why it can work</div>
+          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">
+            The strongest reasons this subnet currently earns a place near the top of the list.
+          </p>
+          <CompactInsightList items={memo.interesting} empty="No clear positive drivers were emitted." />
+        </div>
+
+        <div className="space-y-3">
+          <div className="section-title">What could break it</div>
+          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">
+            The main failure modes and drags that can invalidate the upside case.
+          </p>
+          <CompactInsightList items={memo.breaks} empty="No explicit failure modes were emitted." />
+        </div>
+
+        <div className="space-y-3">
+          <div className="section-title">How much to trust it</div>
+          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">
+            The most important uncertainties still able to move the memo.
+          </p>
+          <CompactInsightList items={memo.uncertainties} empty="No major trust warnings were emitted." />
+        </div>
+      </section>
+
+      <section className="surface-panel p-5 sm:p-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="space-y-3">
+            <div className="section-title">Stress view</div>
+            <p className="text-sm leading-6 text-[color:var(--text-secondary)]">
+              A compact view of how the thesis behaves once it meets real conditions and adverse scenarios.
+            </p>
+            <CompactInsightList items={memo.scenarioItems} empty="No stress scenarios were provided." limit={3} />
+          </div>
+
+          <div className="space-y-3">
+            <div className="section-title">Links</div>
+            <div className="flex flex-wrap gap-2">
+              {memo.links.map((link) => (
+                <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="button-secondary">
+                  {link.label}
+                </a>
               ))}
             </div>
           </div>
         </div>
       </section>
-
-      <CollapsibleSection title="Why now" subtitle="The positive case: top drivers, signal contributors, and the block scores carrying the thesis.">
-        <div className="space-y-6">
-          <InsightList items={memo.interesting} empty="No positive drivers were emitted." />
-          {memo.signalContributorSections.length ? (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {memo.signalContributorSections.map((section) => (
-                <div key={section.title} className="space-y-3">
-                  <div className="section-title text-base">{section.title}</div>
-                  <InsightList items={section.items} empty={`No ${section.title.toLowerCase()} surfaced.`} />
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {memo.blockScores.map((item, index) => (
-              <MetricCard key={`${item.title}-${index}`} label={item.title} value={item.body} meta={item.meta} accent={item.tone === 'neutral' || !item.tone ? 'default' : item.tone} />
-            ))}
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="What breaks" subtitle="Negative drags, thesis breakers, and fragility contributors that can invalidate the setup.">
-        <div className="grid gap-6 xl:grid-cols-2">
-          <div className="space-y-3">
-            <div className="section-title text-base">Negative drags and breakers</div>
-            <InsightList items={memo.breaks} empty="No explicit failure modes were emitted." />
-          </div>
-          <div className="space-y-3">
-            <div className="section-title text-base">Fragility contributors</div>
-            <InsightList items={memo.fragilityContributors} empty="No fragility contributors surfaced." />
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Can I trust this" subtitle="Confidence, reliability, telemetry visibility, and the uncertainties still able to move the memo.">
-        <div className="space-y-6">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {memo.confidenceHeadline.map((item) => (
-              <MetricCard key={item.label} label={item.label} value={item.value} meta={item.meta} accent={item.tone === 'neutral' || !item.tone ? 'default' : item.tone} />
-            ))}
-          </div>
-          <div className="grid gap-6 xl:grid-cols-2">
-            <div className="space-y-3">
-              <div className="section-title text-base">Reliability</div>
-              <InsightList items={memo.confidenceItems} empty="No reliability data was emitted." />
-            </div>
-            <div className="space-y-3">
-              <div className="section-title text-base">Key uncertainties</div>
-              <InsightList items={memo.uncertainties} empty="No key uncertainties were emitted." />
-            </div>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {memo.visibilityItems.map((item, index) => (
-              <MetricCard key={`${item.title}-${index}`} label={item.title} value={item.body} meta={item.meta} accent={item.tone === 'neutral' || !item.tone ? 'default' : item.tone} />
-            ))}
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Stress and execution" subtitle="Fragility class, drawdown behavior, scenarios, and market structure once the thesis meets real conditions.">
-        <div className="space-y-6">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {memo.stressItems.map((item, index) => (
-              <MetricCard key={`${item.title}-${index}`} label={item.title} value={item.body} meta={item.meta} accent={item.tone === 'neutral' || !item.tone ? 'default' : item.tone} />
-            ))}
-          </div>
-          <div className="space-y-3">
-            <div className="section-title text-base">Stress scenarios</div>
-            <InsightList items={memo.scenarioItems} empty="No stress scenarios were provided." />
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Raw context" subtitle="Supporting market context and external links stay available, but collapsed behind the thesis, trust, and stress sections." defaultOpen={false}>
-        <div className="space-y-6">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {memo.rawContext.map((item, index) => (
-              <MetricCard key={`${item.title}-${index}`} label={item.title} value={item.body} meta={item.meta} accent={item.tone === 'neutral' || !item.tone ? 'default' : item.tone} />
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {memo.links.map((link) => (
-              <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="button-secondary">
-                {link.label}
-              </a>
-            ))}
-          </div>
-        </div>
-      </CollapsibleSection>
     </div>
   )
 }
