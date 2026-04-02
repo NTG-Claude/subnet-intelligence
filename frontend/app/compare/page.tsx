@@ -1,10 +1,7 @@
-import CompareWorkspace from '@/features/compare/components/CompareWorkspace'
-import { fetchCompareTimeseries } from '@/lib/api'
+import ComparePageClient from '@/features/compare/components/ComparePageClient'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ComparePage() {
-  const data = await fetchCompareTimeseries(90)
-
-  return <CompareWorkspace data={data} />
+export default function ComparePage() {
+  return <ComparePageClient />
 }

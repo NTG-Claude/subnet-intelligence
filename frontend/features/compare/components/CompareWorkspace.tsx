@@ -24,6 +24,14 @@ type ChartPoint = {
   [key: string]: string | number | null
 }
 
+type HoverSnapshotItem = {
+  key: string
+  name: string
+  color: string
+  value: number
+  highlighted: boolean
+}
+
 const HIGHLIGHT_COLORS = ['#ff4fa3', '#67e26f', '#ffb347', '#74b3ff', '#c084fc', '#44d9e6']
 
 const METRIC_CONFIG: Array<{
@@ -147,22 +155,61 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length || !label) return null
 
-  const topItems = payload
+  const items = payload
     .filter((item): item is { dataKey?: string; value: number; color?: string; name?: string } => typeof item.value === 'number')
     .sort((left, right) => right.value - left.value)
-    .slice(0, 6)
 
   return (
     <div className="rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(7,14,20,0.94)] p-3 shadow-2xl">
       <div className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{formatTooltipLabel(label)}</div>
-      <div className="mt-3 space-y-2">
-        {topItems.map((item) => (
-          <div key={item.dataKey} className="flex items-center justify-between gap-4 text-sm">
-            <div className="flex items-center gap-2 text-[color:var(--text-secondary)]">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-              <span>{item.name}</span>
+      <div className="mt-2 text-sm text-[color:var(--text-secondary)]">
+        {items.length} subnets in this run. Full hovered snapshot is shown below the chart.
+      </div>
+    </div>
+  )
+}
+
+function HoverSnapshot({
+  title,
+  computedAt,
+  items,
+  formatter,
+  lowerIsBetter,
+}: {
+  title: string
+  computedAt: string | null
+  items: HoverSnapshotItem[]
+  formatter: (value: number) => string
+  lowerIsBetter?: boolean
+}) {
+  if (!computedAt || !items.length) return null
+
+  return (
+    <div className="mt-4 rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.6)] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="eyebrow">{title}</div>
+          <div className="mt-1 text-sm text-[color:var(--text-secondary)]">{formatTooltipLabel(computedAt)}</div>
+        </div>
+        <div className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">
+          {lowerIsBetter ? 'Lowest to highest risk' : 'Highest to lowest'}
+        </div>
+      </div>
+      <div className="mt-3 grid max-h-[260px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+        {items.map((item, index) => (
+          <div
+            key={`${item.key}-${computedAt}`}
+            className={cn(
+              'flex items-center justify-between rounded-[var(--radius-sm)] border border-[color:var(--border-subtle)] px-3 py-2.5',
+              item.highlighted && 'bg-[color:rgba(16,29,41,0.88)]',
+            )}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="font-mono text-[11px] text-[color:var(--text-tertiary)]">#{index + 1}</span>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+              <span className="truncate text-sm text-[color:var(--text-primary)]">{item.name}</span>
             </div>
-            <span className="font-mono text-[color:var(--text-primary)]">{formatter(item.value)}</span>
+            <span className="shrink-0 font-mono text-sm text-[color:var(--text-secondary)]">{formatter(item.value)}</span>
           </div>
         ))}
       </div>
@@ -189,6 +236,29 @@ function MetricRunChart({
   lowerIsBetter?: boolean
   dense?: boolean
 }) {
+  const [hoveredRun, setHoveredRun] = useState<string | null>(chartData[chartData.length - 1]?.computed_at ?? null)
+
+  const hoverItems = useMemo(() => {
+    const point = chartData.find((item) => item.computed_at === hoveredRun) ?? chartData[chartData.length - 1]
+    if (!point) return []
+    return series
+      .map((item) => {
+        const value = point[item.key]
+        return typeof value === 'number'
+          ? {
+              key: item.key,
+              name: item.name,
+              color: item.color,
+              value,
+              highlighted: item.highlighted,
+            }
+          : null
+      })
+      .filter((item): item is HoverSnapshotItem => Boolean(item))
+      .sort((left, right) => (lowerIsBetter ? left.value - right.value : right.value - left.value))
+      .slice(0, 18)
+  }, [chartData, hoveredRun, lowerIsBetter, series])
+
   return (
     <section className="surface-panel p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
@@ -203,7 +273,14 @@ function MetricRunChart({
 
       <div className={cn('h-[360px] w-full', dense && 'h-[300px]')}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 16, right: 18, left: 0, bottom: 0 }}>
+          <LineChart
+            data={chartData}
+            margin={{ top: 16, right: 18, left: 0, bottom: 0 }}
+            onMouseMove={(state) => {
+              const nextLabel = typeof state?.activeLabel === 'string' ? state.activeLabel : null
+              if (nextLabel) setHoveredRun(nextLabel)
+            }}
+          >
             <CartesianGrid stroke="rgba(138, 163, 184, 0.14)" vertical={false} />
             <XAxis
               dataKey="computed_at"
@@ -236,6 +313,14 @@ function MetricRunChart({
           </LineChart>
         </ResponsiveContainer>
       </div>
+
+      <HoverSnapshot
+        title="Hovered Run Snapshot"
+        computedAt={hoveredRun}
+        items={hoverItems}
+        formatter={formatter}
+        lowerIsBetter={lowerIsBetter}
+      />
 
       <div className="mt-4">
         <div className="eyebrow">Latest Leaders</div>
