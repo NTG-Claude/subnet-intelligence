@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import MetricCard from '@/components/ui/MetricCard'
-import PageHeader from '@/components/ui/PageHeader'
-import { SubnetSummary } from '@/lib/api'
+import { MarketOverviewData, SubnetSummary } from '@/lib/api'
 import { UniverseRowViewModel, UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
 
 import CompareDock from './CompareDock'
+import DiscoverMarketHero from './DiscoverMarketHero'
 import DecisionRow, { MobileDecisionCard } from './DecisionRow'
 import SidePreviewPanel from './SidePreviewPanel'
 
@@ -92,9 +92,11 @@ function SortHeader({
 export default function DiscoverWorkspace({
   subnets,
   lastRun,
+  market,
 }: {
   subnets: SubnetSummary[]
   lastRun: string | null
+  market: MarketOverviewData
   trackedUniverse: number
   awaitingRunCount: number
   lowConfidenceCount: number
@@ -222,12 +224,7 @@ export default function DiscoverWorkspace({
 
   return (
     <div className="space-y-6 pb-28">
-      <PageHeader
-        title="Discover subnets"
-        subtitle="A ranked screening list with minimal noise. Hover a row to inspect the investment read and trust notes on the right."
-        variant="compact"
-        stats={lastRun ? [{ label: 'Last run', value: lastRun.slice(0, 16).replace('T', ' ') }] : undefined}
-      />
+      <DiscoverMarketHero market={market} lastRun={lastRun} />
 
       <section className="surface-panel p-4 sm:p-5">
         <div className="space-y-5">

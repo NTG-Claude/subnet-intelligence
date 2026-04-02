@@ -33,6 +33,8 @@ from api.models import (
     HealthResponse,
     LeaderboardResponse,
     LatestRunResponse,
+    MarketOverviewPoint,
+    MarketOverviewResponse,
     PrimaryOutputsResponse,
     ScoreBreakdownResponse,
     ScoreHistoryPoint,
@@ -626,6 +628,62 @@ async def compare_timeseries(
     ]
     latest_count = len(runs[-1].subnets) if runs else 0
     result = CompareSeriesResponse(runs=runs, total_subnets=latest_count)
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.get(
+    "/api/v1/market/overview",
+    response_model=MarketOverviewResponse,
+    summary="Aggregated subnet market cap overview across runs",
+    tags=["Market"],
+)
+async def market_overview(
+    request: Request,
+    days: int = Query(90, ge=7, le=365),
+    _: None = Depends(_check_rate_limit),
+) -> MarketOverviewResponse:
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("market_overview", days, rows=all_rows)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    history_rows = [row for row in get_scores_since(days=days) if _is_investable_row(row)]
+    grouped: dict[str, dict[str, float]] = defaultdict(lambda: {"market_cap": 0.0, "count": 0})
+
+    for row in history_rows:
+        market_cap = row.get("market_cap_tao")
+        if market_cap is None:
+            continue
+        bucket = grouped[row["computed_at"]]
+        bucket["market_cap"] += float(market_cap)
+        bucket["count"] += 1
+
+    points = [
+        MarketOverviewPoint(
+            computed_at=computed_at,
+            total_market_cap_tao=values["market_cap"],
+            subnet_count=int(values["count"]),
+        )
+        for computed_at, values in sorted(grouped.items())
+    ]
+
+    current_market_cap = points[-1].total_market_cap_tao if points else 0.0
+    current_count = points[-1].subnet_count if points else 0
+    previous_market_cap = points[-2].total_market_cap_tao if len(points) > 1 else None
+    change_pct = (
+        round(((current_market_cap - previous_market_cap) / previous_market_cap) * 100, 2)
+        if previous_market_cap and previous_market_cap > 0
+        else None
+    )
+
+    result = MarketOverviewResponse(
+        current_market_cap_tao=current_market_cap,
+        change_pct_vs_previous_run=change_pct,
+        current_subnet_count=current_count,
+        points=points,
+    )
     _cache_set(cache_key, result)
     return result
 

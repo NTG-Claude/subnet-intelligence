@@ -93,6 +93,19 @@ class CompareSeriesResponse(BaseModel):
     total_subnets: int
 
 
+class MarketOverviewPoint(BaseModel):
+    computed_at: str
+    total_market_cap_tao: float
+    subnet_count: int
+
+
+class MarketOverviewResponse(BaseModel):
+    current_market_cap_tao: float
+    change_pct_vs_previous_run: Optional[float] = None
+    current_subnet_count: int
+    points: list[MarketOverviewPoint]
+
+
 class SubnetDetailResponse(BaseModel):
     netuid: int
     name: Optional[str] = None
