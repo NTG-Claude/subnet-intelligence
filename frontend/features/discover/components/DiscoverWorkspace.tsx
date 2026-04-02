@@ -30,6 +30,42 @@ function reverseRows(rows: UniverseRowViewModel[]): UniverseRowViewModel[] {
   return [...rows].reverse()
 }
 
+function SortHeader({
+  label,
+  active,
+  direction,
+  align = 'left',
+  onClick,
+}: {
+  label: string
+  active: boolean
+  direction: SortDirection
+  align?: 'left' | 'right'
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'flex min-w-0 items-center gap-1 transition-colors hover:text-[color:var(--text-primary)]',
+        align === 'right' ? 'justify-end text-right' : 'text-left',
+      ].join(' ')}
+    >
+      <span>{label}</span>
+      <span
+        className={[
+          'inline-flex w-3 justify-center text-[9px] leading-none',
+          active ? 'text-[color:var(--text-primary)]' : 'text-transparent',
+        ].join(' ')}
+        aria-hidden="true"
+      >
+        {active ? (direction === 'asc' ? '↑' : '↓') : '↑'}
+      </span>
+    </button>
+  )
+}
+
 export default function DiscoverWorkspace({
   subnets,
   lastRun,
@@ -123,11 +159,6 @@ export default function DiscoverWorkspace({
     setDirection('asc')
   }
 
-  function arrowFor(column: UniverseSortId): string {
-    if (sort !== column) return ''
-    return direction === 'asc' ? '↑' : '↓'
-  }
-
   const previewRow = rows.find((row) => row.id === focusedId) ?? null
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
@@ -178,22 +209,12 @@ export default function DiscoverWorkspace({
             <>
               <div className="hidden md:block">
                 <div className="grid grid-cols-[64px_minmax(0,1.75fr)_76px_76px_76px_88px] gap-3 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
-                  <button type="button" onClick={() => toggleSort('rank')} className="text-left transition-colors hover:text-[color:var(--text-primary)]">
-                    Rank {arrowFor('rank')}
-                  </button>
+                  <SortHeader label="Rank" active={sort === 'rank'} direction={direction} onClick={() => toggleSort('rank')} />
                   <div>Subnet</div>
-                  <button type="button" onClick={() => toggleSort('quality')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
-                    Quality {arrowFor('quality')}
-                  </button>
-                  <button type="button" onClick={() => toggleSort('mispricing')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
-                    Mispricing {arrowFor('mispricing')}
-                  </button>
-                  <button type="button" onClick={() => toggleSort('fragility')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
-                    Fragility {arrowFor('fragility')}
-                  </button>
-                  <button type="button" onClick={() => toggleSort('confidence')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
-                    Confidence {arrowFor('confidence')}
-                  </button>
+                  <SortHeader label="Quality" active={sort === 'quality'} direction={direction} align="right" onClick={() => toggleSort('quality')} />
+                  <SortHeader label="Mispricing" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => toggleSort('mispricing')} />
+                  <SortHeader label="Fragility" active={sort === 'fragility'} direction={direction} align="right" onClick={() => toggleSort('fragility')} />
+                  <SortHeader label="Confidence" active={sort === 'confidence'} direction={direction} align="right" onClick={() => toggleSort('confidence')} />
                 </div>
 
                 <div>
