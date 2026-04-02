@@ -85,6 +85,7 @@ export default function DiscoverWorkspace({
   const [direction, setDirection] = useState<SortDirection>((searchParams.get('dir') as SortDirection) ?? 'asc')
   const [compareIds, setCompareIds] = useState<number[]>(parseIds(searchParams.get('ids')))
   const [focusedId, setFocusedId] = useState<number | null>(null)
+  const [pinnedId, setPinnedId] = useState<number | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -105,12 +106,16 @@ export default function DiscoverWorkspace({
   useEffect(() => {
     if (!rows.length) {
       setFocusedId(null)
+      setPinnedId(null)
       return
     }
     if (!focusedId || !rows.some((row) => row.id === focusedId)) {
       setFocusedId(rows[0].id)
     }
-  }, [focusedId, rows])
+    if (pinnedId && !rows.some((row) => row.id === pinnedId)) {
+      setPinnedId(null)
+    }
+  }, [focusedId, pinnedId, rows])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -159,7 +164,17 @@ export default function DiscoverWorkspace({
     setDirection('asc')
   }
 
-  const previewRow = rows.find((row) => row.id === focusedId) ?? null
+  function handlePreviewFocus(id: number) {
+    setFocusedId(id)
+  }
+
+  function handlePinToggle(id: number) {
+    setPinnedId((current) => (current === id ? null : id))
+    setFocusedId(id)
+  }
+
+  const previewId = pinnedId ?? focusedId
+  const previewRow = rows.find((row) => row.id === previewId) ?? null
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
     .filter((item): item is SubnetSummary => Boolean(item))
@@ -223,8 +238,10 @@ export default function DiscoverWorkspace({
                       key={row.id}
                       row={row}
                       selected={compareIds.includes(row.id)}
-                      focused={focusedId === row.id}
-                      onFocus={() => setFocusedId(row.id)}
+                      focused={previewId === row.id}
+                      pinned={pinnedId === row.id}
+                      onFocus={() => handlePreviewFocus(row.id)}
+                      onSelect={() => handlePinToggle(row.id)}
                     />
                   ))}
                 </div>

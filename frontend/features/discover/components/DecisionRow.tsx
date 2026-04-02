@@ -16,12 +16,16 @@ export default function DecisionRow({
   row,
   selected,
   focused,
+  pinned,
   onFocus,
+  onSelect,
 }: {
   row: UniverseRowViewModel
   selected: boolean
   focused: boolean
+  pinned: boolean
   onFocus: () => void
+  onSelect: () => void
 }) {
   return (
     <article
@@ -29,10 +33,12 @@ export default function DecisionRow({
         'grid cursor-default grid-cols-[64px_minmax(0,1.35fr)_92px_110px_72px_126px] items-center gap-4 border-t border-[color:var(--border-subtle)] px-4 py-2.5 transition-colors sm:px-5',
         focused && 'bg-[color:rgba(19,32,44,0.42)]',
         selected && 'border-l-2 border-l-[color:var(--mispricing-strong)] pl-[14px] sm:pl-[18px]',
+        pinned && 'bg-[color:rgba(19,32,44,0.56)]',
       )}
       tabIndex={0}
       onMouseEnter={onFocus}
       onFocus={onFocus}
+      onClick={onSelect}
     >
       <div className="min-w-0 font-mono">
         <div className="text-base font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
