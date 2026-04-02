@@ -14,7 +14,7 @@ export default function SidePreviewPanel({
   onToggleCompare: (id: number) => void
 }) {
   return (
-    <aside className="surface-panel sticky top-24 hidden h-fit p-5 xl:block">
+    <aside className="surface-panel sticky top-24 hidden h-fit p-5 2xl:block">
       {row ? (
         <div className="space-y-5">
           <div className="space-y-3">

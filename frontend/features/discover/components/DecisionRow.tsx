@@ -47,11 +47,8 @@ export default function DecisionRow({
         </button>
       </td>
       <td className="px-4 py-4 align-top">
-        <div className="text-lg font-semibold text-[color:var(--text-primary)]">{row.rankLabel}</div>
-        <div className="text-xs text-[color:var(--text-tertiary)]">{row.percentileLabel}</div>
-      </td>
-      <td className="px-4 py-4 align-top">
         <div className="flex flex-wrap items-center gap-2">
+          <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
           <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
           <StatusChip tone={row.modelLabelTone}>{row.modelLabel}</StatusChip>
         </div>
@@ -61,6 +58,15 @@ export default function DecisionRow({
         <p className="mt-2 max-w-[26ch] text-sm leading-6 text-[color:var(--text-secondary)] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:4] overflow-hidden">
           {row.thesisLine}
         </p>
+        <div className="mt-3">
+          <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="text-xs text-[color:var(--text-tertiary)]">{row.updatedLabel}</div>
+          <Link href={row.href} className="button-secondary">
+            Research
+          </Link>
+        </div>
       </td>
       <td className="px-4 py-4 align-top">
         <p className="max-w-[24ch] text-sm leading-6 text-[color:var(--text-secondary)] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:4] overflow-hidden">
@@ -72,22 +78,6 @@ export default function DecisionRow({
           <SignalBar signal={signal} compact />
         </td>
       ))}
-      <td className="px-4 py-4 align-top">
-        <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
-      </td>
-      <td className="px-4 py-4 align-top">
-        <div className="text-sm text-[color:var(--text-secondary)]">{row.updatedLabel}</div>
-      </td>
-      <td className="px-4 py-4 align-top">
-        <div className="flex flex-col gap-2">
-          <Link href={row.href} className="button-secondary">
-            Research
-          </Link>
-          <button type="button" onClick={() => onToggleCompare(row.id)} className="button-secondary">
-            {selected ? 'Remove' : 'Compare'}
-          </button>
-        </div>
-      </td>
     </tr>
   )
 }

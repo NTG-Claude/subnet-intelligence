@@ -195,7 +195,7 @@ export default function DiscoverWorkspace({
         ]}
       />
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <div className="surface-panel p-4 sm:p-5">
             <div className="flex flex-col gap-4">
@@ -289,23 +289,19 @@ export default function DiscoverWorkspace({
             {rows.length ? (
               <>
                 <div className="hidden overflow-x-auto md:block">
-                  <table className="min-w-[1320px] w-full table-fixed border-collapse">
+                  <table className="w-full table-fixed border-collapse">
                     <colgroup>
                       <col className="w-[72px]" />
-                      <col className="w-[96px]" />
-                      <col className="w-[240px]" />
-                      <col className="w-[210px]" />
-                      <col className="w-[190px]" />
-                      <col className="w-[190px]" />
-                      <col className="w-[190px]" />
-                      <col className="w-[190px]" />
-                      <col className="w-[180px]" />
-                      <col className="w-[160px]" />
-                      <col className="w-[132px]" />
+                      <col className="w-[31%]" />
+                      <col className="w-[22%]" />
+                      <col className="w-[11.75%]" />
+                      <col className="w-[11.75%]" />
+                      <col className="w-[11.75%]" />
+                      <col className="w-[11.75%]" />
                     </colgroup>
                     <thead className="sticky top-0 z-20 bg-[color:rgba(8,16,23,0.96)] shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur">
                       <tr className="border-b border-[color:var(--border-subtle)] text-left align-top">
-                        {['', 'Rank', 'Subnet', 'Thesis', 'Quality', 'Mispricing', 'Fragility', 'Confidence', 'Trust', 'Updated', 'Actions'].map((label) => (
+                        {['', 'Subnet', 'Thesis', 'Quality', 'Mispricing', 'Fragility', 'Confidence'].map((label) => (
                           <th key={label} className="px-4 py-3 text-[11px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)]">
                             {label}
                           </th>
