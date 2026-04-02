@@ -290,7 +290,7 @@ export default function DiscoverWorkspace({
               <>
                 <div className="hidden overflow-x-auto md:block">
                   <table className="min-w-[1180px] w-full border-collapse">
-                    <thead className="sticky top-[72px] z-20 bg-[color:rgba(8,16,23,0.92)] backdrop-blur">
+                    <thead className="sticky top-0 z-20 bg-[color:rgba(8,16,23,0.96)] shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur">
                       <tr className="border-b border-[color:var(--border-subtle)] text-left align-top">
                         {['', 'Rank', 'Subnet', 'Thesis', 'Quality', 'Mispricing', 'Fragility', 'Confidence', 'Trust', 'Updated', 'Actions'].map((label) => (
                           <th key={label} className="px-3 py-3 text-[11px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)]">
