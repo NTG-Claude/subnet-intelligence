@@ -42,6 +42,7 @@ def local_tmp_path():
     ("github.com/owner/myrepo", "owner", "myrepo"),
     ("git@github.com:owner/repo.git", "owner", "repo"),
     ("https://github.com/owner/repo?tab=readme", "owner", "repo"),
+    ("https://github.com/owner/repo/", "owner", "repo"),
 ])
 def test_get_repo_from_url_valid(url, expected_owner, expected_repo):
     result = get_repo_from_url(url)
@@ -54,6 +55,7 @@ def test_get_repo_from_url_valid(url, expected_owner, expected_repo):
     "",
     "https://gitlab.com/owner/repo",
     "not_a_url",
+    "https://github.com/orgs/Beam-Network/repositories",
     None,
 ])
 def test_get_repo_from_url_invalid(url):
@@ -128,6 +130,30 @@ async def test_get_commits_last_30d_http_error():
     assert result is None
 
 
+@pytest.mark.asyncio
+async def test_get_commits_last_30d_handles_none_payload():
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=_make_response(200, None))
+    result = await get_commits_last_30d("owner", "repo", client=mock_client)
+    assert result is not None
+    assert result.commits_30d == 0
+    assert result.unique_contributors_30d == 0
+
+
+@pytest.mark.asyncio
+async def test_get_commits_last_30d_ignores_none_commit_entries():
+    commits = [_mock_commit("alice"), None, _mock_commit("bob")]
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[
+        _make_response(200, commits),
+        _make_response(200, []),
+    ])
+    result = await get_commits_last_30d("owner", "repo", client=mock_client)
+    assert result is not None
+    assert result.commits_30d == 3
+    assert result.unique_contributors_30d == 2
+
+
 # ---------------------------------------------------------------------------
 # get_repo_stats
 # ---------------------------------------------------------------------------
@@ -163,6 +189,14 @@ async def test_get_repo_stats_private_repo():
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=_make_response(451))
     result = await get_repo_stats("owner", "private_repo", client=mock_client)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_repo_stats_handles_none_payload():
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=_make_response(200, None))
+    result = await get_repo_stats("owner", "repo", client=mock_client)
     assert result is None
 
 

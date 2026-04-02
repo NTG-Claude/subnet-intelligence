@@ -88,7 +88,7 @@ def get_repo_from_url(url: str) -> Optional[RepoCoords]:
     if not url:
         return None
 
-    url = url.strip()
+    url = url.strip().rstrip("/")
 
     # SSH format: git@github.com:owner/repo.git
     ssh = re.match(r"git@github\.com:([^/]+)/([^/.]+)(?:\.git)?$", url)
@@ -104,6 +104,10 @@ def get_repo_from_url(url: str) -> Optional[RepoCoords]:
     repo = match.group(2).removesuffix(".git")
 
     if not owner or not repo:
+        return None
+
+    # Organization listing URLs are not repositories.
+    if owner.lower() == "orgs":
         return None
 
     return RepoCoords(owner=owner, repo=repo)
@@ -145,6 +149,16 @@ async def get_commits_last_30d(
 
                 resp.raise_for_status()
                 page_data = resp.json()
+                if page_data is None:
+                    page_data = []
+                if not isinstance(page_data, list):
+                    logger.warning(
+                        "Unexpected commit payload for %s/%s: %s",
+                        owner,
+                        repo,
+                        type(page_data).__name__,
+                    )
+                    return None
 
                 if not page_data:
                     break
@@ -163,10 +177,14 @@ async def get_commits_last_30d(
                 logger.error("Request error fetching commits for %s/%s: %s", owner, repo, exc)
                 return None
 
-        authors = {
-            c.get("author", {}).get("login") or c.get("commit", {}).get("author", {}).get("email")
-            for c in commits
-        }
+        authors = set()
+        for c in commits:
+            if not isinstance(c, dict):
+                continue
+            author = c.get("author") or {}
+            commit = c.get("commit") or {}
+            commit_author = commit.get("author") or {}
+            authors.add(author.get("login") or commit_author.get("email"))
         authors.discard(None)
 
         return CommitStats(
@@ -204,6 +222,17 @@ async def get_repo_stats(
 
             resp.raise_for_status()
             data = resp.json()
+            if data is None:
+                logger.warning("Empty repo payload for %s/%s", owner, repo)
+                return None
+            if not isinstance(data, dict):
+                logger.warning(
+                    "Unexpected repo payload for %s/%s: %s",
+                    owner,
+                    repo,
+                    type(data).__name__,
+                )
+                return None
 
             return RepoStats(
                 owner=owner,
