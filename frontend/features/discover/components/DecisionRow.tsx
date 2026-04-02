@@ -26,7 +26,7 @@ export default function DecisionRow({
   return (
     <article
       className={cn(
-        'grid cursor-default grid-cols-[64px_minmax(0,1.75fr)_76px_76px_76px_88px] items-center gap-3 border-t border-[color:var(--border-subtle)] px-4 py-2.5 transition-colors sm:px-5',
+        'grid cursor-default grid-cols-[64px_minmax(0,1.35fr)_92px_110px_72px_126px] items-center gap-4 border-t border-[color:var(--border-subtle)] px-4 py-2.5 transition-colors sm:px-5',
         focused && 'bg-[color:rgba(19,32,44,0.42)]',
         selected && 'border-l-2 border-l-[color:var(--mispricing-strong)] pl-[14px] sm:pl-[18px]',
       )}
