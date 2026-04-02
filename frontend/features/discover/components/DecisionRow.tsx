@@ -36,7 +36,6 @@ export default function DecisionRow({
     >
       <div className="min-w-0 font-mono">
         <div className="text-base font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
-        <div className="mt-0.5 text-[11px] text-[color:var(--text-tertiary)]">{row.percentileLabel}</div>
       </div>
 
       <div className="min-w-0">
