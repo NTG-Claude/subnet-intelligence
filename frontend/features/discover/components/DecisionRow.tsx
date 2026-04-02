@@ -43,9 +43,6 @@ export default function DecisionRow({
         <div className="flex min-w-0 items-baseline gap-3">
           <div className="truncate text-[15px] font-medium text-[color:var(--text-primary)]">{row.name}</div>
           <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
-          <div className="hidden truncate text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)] xl:block">
-            {row.modelLabel}
-          </div>
         </div>
       </div>
 
@@ -81,7 +78,6 @@ export function MobileDecisionCard({
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
             <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
-            <StatusChip tone={row.modelLabelTone}>{row.modelLabel}</StatusChip>
           </div>
           <div className="mt-3 text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</div>
           <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">{row.thesisLine}</p>
