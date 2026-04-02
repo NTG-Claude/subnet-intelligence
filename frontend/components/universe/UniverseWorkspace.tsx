@@ -13,7 +13,7 @@ import {
   toUniverseRow,
 } from '@/lib/view-models/research'
 import PrimarySignalBoard from '@/components/PrimarySignalBoard'
-import { MetricGrid, ResearchPanel, StatusBadge, cn } from '@/components/shared/research-ui'
+import { DropdownPill, MetricGrid, ResearchPanel, StatusBadge, cn } from '@/components/shared/research-ui'
 import ResearchList from '@/components/universe/ResearchList'
 
 interface Props {
@@ -42,6 +42,55 @@ function isStale(iso: string | null): boolean {
   return Date.now() - parsed > 36 * 60 * 60 * 1000
 }
 
+function PageNumbers({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}) {
+  const pages: (number | 'ellipsis')[] = []
+
+  if (totalPages <= 7) {
+    for (let i = 0; i < totalPages; i++) pages.push(i)
+  } else {
+    pages.push(0)
+    if (currentPage > 2) pages.push('ellipsis')
+    for (let i = Math.max(1, currentPage - 1); i <= Math.min(totalPages - 2, currentPage + 1); i++) {
+      pages.push(i)
+    }
+    if (currentPage < totalPages - 3) pages.push('ellipsis')
+    pages.push(totalPages - 1)
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      {pages.map((p, idx) =>
+        p === 'ellipsis' ? (
+          <span key={`e${idx}`} className="px-1.5 text-xs text-stone-600">
+            ...
+          </span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onPageChange(p)}
+            className={cn(
+              'focus-ring h-8 min-w-[2rem] rounded-lg px-2 text-xs font-medium transition-colors',
+              p === currentPage
+                ? 'bg-white/[0.08] text-stone-100'
+                : 'text-stone-500 hover:bg-white/[0.04] hover:text-stone-300',
+            )}
+          >
+            {p + 1}
+          </button>
+        ),
+      )}
+    </div>
+  )
+}
+
 export default function UniverseWorkspace({
   subnets,
   lastRun,
@@ -58,7 +107,8 @@ export default function UniverseWorkspace({
   const [excludeFragile, setExcludeFragile] = useState(false)
   const [compareIds, setCompareIds] = useState<number[]>([])
   const [page, setPage] = useState(0)
-  const pageSize = 18
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
+  const pageSize = 12
 
   const filteredSubnets = useMemo(() => {
     let next = applyUniverseLens(subnets, lensId)
@@ -91,6 +141,8 @@ export default function UniverseWorkspace({
   const pageRows = rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   const currentLens = UNIVERSE_LENSES.find((lens) => lens.id === lensId) ?? UNIVERSE_LENSES[0]
 
+  const hasActiveFilters = telemetryOnly || excludeFragile || selectedOnly || search.trim() || lensId !== 'high-mispricing-confidence' || sortId !== 'rank'
+
   const resetAll = () => {
     setSearch('')
     setLensId('high-mispricing-confidence')
@@ -109,51 +161,38 @@ export default function UniverseWorkspace({
     })
   }
 
+  const removeCompare = (netuid: number) => {
+    setCompareIds((current) => current.filter((id) => id !== netuid))
+  }
+
   const compareNames = useMemo(
     () =>
       compareIds.map((id) => {
         const subnet = subnets.find((item) => item.netuid === id)
-        return subnet?.name?.trim() || `SN${id}`
+        return { id, name: subnet?.name?.trim() || `SN${id}` }
       }),
     [compareIds, subnets],
   )
 
+  const lensOptions = UNIVERSE_LENSES.map((l) => ({ id: l.id, title: l.title, description: l.description }))
+  const sortOptions = UNIVERSE_SORTS.map((s) => ({ id: s.id, title: s.label }))
+
   return (
-    <div className="space-y-6">
-      <section className="rounded-[1.9rem] border border-white/10 bg-[#10151b] p-4 sm:p-5">
+    <div className="space-y-4 page-enter">
+      {/* Header section */}
+      <section className="rounded-[1.6rem] border border-white/10 bg-[#10151b] p-4 sm:p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="neutral">Universe workspace</StatusBadge>
               <StatusBadge tone={lastRun ? (isStale(lastRun) ? 'warning' : 'confidence') : 'warning'}>
                 {lastRun ? (isStale(lastRun) ? 'Stale run' : 'Run live') : 'Awaiting run'}
               </StatusBadge>
             </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-stone-50 sm:text-3xl">V2-native research workspace</h1>
-              <p className="mt-2 max-w-4xl text-sm leading-6 text-stone-400">
-                Screen first, then open the memo. The universe list is the primary surface; the lens panels below are only secondary shortcuts for idea discovery.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] xl:min-w-[440px]">
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value)
-                setPage(0)
-              }}
-              placeholder="Search subnet, thesis, label, netuid..."
-              className="w-full rounded-2xl border border-white/10 bg-stone-950 px-4 py-3 text-sm text-stone-100 outline-none placeholder:text-stone-500 focus:border-white/20"
-            />
-            <button
-              onClick={resetAll}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-stone-300 transition-colors hover:bg-white/[0.08]"
-            >
-              Clear filters
-            </button>
+            <h1 className="text-2xl font-semibold tracking-tight text-stone-50 sm:text-3xl">Subnet research</h1>
+            <p className="max-w-3xl text-sm leading-6 text-stone-500">
+              Screen, compare, and build conviction. Expand any row for the full analysis read.
+            </p>
           </div>
         </div>
 
@@ -183,100 +222,82 @@ export default function UniverseWorkspace({
         </div>
       </section>
 
-      <ResearchPanel
-        title="Filters / Saved Views / Quick Lenses"
-        subtitle="Use the saved views to jump into a research slice, then tighten the list with workflow chips and sorting."
-        className="bg-[#10151b]"
-      >
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {UNIVERSE_LENSES.map((lens) => (
+      {/* Consolidated filter toolbar */}
+      <div className="rounded-2xl border border-white/10 bg-stone-950/80 backdrop-blur-sm px-3 py-2.5 sm:px-4 sm:py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Search */}
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(0)
+            }}
+            placeholder="Search..."
+            className="focus-ring w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-stone-100 outline-none placeholder:text-stone-600 sm:w-52"
+          />
+
+          {/* Mobile filter toggle */}
+          <button
+            onClick={() => setShowMobileFilters((v) => !v)}
+            className="flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs text-stone-400 sm:hidden"
+          >
+            Filters
+            <svg width="10" height="10" viewBox="0 0 10 10" className={cn('transition-transform', showMobileFilters && 'rotate-180')}>
+              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+
+          {/* Desktop filters (always visible) + Mobile filters (toggle) */}
+          <div className={cn('flex flex-wrap items-center gap-2', showMobileFilters ? 'flex' : 'hidden sm:flex')}>
+            <DropdownPill label="Lens" value={lensId} options={lensOptions} onChange={(id) => { setLensId(id); setPage(0) }} />
+            <DropdownPill label="Sort" value={sortId} options={sortOptions} onChange={(id) => setSortId(id as UniverseSortId)} />
+
+            <div className="h-4 w-px bg-white/10 hidden sm:block" />
+
+            {/* Workflow chips */}
+            <button
+              onClick={() => { setTelemetryOnly((value) => !value); setPage(0) }}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                telemetryOnly ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-white/10 text-stone-500 hover:text-stone-300',
+              )}
+            >
+              Telemetry repairs
+            </button>
+            <button
+              onClick={() => { setExcludeFragile((value) => !value); setPage(0) }}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                excludeFragile ? 'border-rose-500/30 bg-rose-500/10 text-rose-200' : 'border-white/10 text-stone-500 hover:text-stone-300',
+              )}
+            >
+              Exclude fragile
+            </button>
+            <button
+              onClick={() => { setSelectedOnly((value) => !value); setPage(0) }}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                selectedOnly ? 'border-sky-500/30 bg-sky-500/10 text-sky-200' : 'border-white/10 text-stone-500 hover:text-stone-300',
+              )}
+            >
+              Compare only
+            </button>
+
+            {hasActiveFilters && (
               <button
-                key={lens.id}
-                onClick={() => {
-                  setLensId(lens.id)
-                  setPage(0)
-                }}
-                className={cn(
-                  'rounded-full border px-3 py-2 text-xs font-medium transition-colors',
-                  lensId === lens.id
-                    ? 'border-white/20 bg-white/[0.08] text-stone-100'
-                    : 'border-white/10 bg-stone-950 text-stone-400 hover:border-white/20 hover:text-stone-200',
-                )}
+                onClick={resetAll}
+                className="rounded-full px-2.5 py-1 text-[11px] text-stone-500 transition-colors hover:text-stone-300"
               >
-                {lens.title}
+                Clear all
               </button>
-            ))}
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="space-y-3">
-              <p className="text-sm leading-6 text-stone-400">{currentLens.description}</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => {
-                    setTelemetryOnly((value) => !value)
-                    setPage(0)
-                  }}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs transition-colors',
-                    telemetryOnly ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-white/10 bg-stone-950 text-stone-400',
-                  )}
-                >
-                  Telemetry repairs only
-                </button>
-                <button
-                  onClick={() => {
-                    setExcludeFragile((value) => !value)
-                    setPage(0)
-                  }}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs transition-colors',
-                    excludeFragile ? 'border-rose-500/30 bg-rose-500/10 text-rose-200' : 'border-white/10 bg-stone-950 text-stone-400',
-                  )}
-                >
-                  Exclude fragile setups
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedOnly((value) => !value)
-                    setPage(0)
-                  }}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs transition-colors',
-                    selectedOnly ? 'border-sky-500/30 bg-sky-500/10 text-sky-200' : 'border-white/10 bg-stone-950 text-stone-400',
-                  )}
-                >
-                  Compare tray only
-                </button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2 xl:justify-end">
-              {UNIVERSE_SORTS.map((sort) => (
-                <button
-                  key={sort.id}
-                  onClick={() => setSortId(sort.id)}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs transition-colors',
-                    sortId === sort.id
-                      ? 'border-violet-500/30 bg-violet-500/10 text-violet-200'
-                      : 'border-white/10 bg-stone-950 text-stone-400 hover:border-white/20 hover:text-stone-200',
-                  )}
-                >
-                  Sort: {sort.label}
-                </button>
-              ))}
-            </div>
+            )}
           </div>
         </div>
-      </ResearchPanel>
+      </div>
 
-      <ResearchPanel
-        title="Main Result List"
-        subtitle="Each row should answer the same workflow question: why is this interesting, what breaks it, and how much should we trust the evidence."
-        className="bg-[#10151b]"
-      >
+      {/* Main result list */}
+      <div>
         <ResearchList
           rows={pageRows}
           currentLensTitle={currentLens.title}
@@ -285,59 +306,60 @@ export default function UniverseWorkspace({
           onToggleCompare={toggleCompare}
         />
 
-        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-white/10 bg-stone-950 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-stone-400">
-            {rows.length} result{rows.length === 1 ? '' : 's'}
+        {/* Pagination */}
+        <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-white/10 bg-stone-950/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-xs text-stone-500">
+            {rows.length > 0
+              ? `Showing ${currentPage * pageSize + 1}–${Math.min((currentPage + 1) * pageSize, rows.length)} of ${rows.length}`
+              : `${rows.length} results`}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((current) => Math.max(0, current - 1))}
-              disabled={currentPage === 0}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-stone-300 transition-colors hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Prev
-            </button>
-            <div className="px-3 py-2 text-sm text-stone-400">
-              {currentPage + 1} / {totalPages}
-            </div>
-            <button
-              onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
-              disabled={currentPage >= totalPages - 1}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-stone-300 transition-colors hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
+          {totalPages > 1 && (
+            <PageNumbers currentPage={currentPage} totalPages={totalPages} onPageChange={setPage} />
+          )}
         </div>
-      </ResearchPanel>
+      </div>
 
+      {/* Secondary insight area */}
       <ResearchPanel
         title="Secondary Insight Area"
-        subtitle="These lens boards help you spot candidates fast, but they should always feed back into the memo and compare workflow."
+        subtitle="Quick lens boards for idea discovery — always feed findings back into the memo and compare workflow."
         className="bg-[#10151b]"
       >
         <PrimarySignalBoard subnets={filteredSubnets.filter((subnet) => subnet.primary_outputs)} />
       </ResearchPanel>
 
+      {/* Compare tray */}
       {compareIds.length > 0 ? (
-        <div className="sticky bottom-4 z-30 rounded-3xl border border-sky-500/20 bg-stone-950/95 p-4 shadow-[0_16px_48px_rgba(0,0,0,0.45)] backdrop-blur">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.24em] text-sky-300">Compare tray</div>
-              <div className="mt-1 text-sm text-stone-300">
-                {compareIds.length} subnet{compareIds.length === 1 ? '' : 's'} selected for side-by-side review across signals, explainability, trust, and stress.
+        <div className="slide-up sticky bottom-4 z-30 rounded-2xl border border-sky-500/20 bg-stone-950/95 px-4 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.5)] backdrop-blur">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] uppercase tracking-[0.18em] text-sky-300">Compare</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {compareNames.map(({ id, name }) => (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-200"
+                  >
+                    {name}
+                    <button
+                      onClick={() => removeCompare(id)}
+                      className="ml-0.5 rounded text-sky-400 transition-colors hover:text-sky-100"
+                      aria-label={`Remove ${name}`}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <path d="M3 3L7 7M7 3L3 7" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {compareNames.map((name, index) => (
-                <StatusBadge key={`${name}-${index}`} tone="mispricing">
-                  {name}
-                </StatusBadge>
-              ))}
-              <Link href={`/compare?ids=${compareIds.join(',')}`} className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-2 text-sm text-sky-200 transition-colors hover:bg-sky-500/20">
-                Open compare
-              </Link>
-            </div>
+            <Link
+              href={`/compare?ids=${compareIds.join(',')}`}
+              className="focus-ring rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-2 text-center text-sm font-medium text-sky-200 transition-colors hover:bg-sky-500/20"
+            >
+              Open compare
+            </Link>
           </div>
         </div>
       ) : null}

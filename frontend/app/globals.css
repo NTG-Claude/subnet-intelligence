@@ -25,6 +25,7 @@ body {
   color: rgb(245 245 244);
   background: rgb(var(--bg));
   letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 code,
@@ -40,4 +41,48 @@ a {
 ::selection {
   background: rgba(56, 189, 248, 0.28);
   color: rgb(250 250 249);
+}
+
+/* Expandable row animation */
+.expandable-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease-out;
+}
+.expandable-grid[data-expanded='true'] {
+  grid-template-rows: 1fr;
+}
+.expandable-grid > div {
+  overflow: hidden;
+}
+
+/* Page & row entrance animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-enter {
+  animation: fadeIn 0.2s ease-out both;
+}
+.row-enter {
+  animation: fadeIn 0.22s ease-out both;
+}
+
+/* Compare tray slide-up */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.slide-up {
+  animation: slideUp 0.25s ease-out both;
+}
+
+/* Focus styles */
+@layer components {
+  .focus-ring {
+    @apply outline-none ring-0 transition-shadow;
+  }
+  .focus-ring:focus-visible {
+    @apply ring-2 ring-sky-500/40 ring-offset-2 ring-offset-stone-950;
+  }
 }
