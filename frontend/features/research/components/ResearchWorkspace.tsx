@@ -114,54 +114,6 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-3">
-          <div className="section-title">Why it can work</div>
-          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">
-            The strongest reasons this subnet currently earns a place near the top of the list.
-          </p>
-          <CompactInsightList items={memo.interesting} empty="No clear positive drivers were emitted." />
-        </div>
-
-        <div className="space-y-3">
-          <div className="section-title">What could break it</div>
-          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">
-            The main failure modes and drags that can invalidate the upside case.
-          </p>
-          <CompactInsightList items={memo.breaks} empty="No explicit failure modes were emitted." />
-        </div>
-
-        <div className="space-y-3">
-          <div className="section-title">How much to trust it</div>
-          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">
-            The most important uncertainties still able to move the memo.
-          </p>
-          <CompactInsightList items={memo.uncertainties} empty="No major trust warnings were emitted." />
-        </div>
-      </section>
-
-      <section className="surface-panel p-5 sm:p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="space-y-3">
-            <div className="section-title">Stress view</div>
-            <p className="text-sm leading-6 text-[color:var(--text-secondary)]">
-              A compact view of how the thesis behaves once it meets real conditions and adverse scenarios.
-            </p>
-            <CompactInsightList items={memo.scenarioItems} empty="No stress scenarios were provided." limit={3} />
-          </div>
-
-          <div className="space-y-3">
-            <div className="section-title">Links</div>
-            <div className="flex flex-wrap gap-2">
-              {memo.links.map((link) => (
-                <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="button-secondary">
-                  {link.label}
-                </a>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   )
 }
