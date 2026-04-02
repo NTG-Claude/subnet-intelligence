@@ -211,10 +211,10 @@ export default function DiscoverWorkspace({
                 <div className="grid grid-cols-[64px_minmax(0,1.75fr)_76px_76px_76px_88px] gap-3 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
                   <SortHeader label="Rank" active={sort === 'rank'} direction={direction} onClick={() => toggleSort('rank')} />
                   <div>Subnet</div>
-                  <SortHeader label="Quality" active={sort === 'quality'} direction={direction} align="right" onClick={() => toggleSort('quality')} />
-                  <SortHeader label="Mispricing" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => toggleSort('mispricing')} />
-                  <SortHeader label="Fragility" active={sort === 'fragility'} direction={direction} align="right" onClick={() => toggleSort('fragility')} />
-                  <SortHeader label="Confidence" active={sort === 'confidence'} direction={direction} align="right" onClick={() => toggleSort('confidence')} />
+                  <SortHeader label="Strength" active={sort === 'quality'} direction={direction} align="right" onClick={() => toggleSort('quality')} />
+                  <SortHeader label="Upside Gap" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => toggleSort('mispricing')} />
+                  <SortHeader label="Risk" active={sort === 'fragility'} direction={direction} align="right" onClick={() => toggleSort('fragility')} />
+                  <SortHeader label="Evidence Quality" active={sort === 'confidence'} direction={direction} align="right" onClick={() => toggleSort('confidence')} />
                 </div>
 
                 <div>
