@@ -18,8 +18,9 @@ import httpx
 from collectors.models import RepoActivitySnapshot
 from scorer.bittensor_client import get_all_netuids
 from scorer.database import create_tables, upsert_external_data_snapshot
-from scorer.github_client import get_commits_last_30d, get_repo_stats
+from scorer.github_client import get_commits_last_30d, get_repo_from_url, get_repo_stats
 from scorer.subnet_github_mapper import get_github_coords
+from scorer.taostats_client import TaostatsClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,16 @@ def _github_url(owner: Optional[str], repo: Optional[str]) -> Optional[str]:
 async def _snapshot_for_netuid(
     netuid: int,
     client: httpx.AsyncClient,
+    taostats_links: Optional[dict[int, dict[str, str]]] = None,
 ) -> RepoActivitySnapshot:
     fetched_at = datetime.now(timezone.utc).isoformat()
-    coords = await get_github_coords(netuid, live_fetch=True)
+    github_url = None
+    if taostats_links:
+        github_url = (taostats_links.get(netuid) or {}).get("github_url")
+
+    coords = get_repo_from_url(github_url) if github_url else None
+    if coords is None:
+        coords = await get_github_coords(netuid, live_fetch=True)
     if not coords:
         return RepoActivitySnapshot(
             source_status="unmapped",
@@ -48,7 +56,7 @@ async def _snapshot_for_netuid(
     )
     source_status = "active_repo" if commits or repo else "mapped_no_data"
     return RepoActivitySnapshot(
-        github_url=_github_url(coords.owner, coords.repo),
+        github_url=github_url or _github_url(coords.owner, coords.repo),
         owner=coords.owner,
         repo=coords.repo,
         source_status=source_status,
@@ -73,10 +81,18 @@ async def refresh_external_data_snapshots(
         return {}
 
     results: dict[int, RepoActivitySnapshot] = {}
+    taostats_links: dict[int, dict[str, str]] = {}
+    try:
+        async with TaostatsClient() as tc:
+            taostats_links = await tc.scrape_all_subnet_external_links_from_subnets_page()
+        logger.info("Loaded TaoStats external links for %d subnets", len(taostats_links))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("TaoStats external link scrape failed: %s", exc)
+
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for netuid in netuids:
             try:
-                snapshot = await _snapshot_for_netuid(netuid, client)
+                snapshot = await _snapshot_for_netuid(netuid, client, taostats_links=taostats_links)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("External data refresh failed for SN%d: %s", netuid, exc)
                 snapshot = RepoActivitySnapshot(

@@ -32,6 +32,16 @@ _JSON_NAME_PATTERNS = (
     re.compile(r'"subnet_name"\s*:\s*"(?P<name>[^"]+)"', re.IGNORECASE),
     re.compile(r'"name"\s*:\s*"(?P<name>[^"]+)"', re.IGNORECASE),
 )
+_JSON_GITHUB_PATTERNS = (
+    re.compile(r'"github"\s*:\s*"(?P<url>[^"]+)"', re.IGNORECASE),
+    re.compile(r'"github_url"\s*:\s*"(?P<url>[^"]+)"', re.IGNORECASE),
+    re.compile(r'"github_repo"\s*:\s*"(?P<url>[^"]+)"', re.IGNORECASE),
+)
+_JSON_WEBSITE_PATTERNS = (
+    re.compile(r'"subnet_url"\s*:\s*"(?P<url>[^"]+)"', re.IGNORECASE),
+    re.compile(r'"website"\s*:\s*"(?P<url>[^"]+)"', re.IGNORECASE),
+    re.compile(r'"url"\s*:\s*"(?P<url>[^"]+)"', re.IGNORECASE),
+)
 _PUBLIC_NAME_RE_TEMPLATE = r"SN\s*{netuid}\s*(?:\s*[^\w\s]+\s*)+(?P<name>.+?)\s*(?:\s*[^\w\s]+\s*)+taostats"
 _PUBLIC_NAME_PATHS = (
     "/subnets/{netuid}/distribution",
@@ -422,6 +432,19 @@ class TaostatsClient:
         response.raise_for_status()
         return _extract_subnet_names_from_subnets_page(response.text)
 
+    async def scrape_all_subnet_external_links_from_subnets_page(self) -> dict[int, dict[str, str]]:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        url = f"{PUBLIC_BASE_URL}{_SUBNETS_PAGE_PATH}"
+        response = await self._c.get(url, timeout=30.0, headers=headers)
+        response.raise_for_status()
+        return _extract_subnet_external_links_from_subnets_page(response.text)
+
     async def scrape_public_subnet_name_candidates(self, netuids: list[int]) -> dict[int, dict[str, str]]:
         names: dict[int, dict[str, str]] = {}
         if not netuids:
@@ -588,6 +611,52 @@ def _extract_subnet_names_from_subnets_page(page_html: str) -> dict[int, str]:
         names[netuid] = value
 
     return names
+
+
+def _extract_subnet_external_links_from_subnets_page(page_html: str) -> dict[int, dict[str, str]]:
+    decoded = (
+        page_html
+        .replace('\\"', '"')
+        .replace("\\/", "/")
+        .replace("\\n", " ")
+        .replace("\\t", " ")
+        .replace("\\u002F", "/")
+    )
+    links: dict[int, dict[str, str]] = {}
+    netuid_matches = list(_NETUID_RE.finditer(decoded))
+    for index, netuid_match in enumerate(netuid_matches):
+        netuid = int(netuid_match.group("netuid"))
+        start = netuid_match.start()
+        end = netuid_matches[index + 1].start() if index + 1 < len(netuid_matches) else min(len(decoded), start + 5000)
+        window = decoded[start:end]
+
+        github_url: Optional[str] = None
+        website: Optional[str] = None
+
+        for pattern in _JSON_GITHUB_PATTERNS:
+            match = pattern.search(window)
+            if match:
+                candidate = html.unescape(match.group("url")).strip()
+                if "github.com" in candidate.lower():
+                    github_url = candidate
+                    break
+
+        for pattern in _JSON_WEBSITE_PATTERNS:
+            match = pattern.search(window)
+            if match:
+                candidate = html.unescape(match.group("url")).strip()
+                if candidate.lower().startswith(("http://", "https://")):
+                    website = candidate
+                    break
+
+        if github_url or website:
+            links[netuid] = {}
+            if github_url:
+                links[netuid]["github_url"] = github_url
+            if website:
+                links[netuid]["website"] = website
+
+    return links
 
 
 def _extract_tao_app_subnet_name(page_html: str, netuid: int) -> Optional[str]:

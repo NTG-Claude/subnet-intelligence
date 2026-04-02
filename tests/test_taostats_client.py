@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from scorer.taostats_client import (
+    _extract_subnet_external_links_from_subnets_page,
     _extract_public_subnet_name,
     _extract_subnet_names_from_subnets_page,
     _extract_tao_app_subnet_name,
@@ -89,3 +90,20 @@ def test_extract_subnet_names_from_subnets_page_normalizes_templar():
     )
     names = _extract_subnet_names_from_subnets_page(html)
     assert names[3] == "Templar"
+
+
+def test_extract_subnet_external_links_from_subnets_page():
+    html = (
+        '<script>'
+        '{\\"netuid\\":39,\\"name\\":\\"basilica\\",'
+        '\\"github\\":\\"https://github.com/basilicaai/basilica\\",'
+        '\\"subnet_url\\":\\"https://basilica.ai/\\"},'
+        '{\\"netuid\\":64,\\"name\\":\\"Chutes\\",'
+        '\\"github\\":\\"https://github.com/chutesai/chutes\\",'
+        '\\"subnet_url\\":\\"https://chutes.ai/\\"}'
+        '</script>'
+    )
+    links = _extract_subnet_external_links_from_subnets_page(html)
+    assert links[39]["github_url"] == "https://github.com/basilicaai/basilica"
+    assert links[39]["website"] == "https://basilica.ai/"
+    assert links[64]["github_url"] == "https://github.com/chutesai/chutes"
