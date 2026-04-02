@@ -163,18 +163,18 @@ export const UNIVERSE_LENSES: UniverseLens[] = [
 
 export const UNIVERSE_SORTS: UniverseSortOption[] = [
   { id: 'rank', label: 'Rank' },
-  { id: 'mispricing', label: 'Mispricing' },
-  { id: 'quality', label: 'Quality' },
-  { id: 'confidence', label: 'Confidence' },
-  { id: 'fragility', label: 'Lowest fragility' },
+  { id: 'mispricing', label: 'Upside Gap' },
+  { id: 'quality', label: 'Strength' },
+  { id: 'confidence', label: 'Evidence Quality' },
+  { id: 'fragility', label: 'Lowest risk' },
   { id: 'updated', label: 'Updated' },
 ]
 
 const SIGNAL_META: Record<keyof PrimaryOutputs, Omit<SignalStat, 'value'>> = {
-  fundamental_quality: { key: 'fundamental_quality', label: 'Quality', shortLabel: 'QLTY', tone: 'quality' },
-  mispricing_signal: { key: 'mispricing_signal', label: 'Mispricing', shortLabel: 'MISP', tone: 'mispricing' },
-  fragility_risk: { key: 'fragility_risk', label: 'Fragility', shortLabel: 'FRAG', tone: 'fragility', invert: true },
-  signal_confidence: { key: 'signal_confidence', label: 'Confidence', shortLabel: 'CONF', tone: 'confidence' },
+  fundamental_quality: { key: 'fundamental_quality', label: 'Strength', shortLabel: 'STR', tone: 'quality' },
+  mispricing_signal: { key: 'mispricing_signal', label: 'Upside Gap', shortLabel: 'UPS', tone: 'mispricing' },
+  fragility_risk: { key: 'fragility_risk', label: 'Risk', shortLabel: 'RISK', tone: 'fragility', invert: true },
+  signal_confidence: { key: 'signal_confidence', label: 'Evidence Quality', shortLabel: 'EVID', tone: 'confidence' },
 }
 
 const BLOCK_LABELS: Record<string, string> = {
