@@ -73,6 +73,26 @@ class DetailedScoreHistoryPoint(BaseModel):
     top_negative_drags: list[dict] = Field(default_factory=list)
 
 
+class CompareSeriesSubnetPoint(BaseModel):
+    netuid: int
+    name: Optional[str] = None
+    score: float
+    fundamental_quality: Optional[float] = None
+    mispricing_signal: Optional[float] = None
+    fragility_risk: Optional[float] = None
+    signal_confidence: Optional[float] = None
+
+
+class CompareSeriesRunPoint(BaseModel):
+    computed_at: str
+    subnets: list[CompareSeriesSubnetPoint]
+
+
+class CompareSeriesResponse(BaseModel):
+    runs: list[CompareSeriesRunPoint]
+    total_subnets: int
+
+
 class SubnetDetailResponse(BaseModel):
     netuid: int
     name: Optional[str] = None
