@@ -50,9 +50,11 @@ function SnapshotColumn({
                   <div className="mt-2 text-base font-medium text-stone-200">{row.name}</div>
                   <p className="mt-1 text-sm leading-6 text-stone-400">{row.decisionLine}</p>
                 </div>
-                <div className="min-w-[92px] text-right">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-stone-500">Trust</div>
-                  <div className="mt-1 text-sm text-stone-200">{row.trustLabel}</div>
+                <div className="min-w-[132px] text-right">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-stone-500">Model label</div>
+                  <div className="mt-1 inline-flex justify-end">
+                    <StatusBadge tone={row.modelLabelTone}>{row.modelLabel}</StatusBadge>
+                  </div>
                 </div>
               </div>
 

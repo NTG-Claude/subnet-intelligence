@@ -80,11 +80,7 @@ export default function ResearchList({ rows, currentLensTitle, emptyMessage, com
 
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
-                {row.statusFlags.map((flag) => (
-                  <StatusBadge key={flag.label} tone={flag.tone}>
-                    {flag.label}
-                  </StatusBadge>
-                ))}
+                <StatusBadge tone={row.modelLabelTone}>{row.modelLabel}</StatusBadge>
               </div>
 
               <div className="space-y-2">
@@ -95,9 +91,9 @@ export default function ResearchList({ rows, currentLensTitle, emptyMessage, com
                     </Link>
                     <div className="mt-2 text-sm text-stone-500">{row.decisionLine}</div>
                   </div>
-                  <div className="min-w-[124px] rounded-2xl border border-white/10 bg-stone-950 px-3 py-2 text-right">
-                    <div className="text-[11px] uppercase tracking-[0.2em] text-stone-500">Trust</div>
-                    <div className="mt-1 text-sm font-medium text-stone-100">{row.trustLabel}</div>
+                  <div className="min-w-[164px] rounded-2xl border border-white/10 bg-stone-950 px-3 py-2 text-right">
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-stone-500">Model label</div>
+                    <div className="mt-1 text-sm font-medium text-stone-100">{row.modelLabel}</div>
                   </div>
                 </div>
                 <p className="max-w-4xl text-sm leading-6 text-stone-400">{row.thesisLine}</p>

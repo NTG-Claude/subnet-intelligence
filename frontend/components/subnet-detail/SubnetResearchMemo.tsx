@@ -29,11 +29,7 @@ export default function SubnetResearchMemo({ memo }: { memo: DetailMemoViewModel
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="neutral">{memo.netuidLabel}</StatusBadge>
-              {memo.summaryFlags.map((flag) => (
-                <StatusBadge key={flag.label} tone={flag.tone}>
-                  {flag.label}
-                </StatusBadge>
-              ))}
+              <StatusBadge tone={memo.modelLabelTone}>{memo.modelLabel}</StatusBadge>
             </div>
 
             <div className="space-y-3">

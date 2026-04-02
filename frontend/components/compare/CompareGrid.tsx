@@ -24,11 +24,7 @@ export default function CompareGrid({ memos }: { memos: DetailMemoViewModel[] })
           <section key={memo.netuidLabel} className="rounded-3xl border border-white/10 bg-[#11161c] p-5">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="neutral">{memo.netuidLabel}</StatusBadge>
-              {memo.summaryFlags.map((flag) => (
-                <StatusBadge key={flag.label} tone={flag.tone}>
-                  {flag.label}
-                </StatusBadge>
-              ))}
+              <StatusBadge tone={memo.modelLabelTone}>{memo.modelLabel}</StatusBadge>
             </div>
             <div className="mt-4 space-y-2">
               <Link href={memo.href} className="text-2xl font-semibold tracking-tight text-stone-50 transition-colors hover:text-sky-200">

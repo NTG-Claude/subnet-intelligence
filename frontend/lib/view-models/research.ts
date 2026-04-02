@@ -48,6 +48,8 @@ export interface UniverseRowViewModel {
   href: string
   name: string
   netuidLabel: string
+  modelLabel: string
+  modelLabelTone: SignalTone
   thesisLine: string
   decisionLine: string
   signals: SignalStat[]
@@ -62,7 +64,6 @@ export interface UniverseRowViewModel {
   rankLabel: string
   percentileLabel: string
   updatedLabel: string
-  trustLabel: string
   compareLabel: string
   awaitingRun: boolean
   updatedAtMs: number
@@ -81,6 +82,8 @@ export interface DetailMemoViewModel {
   name: string
   netuidLabel: string
   href: string
+  modelLabel: string
+  modelLabelTone: SignalTone
   thesis: string
   decisionLine: string
   updatedLabel: string
@@ -318,13 +321,21 @@ function summaryWarnings(subnet: SubnetSummary): ResearchHint[] {
   return clipHints(warnings, 3)
 }
 
-function trustLabel(subnet: SubnetSummary): string {
-  if (!subnet.primary_outputs) return 'Awaiting run'
-  if (visibilityCount(subnet.analysis_preview?.conditioning, 'discarded') > 0) return 'Visibility gaps'
-  if (visibilityCount(subnet.analysis_preview?.conditioning, 'reconstructed') > 0) return 'Repaired telemetry'
-  if (confidenceValue(subnet) < 45) return 'Low confidence'
-  if (confidenceValue(subnet) < 65) return 'Adequate confidence'
-  return 'Usable confidence'
+function modelLabelValue(subnet: Pick<SubnetSummary, 'label'>): string {
+  return subnet.label?.trim() || 'Evidence Limited'
+}
+
+function modelLabelTone(label: string): SignalTone {
+  if (label === 'Compounding Quality' || label === 'Underpriced Quality' || label === 'Quality Leader') {
+    return 'quality'
+  }
+  if (label === 'Crowded Reflexive' || label === 'Fragile Yield' || label === 'Overrewarded' || label === 'Dereg Risk') {
+    return 'fragility'
+  }
+  if (label === 'Evidence Limited' || label === 'Consensus Hollow') {
+    return 'warning'
+  }
+  return 'neutral'
 }
 
 function decisionLineFromOutputs(outputs: PrimaryOutputs | null | undefined): string {
@@ -407,6 +418,8 @@ export function toUniverseRow(subnet: SubnetSummary): UniverseRowViewModel {
     href: `/subnets/${subnet.netuid}`,
     name: toDisplayName(subnet.name, subnet.netuid),
     netuidLabel: `SN${subnet.netuid}`,
+    modelLabel: modelLabelValue(subnet),
+    modelLabelTone: modelLabelTone(modelLabelValue(subnet)),
     thesisLine: subnet.thesis ?? 'No concise thesis has been produced for this run yet.',
     decisionLine: decisionLineFromOutputs(subnet.primary_outputs),
     signals: getSignalStats(subnet.primary_outputs),
@@ -421,7 +434,6 @@ export function toUniverseRow(subnet: SubnetSummary): UniverseRowViewModel {
     rankLabel: subnet.rank ? `#${subnet.rank}` : 'n/a',
     percentileLabel: subnet.percentile != null ? `${subnet.percentile.toFixed(1)}th` : 'n/a',
     updatedLabel: formatDateTime(subnet.computed_at),
-    trustLabel: trustLabel(subnet),
     compareLabel: compareLabel(subnet),
     awaitingRun: !subnet.primary_outputs,
     updatedAtMs: parseTimestamp(subnet.computed_at),
@@ -611,6 +623,8 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     name: toDisplayName(subnet.name, subnet.netuid),
     netuidLabel: `SN${subnet.netuid}`,
     href: `/subnets/${subnet.netuid}`,
+    modelLabel: summary.modelLabel,
+    modelLabelTone: summary.modelLabelTone,
     thesis: subnet.thesis ?? analysis?.thesis ?? 'No concise thesis generated yet.',
     decisionLine: summary.decisionLine,
     updatedLabel: formatDateTime(subnet.computed_at),
@@ -622,7 +636,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
       { label: 'Rank', value: subnet.rank ? `#${subnet.rank}` : 'n/a' },
       { label: 'Percentile', value: subnet.percentile != null ? `${subnet.percentile.toFixed(1)}th` : 'n/a' },
       { label: 'Updated', value: formatDateTime(subnet.computed_at), tone: isStale(subnet.computed_at) ? 'warning' : 'neutral' },
-      { label: 'Read state', value: summary.trustLabel, tone: summary.awaitingRun ? 'warning' : 'confidence' },
+      { label: 'Model label', value: summary.modelLabel, tone: summary.modelLabelTone },
     ],
     interesting: toMemoItems(analysis?.top_positive_drivers, 'quality'),
     signalContributorSections: contributorSections,
