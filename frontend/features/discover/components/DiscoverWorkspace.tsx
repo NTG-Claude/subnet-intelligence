@@ -31,6 +31,28 @@ function reverseRows(rows: UniverseRowViewModel[]): UniverseRowViewModel[] {
   return [...rows].reverse()
 }
 
+function rankMap(rows: UniverseRowViewModel[], key: 'quality' | 'mispricing' | 'confidence' | 'fragility') {
+  const ordered = [...rows].sort((a, b) => {
+    if (key === 'fragility') {
+      const aValue = a.signals.find((item) => item.key === 'fragility_risk')?.value ?? Number.POSITIVE_INFINITY
+      const bValue = b.signals.find((item) => item.key === 'fragility_risk')?.value ?? Number.POSITIVE_INFINITY
+      return aValue - bValue || a.id - b.id
+    }
+
+    const signalKey =
+      key === 'quality'
+        ? 'fundamental_quality'
+        : key === 'mispricing'
+          ? 'mispricing_signal'
+          : 'signal_confidence'
+    const aValue = a.signals.find((item) => item.key === signalKey)?.value ?? Number.NEGATIVE_INFINITY
+    const bValue = b.signals.find((item) => item.key === signalKey)?.value ?? Number.NEGATIVE_INFINITY
+    return bValue - aValue || a.id - b.id
+  })
+
+  return new Map(ordered.map((row, index) => [row.id, index + 1]))
+}
+
 function SortHeader({
   label,
   active,
@@ -176,6 +198,20 @@ export default function DiscoverWorkspace({
 
   const previewId = pinnedId ?? focusedId
   const previewRow = rows.find((row) => row.id === previewId) ?? null
+  const metricRanks = useMemo(() => {
+    if (!previewRow) return null
+    const strengthRanks = rankMap(rows, 'quality')
+    const upsideRanks = rankMap(rows, 'mispricing')
+    const riskRanks = rankMap(rows, 'fragility')
+    const evidenceRanks = rankMap(rows, 'confidence')
+    return {
+      strength: strengthRanks.get(previewRow.id) ?? rows.length,
+      upside: upsideRanks.get(previewRow.id) ?? rows.length,
+      risk: riskRanks.get(previewRow.id) ?? rows.length,
+      evidence: evidenceRanks.get(previewRow.id) ?? rows.length,
+      total: rows.length,
+    }
+  }, [previewRow, rows])
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
     .filter((item): item is SubnetSummary => Boolean(item))
@@ -300,7 +336,12 @@ export default function DiscoverWorkspace({
           )}
         </section>
 
-        <SidePreviewPanel row={previewRow} selected={previewRow ? compareIds.includes(previewRow.id) : false} onToggleCompare={toggleCompare} />
+        <SidePreviewPanel
+          row={previewRow}
+          metricRanks={metricRanks}
+          selected={previewRow ? compareIds.includes(previewRow.id) : false}
+          onToggleCompare={toggleCompare}
+        />
       </section>
 
       <CompareDock items={compareItems} onRemove={(id) => setCompareIds((current) => current.filter((item) => item !== id))} />
