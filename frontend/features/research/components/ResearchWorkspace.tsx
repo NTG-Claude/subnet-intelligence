@@ -37,33 +37,40 @@ function buildInvestmentRead(memo: DetailMemoViewModel): string {
   return parts.join(' ')
 }
 
-function DetailCluster({
+function cleanText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function buildNarrative(
+  lead: string,
+  items: MemoSectionItem[],
+  fallback: string,
+): string {
+  const points = items
+    .slice(0, 3)
+    .map((item) => cleanText(item.body))
+    .filter(Boolean)
+
+  if (!points.length) return fallback
+
+  const [first, second, third] = points
+  const sentences = [lead, first]
+  if (second) sentences.push(second)
+  if (third) sentences.push(third)
+  return sentences.join(' ')
+}
+
+function NarrativeSection({
   title,
-  intro,
-  items,
-  empty,
+  body,
 }: {
   title: string
-  intro: string
-  items: MemoSectionItem[]
-  empty: string
+  body: string
 }) {
   return (
     <div className="surface-subtle p-4">
       <div className="eyebrow">{title}</div>
-      <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{intro}</p>
-      {items.length ? (
-        <div className="mt-4 space-y-3">
-          {items.slice(0, 3).map((item, index) => (
-            <div key={`${item.title}-${index}`} className="rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-3)] p-3">
-              <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
-              <p className="mt-1 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-4 text-sm text-[color:var(--text-tertiary)]">{empty}</div>
-      )}
+      <p className="mt-2 text-sm leading-7 text-[color:var(--text-secondary)]">{body}</p>
     </div>
   )
 }
@@ -81,6 +88,27 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
     memo.interesting
   const riskItems = memo.fragilityContributors.length ? memo.fragilityContributors : memo.breaks
   const evidenceItems = memo.uncertainties.length ? memo.uncertainties : memo.confidenceItems
+
+  const strengthNarrative = buildNarrative(
+    'This score is mainly a read on how durable and fundamentally sound the subnet looks today.',
+    strengthItems,
+    'This score suggests the subnet looks fundamentally solid, but the current data does not surface many specific strengths.',
+  )
+  const upsideNarrative = buildNarrative(
+    'This score reflects how much upside the model still sees from the current setup rather than how good the subnet is in absolute terms.',
+    upsideItems,
+    'This score suggests there may be some upside, but the current data does not point to a large valuation gap.',
+  )
+  const riskNarrative = buildNarrative(
+    'This score is about how easily the thesis could break if conditions worsen, liquidity tightens, or execution disappoints.',
+    riskItems,
+    'This score suggests the model does not currently see one dominant break-risk factor.',
+  )
+  const evidenceNarrative = buildNarrative(
+    'This score tells you how much trust to place in the read based on how clean, complete, and decision-useful the evidence is.',
+    evidenceItems,
+    'This score suggests the evidence base is reasonably usable, with no single warning dominating the memo.',
+  )
 
   return (
     <div className="space-y-6 pb-12">
@@ -118,29 +146,21 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <DetailCluster
+            <NarrativeSection
               title="Why Strength Looks Like This"
-              intro="The strength score reflects the operating quality and durability the model sees in the subnet today."
-              items={strengthItems}
-              empty="No additional strength drivers were emitted."
+              body={strengthNarrative}
             />
-            <DetailCluster
+            <NarrativeSection
               title="Why Upside Gap Looks Like This"
-              intro="This explains why the model still sees, or does not see, enough valuation gap to justify upside from here."
-              items={upsideItems}
-              empty="No specific upside-gap drivers were emitted."
+              body={upsideNarrative}
             />
-            <DetailCluster
+            <NarrativeSection
               title="Why Risk Looks Like This"
-              intro="This captures the main ways the thesis can break under stress, crowding, liquidity pressure, or weaker execution."
-              items={riskItems}
-              empty="No specific risk drivers were emitted."
+              body={riskNarrative}
             />
-            <DetailCluster
+            <NarrativeSection
               title="Why Evidence Quality Looks Like This"
-              intro="This explains how clean, complete, and decision-useful the underlying evidence base currently is."
-              items={evidenceItems}
-              empty="No specific evidence-quality warnings were emitted."
+              body={evidenceNarrative}
             />
           </div>
         </div>
