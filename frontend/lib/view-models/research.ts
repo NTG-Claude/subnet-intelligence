@@ -211,6 +211,10 @@ function contributorLabel(item: ExplanationContributor): string {
   return item.short_explanation || item.metric || item.name || item.source_block || 'Unspecified contributor'
 }
 
+function contributorKey(item: ExplanationContributor): string {
+  return item.name || item.metric || ''
+}
+
 function contributorTitle(item: ExplanationContributor): string {
   return item.metric || item.name || item.source_block || 'Contributor'
 }
@@ -318,10 +322,122 @@ function cleanSentence(value: string | undefined | null): string {
   return (value ?? '').replace(/\s+/g, ' ').trim()
 }
 
+function metricPhrase(name: string | undefined | null): string {
+  switch (name) {
+    case 'fragility':
+      return 'downside and liquidity stress remain contained'
+    case 'fundamental_health':
+      return 'core operating quality is holding up'
+    case 'thesis_confidence':
+      return 'the broader thesis still hangs together'
+    case 'market_confidence':
+      return 'market structure is good enough to underwrite the setup'
+    case 'confidence_factor':
+      return 'the evidence stack is coherent enough for a first-pass read'
+    case 'base_opportunity':
+      return 'the market is still leaving some valuation upside on the table'
+    case 'data_confidence':
+      return 'data coverage is good enough to support the case'
+    case 'reserve_change':
+      return 'reserve growth has not yet translated into a stronger market response'
+    case 'liquidity_improvement_rate':
+      return 'liquidity is not improving fast enough to widen the upside case'
+    case 'reserve_growth_without_price':
+      return 'fundamental improvement is not yet being rewarded in price'
+    case 'quality_acceleration':
+      return 'quality is solid, but the rate of improvement is not accelerating'
+    case 'price_response_lag_to_quality_shift':
+      return 'the rerating window may be narrower than the quality trend suggests'
+    case 'expected_price_response_gap':
+      return 'the price-response gap is not as wide as in the strongest rerating setups'
+    case 'emission_to_sticky_usage_conversion':
+      return 'emissions are not yet converting cleanly into sticky usage'
+    case 'post_incentive_retention':
+      return 'retention still needs to hold once incentives are less supportive'
+    case 'emission_efficiency':
+      return 'capital is not converting into usage efficiently enough'
+    case 'cohort_quality_edge':
+      return 'quality leadership versus peers is not overwhelming'
+    case 'discarded_inputs':
+      return 'part of the history had to be discarded, so visibility is incomplete'
+    case 'external_data_reliability':
+      return 'external corroboration is still thin'
+    default:
+      return ''
+  }
+}
+
+function sentenceCase(text: string): string {
+  if (!text) return text
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+function strongestBlock(blockScores: Record<string, number> | undefined, keys: string[]): string | null {
+  if (!blockScores) return null
+  let bestKey: string | null = null
+  let bestValue = -Infinity
+  for (const key of keys) {
+    const value = blockScores[key]
+    if (typeof value === 'number' && value > bestValue) {
+      bestValue = value
+      bestKey = key
+    }
+  }
+  return bestKey
+}
+
+function weakestBlock(blockScores: Record<string, number> | undefined, keys: string[]): string | null {
+  if (!blockScores) return null
+  let worstKey: string | null = null
+  let worstValue = Infinity
+  for (const key of keys) {
+    const value = blockScores[key]
+    if (typeof value === 'number' && value < worstValue) {
+      worstValue = value
+      worstKey = key
+    }
+  }
+  return worstKey
+}
+
+function supportSentence(subnet: SubnetSummary): string {
+  const blocks = subnet.analysis_preview?.block_scores
+  const primarySupport =
+    strongestBlock(blocks, ['fundamental_health', 'structural_validity', 'market_legitimacy', 'confidence_factor']) ??
+    subnet.analysis_preview?.top_positive_drivers?.[0]?.name
+
+  switch (primarySupport) {
+    case 'fundamental_health':
+      return 'The rank is being earned by strong underlying quality rather than by a speculative rerating.'
+    case 'structural_validity':
+      return 'It ranks well because the market structure still looks investable instead of fragile or crowded.'
+    case 'market_legitimacy':
+      return 'It is screening well because the network already looks credible enough to carry institutional attention.'
+    case 'confidence_factor':
+      return 'It holds a high rank because the evidence stack is coherent enough to support the thesis.'
+    default:
+      return 'It ranks well because the model sees a credible quality base with manageable downside.'
+  }
+}
+
+function headwindSentence(subnet: SubnetSummary): string {
+  const drag =
+    subnet.analysis_preview?.top_negative_drags?.find((item) => metricPhrase(contributorKey(item))) ??
+    subnet.analysis_preview?.key_uncertainties?.find((item) => metricPhrase(item.name))
+
+  const dragKey = drag ? ('metric' in drag ? contributorKey(drag) : drag.name) : ''
+  const dragText = metricPhrase(dragKey)
+  if (!dragText) return ''
+
+  if (dragKey === 'discarded_inputs') {
+    return `The main caveat is that ${dragText}.`
+  }
+
+  return `The current limiter is that ${dragText}.`
+}
+
 function rankingHeadline(subnet: SubnetSummary): string {
   const outputs = subnet.primary_outputs
-  const positive = cleanSentence(subnet.analysis_preview?.top_positive_drivers?.[0]?.short_explanation)
-  const negative = cleanSentence(subnet.analysis_preview?.top_negative_drags?.[0]?.short_explanation)
 
   if (!outputs) {
     return 'The ranking is provisional because the latest scored output is still missing.'
@@ -332,36 +448,53 @@ function rankingHeadline(subnet: SubnetSummary): string {
   const fragility = outputs.fragility_risk
   const confidence = outputs.signal_confidence
 
-  if (quality >= 70 && fragility <= 35) {
-    return positive || 'This name ranks well because quality is already visible and the downside profile is still relatively contained.'
+  if (quality >= 70 && fragility <= 30 && mispricing < 55) {
+    return `${supportSentence(subnet)} This reads more like a high-quality compounder than a pure multiple-expansion trade.`
   }
-  if (mispricing >= 65 && confidence >= 55) {
-    return positive || 'This name ranks on a real valuation gap, and the evidence is good enough for that gap to matter.'
+  if (mispricing >= 60 && confidence >= 55) {
+    return `${supportSentence(subnet)} The model still sees enough valuation gap for a rerating case to matter.`
+  }
+  if (quality >= 65 && confidence < 50) {
+    return `${supportSentence(subnet)} The rank would be easier to trust with a cleaner evidence base.`
   }
   if (quality >= 65 && mispricing < 50) {
-    return 'This ranking is being earned more by business quality than by a large valuation disconnect, so upside depends on execution compounding from here.'
+    return `${supportSentence(subnet)} Upside from here depends more on continued execution than on an obvious valuation disconnect.`
   }
   if (fragility >= 65) {
-    return negative || 'The rank is being held back because the stress profile is still fragile enough to cap position quality.'
+    return 'The rank is being held back because the stress profile is still fragile enough to cap position quality.'
   }
   if (confidence < 50) {
     return 'The score is interesting, but the rank is capped by evidence quality and how much confidence we can place in the read.'
   }
 
-  return positive || 'The current rank reflects a mixed but investable setup where quality, upside, and fragility are still in balance.'
+  return `${supportSentence(subnet)} The setup remains balanced rather than dominant on any single dimension.`
 }
 
 function rankingCatalystLine(subnet: SubnetSummary): string {
-  const positive = cleanSentence(subnet.analysis_preview?.top_positive_drivers?.[0]?.short_explanation)
-  const negative = cleanSentence(subnet.analysis_preview?.top_negative_drags?.[0]?.short_explanation)
-  const uncertainty = cleanSentence(subnet.analysis_preview?.key_uncertainties?.[0]?.short_explanation)
+  const outputs = subnet.primary_outputs
+  const blocks = subnet.analysis_preview?.block_scores
+  const positiveDriver =
+    subnet.analysis_preview?.top_positive_drivers?.find((item) => metricPhrase(contributorKey(item))) ??
+    subnet.analysis_preview?.top_positive_drivers?.[0]
+  const supportText = metricPhrase(positiveDriver ? contributorKey(positiveDriver) : '')
 
-  const catalystPieces = [positive, negative ? `Watch item: ${negative}` : '', uncertainty ? `Key uncertainty: ${uncertainty}` : '']
-    .filter(Boolean)
-    .slice(0, 3)
+  const weakestSupportBlock = weakestBlock(blocks, ['opportunity_underreaction', 'evidence_confidence', 'confidence_factor'])
+  let middleSentence = ''
+  if (weakestSupportBlock === 'opportunity_underreaction' || (outputs && outputs.mispricing_signal < 50)) {
+    middleSentence = 'What is missing today is a larger valuation gap.'
+  } else if (weakestSupportBlock === 'evidence_confidence' || weakestSupportBlock === 'confidence_factor' || (outputs && outputs.signal_confidence < 50)) {
+    middleSentence = 'The main thing still missing is cleaner evidence.'
+  }
 
-  if (catalystPieces.length) {
-    return catalystPieces.join(' ')
+  const dragSentence = headwindSentence(subnet)
+  const pieces = [
+    supportText ? `${sentenceCase(supportText)}.` : '',
+    middleSentence,
+    dragSentence,
+  ].filter(Boolean)
+
+  if (pieces.length) {
+    return pieces.join(' ')
   }
 
   return decisionLineFromOutputs(subnet.primary_outputs)
