@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
+import MetricCard from '@/components/ui/MetricCard'
 import PageHeader from '@/components/ui/PageHeader'
 import { SubnetSummary } from '@/lib/api'
 import { UniverseRowViewModel, UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
@@ -193,18 +194,50 @@ export default function DiscoverWorkspace({
       />
 
       <section className="surface-panel p-4 sm:p-5">
-        <div className="w-full max-w-xl">
-          <label htmlFor="discover-search" className="eyebrow">
-            Search
-          </label>
-          <input
-            id="discover-search"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search subnet or netuid"
-            className="mt-2 min-h-11 w-full rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-4 text-sm text-[color:var(--text-primary)] outline-none placeholder:text-[color:var(--text-tertiary)]"
-          />
+        <div className="space-y-5">
+          <div className="w-full max-w-xl">
+            <label htmlFor="discover-search" className="eyebrow">
+              Search
+            </label>
+            <input
+              id="discover-search"
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search subnet or netuid"
+              className="mt-2 min-h-11 w-full rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-4 text-sm text-[color:var(--text-primary)] outline-none placeholder:text-[color:var(--text-tertiary)]"
+            />
+          </div>
+
+          <div>
+            <div className="eyebrow">How To Read The Table</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                label="Strength"
+                value="How strong is the subnet?"
+                meta="Higher means the network looks fundamentally healthier and more durable."
+                accent="quality"
+              />
+              <MetricCard
+                label="Upside Gap"
+                value="How much upside is left?"
+                meta="Higher means the model still sees a larger gap between current pricing and fairer value."
+                accent="mispricing"
+              />
+              <MetricCard
+                label="Risk"
+                value="How easily can the thesis break?"
+                meta="Lower is better. A lower score means less fragility under stress, crowding, or thin liquidity."
+                accent="fragility"
+              />
+              <MetricCard
+                label="Evidence Quality"
+                value="How much should I trust the read?"
+                meta="Higher means the evidence base is cleaner, more complete, and easier to underwrite."
+                accent="confidence"
+              />
+            </div>
+          </div>
         </div>
       </section>
 
