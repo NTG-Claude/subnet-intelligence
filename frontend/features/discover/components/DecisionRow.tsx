@@ -26,35 +26,33 @@ export default function DecisionRow({
   return (
     <article
       className={cn(
-        'grid cursor-default grid-cols-[74px_minmax(0,1.5fr)_88px_88px_88px_88px] items-center gap-3 border-t border-[color:var(--border-subtle)] px-4 py-3 transition-colors sm:px-5',
-        focused && 'bg-[color:rgba(19,32,44,0.6)]',
-        selected && 'ring-1 ring-inset ring-[color:var(--mispricing-border)]',
+        'grid cursor-default grid-cols-[64px_minmax(0,1.75fr)_76px_76px_76px_88px] items-center gap-3 border-t border-[color:var(--border-subtle)] px-4 py-2.5 transition-colors sm:px-5',
+        focused && 'bg-[color:rgba(19,32,44,0.42)]',
+        selected && 'border-l-2 border-l-[color:var(--mispricing-strong)] pl-[14px] sm:pl-[18px]',
       )}
       tabIndex={0}
       onMouseEnter={onFocus}
       onFocus={onFocus}
     >
-      <div className="min-w-0">
-        <div className="text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
-        <div className="mt-1 text-xs text-[color:var(--text-tertiary)]">{row.percentileLabel}</div>
+      <div className="min-w-0 font-mono">
+        <div className="text-base font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
+        <div className="mt-0.5 text-[11px] text-[color:var(--text-tertiary)]">{row.percentileLabel}</div>
       </div>
 
       <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-base font-medium text-[color:var(--text-primary)]">{row.name}</div>
-            <div className="mt-1 text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
-          </div>
-          <StatusChip tone={row.modelLabelTone} className="shrink-0">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <div className="truncate text-[15px] font-medium text-[color:var(--text-primary)]">{row.name}</div>
+          <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
+          <div className="hidden truncate text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)] xl:block">
             {row.modelLabel}
-          </StatusChip>
+          </div>
         </div>
       </div>
 
-      <div className="text-sm font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
-      <div className="text-sm font-medium text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
-      <div className="text-sm font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
-      <div className="text-sm font-medium text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
+      <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
+      <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
+      <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
+      <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
     </article>
   )
 }

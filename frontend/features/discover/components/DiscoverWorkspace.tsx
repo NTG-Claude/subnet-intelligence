@@ -193,7 +193,7 @@ export default function DiscoverWorkspace({
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="surface-panel overflow-hidden p-0">
-          <div className="flex items-center justify-between gap-4 border-b border-[color:var(--border-subtle)] px-4 py-4 sm:px-5">
+          <div className="flex items-center justify-between gap-4 border-b border-[color:var(--border-subtle)] px-4 py-3 sm:px-5">
             <div>
               <div className="section-title">Ranked subnets</div>
               <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
@@ -206,13 +206,13 @@ export default function DiscoverWorkspace({
           {rows.length ? (
             <>
               <div className="hidden md:block">
-                <div className="grid grid-cols-[74px_minmax(0,1.5fr)_88px_88px_88px_88px] gap-3 border-b border-[color:var(--border-subtle)] px-4 py-3 text-[11px] font-medium uppercase tracking-[0.22em] text-[color:var(--text-tertiary)] sm:px-5">
+                <div className="grid grid-cols-[64px_minmax(0,1.75fr)_76px_76px_76px_88px] gap-3 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
                   <div>Rank</div>
                   <div>Subnet</div>
-                  <div>Quality</div>
-                  <div>Mispricing</div>
-                  <div>Fragility</div>
-                  <div>Confidence</div>
+                  <div className="text-right">Quality</div>
+                  <div className="text-right">Mispricing</div>
+                  <div className="text-right">Fragility</div>
+                  <div className="text-right">Confidence</div>
                 </div>
 
                 <div>
