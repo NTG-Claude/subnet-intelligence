@@ -1,5 +1,6 @@
 import pytest
 
+from collectors.models import RepoActivitySnapshot
 from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from features.types import AxisScores
 from features.types import FeatureBundle, PrimarySignals
@@ -184,6 +185,86 @@ def test_stabilize_primary_with_history_allows_larger_breakaway_when_runtime_is_
     assert stabilized.fundamental_quality > snapshot.history[0].fundamental_quality + PRIMARY_SIGNAL_DRIFT_CAPS["fundamental_quality"]
     assert stabilized.mispricing_signal > snapshot.history[0].mispricing_signal + PRIMARY_SIGNAL_DRIFT_CAPS["mispricing_signal"]
     assert stabilized.fragility_risk < snapshot.history[0].fragility_risk - PRIMARY_SIGNAL_DRIFT_CAPS["fragility_risk"]
+
+
+def test_external_repo_continuity_supports_confidence_beyond_empty_30d_window():
+    base_kwargs = dict(
+        current_block=1000,
+        n_total=128,
+        yuma_neurons=128,
+        active_neurons_7d=96,
+        active_validators_7d=8,
+        total_stake_tao=1_500_000.0,
+        unique_coldkeys=48,
+        top3_stake_fraction=0.52,
+        emission_per_block_tao=0.08,
+        incentive_scores=[0.12, 0.10, 0.09, 0.08],
+        n_validators=12,
+        tao_in_pool=42_000.0,
+        alpha_in_pool=1_200_000.0,
+        alpha_price_tao=0.035,
+        coldkey_stakes=[200_000.0, 150_000.0, 120_000.0],
+        validator_stakes=[180_000.0] * 12,
+        validator_weight_matrix=[],
+        validator_bond_matrix=[],
+        last_update_blocks=[5, 8, 13],
+        yuma_mask=[True] * 12,
+        mechanism_ids=[0],
+        immunity_period=0,
+        registration_allowed=True,
+        target_regs_per_interval=2,
+        min_burn=0.0,
+        max_burn=0.0,
+        difficulty=0.0,
+        history=[
+            HistoricalFeaturePoint(
+                timestamp="2026-03-20T00:00:00+00:00",
+                alpha_price_tao=0.034,
+                tao_in_pool=41_500.0,
+                emission_per_block_tao=0.08,
+                active_ratio=0.74,
+                participation_breadth=0.42,
+                validator_participation=0.68,
+                incentive_distribution_quality=0.61,
+                concentration_proxy=0.44,
+                liquidity_thinness=0.05,
+                market_relevance_proxy=0.62,
+                market_structure_floor=0.71,
+                intrinsic_quality=0.58,
+                economic_sustainability=0.61,
+                reflexivity=0.33,
+                stress_robustness=0.66,
+                opportunity_gap=0.05,
+                fundamental_quality=0.61,
+                mispricing_signal=0.41,
+                fragility_risk=0.29,
+                signal_confidence=0.48,
+            )
+        ],
+    )
+    no_repo_snapshot = RawSubnetSnapshot(netuid=201, **base_kwargs)
+    continuity_repo_snapshot = RawSubnetSnapshot(
+        netuid=202,
+        github=RepoActivitySnapshot(
+            github_url="https://github.com/example/subnet",
+            owner="example",
+            repo="subnet",
+            source_status="active_repo",
+            commits_30d=0,
+            contributors_30d=0,
+            commits_90d=24,
+            contributors_90d=3,
+            commits_180d=72,
+            contributors_180d=6,
+            last_push="2026-03-18T00:00:00+00:00",
+            last_commit_at="2026-03-18T00:00:00+00:00",
+        ),
+        **base_kwargs,
+    )
+
+    artifacts = build_scores([no_repo_snapshot, continuity_repo_snapshot])
+
+    assert artifacts[202].primary.signal_confidence > artifacts[201].primary.signal_confidence
 
 
 def test_stabilize_priority_with_history_limits_leaderboard_pressure():

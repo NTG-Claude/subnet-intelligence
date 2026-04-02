@@ -24,9 +24,10 @@ def build_confidence_components(
         + 0.20 * normalized.get("history_data_reliability", 0.0)
     )
     data_confidence = clamp01(
-        0.40 * evidence_depth
-        + 0.30 * evidence_consistency
-        + 0.30 * telemetry_quality
+        0.36 * evidence_depth
+        + 0.28 * evidence_consistency
+        + 0.24 * telemetry_quality
+        + 0.12 * normalized.get("external_data_reliability", 0.0)
     )
     market_confidence = clamp01(
         0.34 * base_components.get("market_relevance", 0.0)
@@ -35,11 +36,13 @@ def build_confidence_components(
         + 0.16 * normalized.get("market_data_reliability", 0.0)
     )
     thesis_confidence = clamp01(
-        0.30 * evidence_consistency
-        + 0.24 * opportunity_components.get("uncrowded_participation", 0.0)
-        + 0.18 * opportunity_components.get("fair_value_gap_light", 0.0)
-        + 0.16 * (1.0 - fragility_components.get("reversal_risk", 0.0))
-        + 0.12 * normalized.get("external_data_reliability", 0.0)
+        0.24 * evidence_consistency
+        + 0.22 * opportunity_components.get("uncrowded_participation", 0.0)
+        + 0.16 * opportunity_components.get("fair_value_gap_light", 0.0)
+        + 0.14 * (1.0 - fragility_components.get("reversal_risk", 0.0))
+        + 0.10 * normalized.get("external_source_legitimacy", 0.0)
+        + 0.08 * normalized.get("external_dev_recency", 0.0)
+        + 0.06 * normalized.get("external_dev_continuity", 0.0)
     )
     evidence_confidence = clamp01(
         0.40 * data_confidence

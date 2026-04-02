@@ -10,9 +10,11 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from scorer.github_client import (
+    CommitActivitySummary,
     CommitStats,
     RepoCoords,
     RepoStats,
+    get_commit_activity_summary,
     get_commits_last_30d,
     get_repo_from_url,
     get_repo_stats,
@@ -67,10 +69,10 @@ def test_get_repo_from_url_invalid(url):
 # get_commits_last_30d
 # ---------------------------------------------------------------------------
 
-def _mock_commit(login="user1", email="user1@example.com"):
+def _mock_commit(login="user1", email="user1@example.com", date="2026-03-25T10:00:00Z"):
     return {
         "author": {"login": login},
-        "commit": {"author": {"email": email}},
+        "commit": {"author": {"email": email, "date": date}},
     }
 
 
@@ -141,6 +143,40 @@ async def test_get_commits_last_30d_handles_none_payload():
 
 
 @pytest.mark.asyncio
+async def test_get_commit_activity_summary_builds_multi_horizon_windows():
+    commits = [
+        {
+            "author": {"login": "alice"},
+            "commit": {"author": {"email": "alice@example.com", "date": "2026-03-25T10:00:00Z"}},
+        },
+        {
+            "author": {"login": "bob"},
+            "commit": {"author": {"email": "bob@example.com", "date": "2026-02-10T10:00:00Z"}},
+        },
+        {
+            "author": {"login": "carol"},
+            "commit": {"author": {"email": "carol@example.com", "date": "2025-09-15T10:00:00Z"}},
+        },
+    ]
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[
+        _make_response(200, commits),
+        _make_response(200, []),
+    ])
+
+    result = await get_commit_activity_summary("owner", "repo", client=mock_client)
+
+    assert isinstance(result, CommitActivitySummary)
+    assert result.commits_30d == 1
+    assert result.unique_contributors_30d == 1
+    assert result.commits_90d == 2
+    assert result.unique_contributors_90d == 2
+    assert result.commits_180d == 2
+    assert result.unique_contributors_180d == 2
+    assert result.last_commit_at == "2026-03-25T10:00:00+00:00"
+
+
+@pytest.mark.asyncio
 async def test_get_commits_last_30d_ignores_none_commit_entries():
     commits = [_mock_commit("alice"), None, _mock_commit("bob")]
     mock_client = AsyncMock()
@@ -150,7 +186,7 @@ async def test_get_commits_last_30d_ignores_none_commit_entries():
     ])
     result = await get_commits_last_30d("owner", "repo", client=mock_client)
     assert result is not None
-    assert result.commits_30d == 3
+    assert result.commits_30d == 2
     assert result.unique_contributors_30d == 2
 
 

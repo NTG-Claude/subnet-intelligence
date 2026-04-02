@@ -96,10 +96,15 @@ class ExternalDataSnapshotRow(Base):
     fetched_at = Column(DateTime(timezone=True), nullable=False)
     commits_30d = Column(Integer, nullable=False, default=0)
     contributors_30d = Column(Integer, nullable=False, default=0)
+    commits_90d = Column(Integer, nullable=False, default=0)
+    contributors_90d = Column(Integer, nullable=False, default=0)
+    commits_180d = Column(Integer, nullable=False, default=0)
+    contributors_180d = Column(Integer, nullable=False, default=0)
     stars = Column(Integer, nullable=False, default=0)
     forks = Column(Integer, nullable=False, default=0)
     open_issues = Column(Integer, nullable=False, default=0)
     last_push = Column(String(64), nullable=True)
+    last_commit_at = Column(String(64), nullable=True)
 
 
 def create_tables() -> None:
@@ -107,6 +112,7 @@ def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
     _migrate_add_dtao_columns()
     _migrate_score_version_length()
+    _migrate_external_snapshot_columns()
 
 
 def _migrate_add_dtao_columns() -> None:
@@ -136,6 +142,25 @@ def _migrate_score_version_length() -> None:
                 conn.commit()
         except Exception:
             pass
+
+
+def _migrate_external_snapshot_columns() -> None:
+    """Add newer external snapshot columns for multi-horizon repo evidence."""
+    new_cols = [
+        ("commits_90d", "INTEGER DEFAULT 0"),
+        ("contributors_90d", "INTEGER DEFAULT 0"),
+        ("commits_180d", "INTEGER DEFAULT 0"),
+        ("contributors_180d", "INTEGER DEFAULT 0"),
+        ("last_commit_at", "VARCHAR(64)"),
+    ]
+    with engine.connect() as conn:
+        for col, col_type in new_cols:
+            try:
+                conn.execute(text(f"ALTER TABLE external_data_snapshots ADD COLUMN {col} {col_type}"))
+                conn.commit()
+                logger.info("Migration: added column external_data_snapshots.%s", col)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -210,10 +235,15 @@ def upsert_external_data_snapshot(
     fetched_at: datetime,
     commits_30d: int,
     contributors_30d: int,
+    commits_90d: int,
+    contributors_90d: int,
+    commits_180d: int,
+    contributors_180d: int,
     stars: int,
     forks: int,
     open_issues: int,
     last_push: Optional[str],
+    last_commit_at: Optional[str],
 ) -> None:
     """Insert or update the latest external evidence snapshot for a subnet."""
     with SessionLocal() as session:
@@ -228,10 +258,15 @@ def upsert_external_data_snapshot(
         row.fetched_at = fetched_at
         row.commits_30d = commits_30d
         row.contributors_30d = contributors_30d
+        row.commits_90d = commits_90d
+        row.contributors_90d = contributors_90d
+        row.commits_180d = commits_180d
+        row.contributors_180d = contributors_180d
         row.stars = stars
         row.forks = forks
         row.open_issues = open_issues
         row.last_push = last_push
+        row.last_commit_at = last_commit_at
         session.commit()
 
 
@@ -388,10 +423,15 @@ def get_external_data_snapshot_map() -> dict[int, dict]:
             "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
             "commits_30d": row.commits_30d,
             "contributors_30d": row.contributors_30d,
+            "commits_90d": getattr(row, "commits_90d", 0),
+            "contributors_90d": getattr(row, "contributors_90d", 0),
+            "commits_180d": getattr(row, "commits_180d", 0),
+            "contributors_180d": getattr(row, "contributors_180d", 0),
             "stars": row.stars,
             "forks": row.forks,
             "open_issues": row.open_issues,
             "last_push": row.last_push,
+            "last_commit_at": getattr(row, "last_commit_at", None),
         }
         for row in rows
     }

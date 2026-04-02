@@ -65,10 +65,15 @@ def _repo_activity_from_snapshot(snapshot: Optional[dict]) -> Optional[RepoActiv
         fetched_at=snapshot.get("fetched_at"),
         commits_30d=int(snapshot.get("commits_30d") or 0),
         contributors_30d=int(snapshot.get("contributors_30d") or 0),
+        commits_90d=int(snapshot.get("commits_90d") or 0),
+        contributors_90d=int(snapshot.get("contributors_90d") or 0),
+        commits_180d=int(snapshot.get("commits_180d") or 0),
+        contributors_180d=int(snapshot.get("contributors_180d") or 0),
         stars=int(snapshot.get("stars") or 0),
         forks=int(snapshot.get("forks") or 0),
         open_issues=int(snapshot.get("open_issues") or 0),
         last_push=snapshot.get("last_push"),
+        last_commit_at=snapshot.get("last_commit_at"),
     )
 
 

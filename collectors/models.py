@@ -11,10 +11,15 @@ class RepoActivitySnapshot:
     fetched_at: Optional[str] = None
     commits_30d: int = 0
     contributors_30d: int = 0
+    commits_90d: int = 0
+    contributors_90d: int = 0
+    commits_180d: int = 0
+    contributors_180d: int = 0
     stars: int = 0
     forks: int = 0
     open_issues: int = 0
     last_push: Optional[str] = None
+    last_commit_at: Optional[str] = None
 
 
 @dataclass

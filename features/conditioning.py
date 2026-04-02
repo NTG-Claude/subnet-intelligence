@@ -16,6 +16,15 @@ def safe_ratio(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
+def _log_scaled(value: float | int | None, scale: float) -> float:
+    if value is None:
+        return 0.0
+    numeric = max(float(value), 0.0)
+    if numeric <= 0.0:
+        return 0.0
+    return clamp01(math.log1p(numeric) / math.log1p(scale))
+
+
 def _finite_number(value: object) -> float | None:
     if value is None:
         return None
@@ -83,6 +92,80 @@ def _sanitize_timestamp(value: str | None) -> str | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat()
     except ValueError:
         return None
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _external_repo_signals(snapshot: RawSubnetSnapshot) -> dict[str, float]:
+    github = snapshot.github
+    if github is None:
+        return {
+            "external_source_legitimacy": 0.0,
+            "external_dev_recency": 0.0,
+            "external_dev_continuity": 0.0,
+            "external_dev_breadth": 0.0,
+            "external_data_reliability": 0.0,
+        }
+
+    source_legitimacy = 0.0
+    if github.github_url and github.owner and github.repo:
+        if github.source_status in {"active_repo", "mapped_no_data"}:
+            source_legitimacy = 1.0
+        elif github.source_status == "fetch_failed":
+            source_legitimacy = 0.35
+        else:
+            source_legitimacy = 0.7
+    elif github.github_url:
+        source_legitimacy = 0.5
+
+    reference_time = _parse_iso_datetime(github.last_commit_at) or _parse_iso_datetime(github.last_push)
+    if reference_time is None:
+        dev_recency = 0.0
+    else:
+        age_days = max((datetime.now(reference_time.tzinfo) - reference_time).total_seconds() / 86400.0, 0.0)
+        if age_days <= 14.0:
+            dev_recency = 1.0
+        elif age_days <= 45.0:
+            dev_recency = 0.82
+        elif age_days <= 90.0:
+            dev_recency = 0.6
+        elif age_days <= 180.0:
+            dev_recency = 0.38
+        elif age_days <= 365.0:
+            dev_recency = 0.18
+        else:
+            dev_recency = 0.0
+
+    dev_continuity = clamp01(
+        0.20 * _log_scaled(github.commits_30d, 30.0)
+        + 0.35 * _log_scaled(github.commits_90d, 90.0)
+        + 0.45 * _log_scaled(github.commits_180d, 180.0)
+    )
+    dev_breadth = clamp01(
+        0.20 * _log_scaled(github.contributors_30d, 4.0)
+        + 0.35 * _log_scaled(github.contributors_90d, 8.0)
+        + 0.45 * _log_scaled(github.contributors_180d, 12.0)
+    )
+    external_data_reliability = clamp01(
+        0.30 * source_legitimacy
+        + 0.25 * dev_recency
+        + 0.30 * dev_continuity
+        + 0.15 * dev_breadth
+    )
+    return {
+        "external_source_legitimacy": source_legitimacy,
+        "external_dev_recency": dev_recency,
+        "external_dev_continuity": dev_continuity,
+        "external_dev_breadth": dev_breadth,
+        "external_data_reliability": external_data_reliability,
+    }
 
 
 def _sanitize_history(
@@ -220,14 +303,11 @@ def condition_snapshot(snapshot: RawSubnetSnapshot) -> ConditionedSnapshot:
         clamp01(len(values["history"]) / 14.0),
         1.0 if any(point.alpha_price_tao is not None for point in values["history"]) else 0.0,
     ]
-    external_inputs = [
-        1.0 if snapshot.github is not None else 0.0,
-        1.0 if snapshot.github and snapshot.github.last_push else 0.0,
-    ]
+    external_signals = _external_repo_signals(snapshot)
     reliability = {
         "market_data_reliability": clamp01(sum(market_inputs) / len(market_inputs)),
         "validator_data_reliability": clamp01(sum(validator_inputs) / len(validator_inputs)),
         "history_data_reliability": clamp01(sum(history_inputs) / len(history_inputs)),
-        "external_data_reliability": clamp01(sum(external_inputs) / len(external_inputs)) if external_inputs else 0.0,
+        **external_signals,
     }
     return ConditionedSnapshot(values=values, reliability=reliability, visibility=visibility)

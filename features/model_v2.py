@@ -626,8 +626,12 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     external_evidence_coverage = _signal_presence_ratio(
         [
             float(c["github"].commits_30d) if c["github"] else None,
+            float(c["github"].commits_90d) if c["github"] else None,
+            float(c["github"].commits_180d) if c["github"] else None,
             float(c["github"].contributors_30d) if c["github"] else None,
-            1.0 if c["github"] and c["github"].last_push else None,
+            float(c["github"].contributors_90d) if c["github"] else None,
+            float(c["github"].contributors_180d) if c["github"] else None,
+            1.0 if c["github"] and (c["github"].last_commit_at or c["github"].last_push) else None,
         ]
     )
     data_coverage = clamp01(
@@ -688,6 +692,10 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     validator_data_reliability = conditioned.reliability.get("validator_data_reliability", 0.0)
     history_data_reliability = conditioned.reliability.get("history_data_reliability", 0.0)
     external_data_reliability = conditioned.reliability.get("external_data_reliability", 0.0)
+    external_source_legitimacy = conditioned.reliability.get("external_source_legitimacy", 0.0)
+    external_dev_recency = conditioned.reliability.get("external_dev_recency", 0.0)
+    external_dev_continuity = conditioned.reliability.get("external_dev_continuity", 0.0)
+    external_dev_breadth = conditioned.reliability.get("external_dev_breadth", 0.0)
     onchain_evidence_support = clamp01(
         0.35 * market_structure_floor
         + 0.25 * market_relevance
@@ -776,7 +784,15 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "dereg_risk_proxy": dereg_risk_proxy,
         "repo_commits_30d": float(c["github"].commits_30d) if c["github"] else None,
         "repo_contributors_30d": float(c["github"].contributors_30d) if c["github"] else None,
-        "repo_recency": None if not c["github"] or not c["github"].last_push else 1.0,
+        "repo_commits_90d": float(c["github"].commits_90d) if c["github"] else None,
+        "repo_contributors_90d": float(c["github"].contributors_90d) if c["github"] else None,
+        "repo_commits_180d": float(c["github"].commits_180d) if c["github"] else None,
+        "repo_contributors_180d": float(c["github"].contributors_180d) if c["github"] else None,
+        "repo_recency": None if not c["github"] or not (c["github"].last_commit_at or c["github"].last_push) else 1.0,
+        "external_source_legitimacy": external_source_legitimacy,
+        "external_dev_recency": external_dev_recency,
+        "external_dev_continuity": external_dev_continuity,
+        "external_dev_breadth": external_dev_breadth,
         "confidence_market_integrity": confidence_market_integrity,
         "confidence_thesis_coherence": confidence_thesis_coherence,
         "quality_change": quality_change,
@@ -880,10 +896,11 @@ METRIC_MAP = {
     "market_data_reliability": ("conditioning", "signal_confidence", 0.08, False),
     "validator_data_reliability": ("conditioning", "signal_confidence", 0.08, False),
     "history_data_reliability": ("conditioning", "signal_confidence", 0.08, False),
-    "external_data_reliability": ("conditioning", "signal_confidence", 0.04, False),
-    "repo_commits_30d": ("external_proxy", "signal_confidence", 0.02, False),
-    "repo_contributors_30d": ("external_proxy", "signal_confidence", 0.02, False),
-    "repo_recency": ("external_proxy", "signal_confidence", 0.02, False),
+    "external_data_reliability": ("conditioning", "signal_confidence", 0.03, False),
+    "external_source_legitimacy": ("external_proxy", "signal_confidence", 0.03, False),
+    "external_dev_recency": ("external_proxy", "signal_confidence", 0.025, False),
+    "external_dev_continuity": ("external_proxy", "signal_confidence", 0.025, False),
+    "external_dev_breadth": ("external_proxy", "signal_confidence", 0.015, False),
 }
 
 

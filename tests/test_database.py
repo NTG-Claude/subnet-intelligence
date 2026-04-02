@@ -300,16 +300,23 @@ def test_upsert_and_read_external_data_snapshot():
         fetched_at=fetched_at,
         commits_30d=24,
         contributors_30d=3,
+        commits_90d=61,
+        contributors_90d=5,
+        commits_180d=128,
+        contributors_180d=8,
         stars=100,
         forks=20,
         open_issues=4,
         last_push="2025-06-01T00:00:00+00:00",
+        last_commit_at="2025-06-01T00:00:00+00:00",
     )
 
     snapshots = get_external_data_snapshot_map()
     assert snapshots[64]["repo"] == "chutes"
     assert snapshots[64]["commits_30d"] == 24
+    assert snapshots[64]["commits_180d"] == 128
 
     with db_module.SessionLocal() as session:
         row = session.get(ExternalDataSnapshotRow, 64)
         assert row.source_status == "active_repo"
+        assert row.contributors_90d == 5

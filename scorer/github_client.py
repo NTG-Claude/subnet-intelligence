@@ -36,6 +36,19 @@ class CommitStats(BaseModel):
     repo: str
     commits_30d: int
     unique_contributors_30d: int
+    last_commit_at: Optional[str] = None
+
+
+class CommitActivitySummary(BaseModel):
+    owner: str
+    repo: str
+    commits_30d: int
+    unique_contributors_30d: int
+    commits_90d: int
+    unique_contributors_90d: int
+    commits_180d: int
+    unique_contributors_180d: int
+    last_commit_at: Optional[str] = None
 
 
 class RepoStats(BaseModel):
@@ -120,7 +133,83 @@ async def get_commits_last_30d(
     Return commit count and unique contributor count for the last 30 days.
     Returns None if the repo is not found, private, or the request fails.
     """
-    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    summary = await get_commit_activity_summary(owner, repo, client=client)
+    if summary is None:
+        return None
+    return CommitStats(
+        owner=owner,
+        repo=repo,
+        commits_30d=summary.commits_30d,
+        unique_contributors_30d=summary.unique_contributors_30d,
+        last_commit_at=summary.last_commit_at,
+    )
+
+
+def _coerce_commit_datetime(value: object) -> Optional[datetime]:
+    if not value or not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _build_commit_activity_summary(owner: str, repo: str, commits: list[dict]) -> CommitActivitySummary:
+    now = datetime.now(timezone.utc)
+    windows = {
+        30: now - timedelta(days=30),
+        90: now - timedelta(days=90),
+        180: now - timedelta(days=180),
+    }
+    counts = {30: 0, 90: 0, 180: 0}
+    contributors = {30: set(), 90: set(), 180: set()}
+    last_commit_at: Optional[datetime] = None
+
+    for item in commits:
+        if not isinstance(item, dict):
+            continue
+        commit = item.get("commit") or {}
+        commit_author = commit.get("author") or {}
+        timestamp = _coerce_commit_datetime(commit_author.get("date"))
+        author = item.get("author") or {}
+        contributor_id = author.get("login") or commit_author.get("email")
+
+        if timestamp and (last_commit_at is None or timestamp > last_commit_at):
+            last_commit_at = timestamp
+
+        for days, cutoff in windows.items():
+            if timestamp is None or timestamp < cutoff:
+                continue
+            counts[days] += 1
+            if contributor_id:
+                contributors[days].add(contributor_id)
+
+    return CommitActivitySummary(
+        owner=owner,
+        repo=repo,
+        commits_30d=counts[30],
+        unique_contributors_30d=len(contributors[30]),
+        commits_90d=counts[90],
+        unique_contributors_90d=len(contributors[90]),
+        commits_180d=counts[180],
+        unique_contributors_180d=len(contributors[180]),
+        last_commit_at=last_commit_at.isoformat() if last_commit_at else None,
+    )
+
+
+async def get_commit_activity_summary(
+    owner: str, repo: str, client: Optional[httpx.AsyncClient] = None
+) -> Optional[CommitActivitySummary]:
+    """Return multi-horizon commit activity for the last 180 days."""
+    since = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat()
     url = f"{GITHUB_API}/repos/{owner}/{repo}/commits"
     params = {"since": since, "per_page": 100}
 
@@ -145,7 +234,17 @@ async def get_commits_last_30d(
                     logger.info("Repo %s/%s not accessible (status %s)", owner, repo, resp.status_code)
                     return None
                 if resp.status_code == 409:  # empty repo
-                    return CommitStats(owner=owner, repo=repo, commits_30d=0, unique_contributors_30d=0)
+                    return CommitActivitySummary(
+                        owner=owner,
+                        repo=repo,
+                        commits_30d=0,
+                        unique_contributors_30d=0,
+                        commits_90d=0,
+                        unique_contributors_90d=0,
+                        commits_180d=0,
+                        unique_contributors_180d=0,
+                        last_commit_at=None,
+                    )
 
                 resp.raise_for_status()
                 page_data = resp.json()
@@ -177,22 +276,7 @@ async def get_commits_last_30d(
                 logger.error("Request error fetching commits for %s/%s: %s", owner, repo, exc)
                 return None
 
-        authors = set()
-        for c in commits:
-            if not isinstance(c, dict):
-                continue
-            author = c.get("author") or {}
-            commit = c.get("commit") or {}
-            commit_author = commit.get("author") or {}
-            authors.add(author.get("login") or commit_author.get("email"))
-        authors.discard(None)
-
-        return CommitStats(
-            owner=owner,
-            repo=repo,
-            commits_30d=len(commits),
-            unique_contributors_30d=len(authors),
-        )
+        return _build_commit_activity_summary(owner, repo, commits)
 
     finally:
         if owns_client:

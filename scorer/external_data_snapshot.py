@@ -18,7 +18,7 @@ import httpx
 from collectors.models import RepoActivitySnapshot
 from scorer.bittensor_client import get_all_netuids
 from scorer.database import create_tables, upsert_external_data_snapshot
-from scorer.github_client import get_commits_last_30d, get_repo_from_url, get_repo_stats
+from scorer.github_client import get_commit_activity_summary, get_repo_from_url, get_repo_stats
 from scorer.subnet_github_mapper import get_github_coords
 from scorer.taostats_client import TaostatsClient
 
@@ -50,23 +50,36 @@ async def _snapshot_for_netuid(
             fetched_at=fetched_at,
         )
 
-    commits, repo = await asyncio.gather(
-        get_commits_last_30d(coords.owner, coords.repo, client=client),
+    commit_activity, repo = await asyncio.gather(
+        get_commit_activity_summary(coords.owner, coords.repo, client=client),
         get_repo_stats(coords.owner, coords.repo, client=client),
     )
-    source_status = "active_repo" if commits or repo else "mapped_no_data"
+    has_recent_activity = bool(
+        commit_activity
+        and (
+            commit_activity.commits_180d > 0
+            or commit_activity.unique_contributors_180d > 0
+            or commit_activity.last_commit_at
+        )
+    )
+    source_status = "active_repo" if has_recent_activity or repo else "mapped_no_data"
     return RepoActivitySnapshot(
         github_url=github_url or _github_url(coords.owner, coords.repo),
         owner=coords.owner,
         repo=coords.repo,
         source_status=source_status,
         fetched_at=fetched_at,
-        commits_30d=commits.commits_30d if commits else 0,
-        contributors_30d=commits.unique_contributors_30d if commits else 0,
+        commits_30d=commit_activity.commits_30d if commit_activity else 0,
+        contributors_30d=commit_activity.unique_contributors_30d if commit_activity else 0,
+        commits_90d=commit_activity.commits_90d if commit_activity else 0,
+        contributors_90d=commit_activity.unique_contributors_90d if commit_activity else 0,
+        commits_180d=commit_activity.commits_180d if commit_activity else 0,
+        contributors_180d=commit_activity.unique_contributors_180d if commit_activity else 0,
         stars=repo.stars if repo else 0,
         forks=repo.forks if repo else 0,
         open_issues=repo.open_issues if repo else 0,
         last_push=repo.last_push if repo else None,
+        last_commit_at=commit_activity.last_commit_at if commit_activity else None,
     )
 
 
@@ -109,10 +122,15 @@ async def refresh_external_data_snapshots(
                 fetched_at=datetime.fromisoformat(snapshot.fetched_at) if snapshot.fetched_at else datetime.now(timezone.utc),
                 commits_30d=snapshot.commits_30d,
                 contributors_30d=snapshot.contributors_30d,
+                commits_90d=snapshot.commits_90d,
+                contributors_90d=snapshot.contributors_90d,
+                commits_180d=snapshot.commits_180d,
+                contributors_180d=snapshot.contributors_180d,
                 stars=snapshot.stars,
                 forks=snapshot.forks,
                 open_issues=snapshot.open_issues,
                 last_push=snapshot.last_push,
+                last_commit_at=snapshot.last_commit_at,
             )
     logger.info("External data snapshot refreshed for %d subnets", len(results))
     return results
