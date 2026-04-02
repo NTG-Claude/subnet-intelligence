@@ -62,28 +62,21 @@ export default function DecisionRow({
         <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <div className="space-y-3">
             <div>
-              <div className="eyebrow">Subnet thesis</div>
+              <div className="eyebrow">Why It Ranks Here</div>
               <p className="mt-2 max-w-[34ch] text-sm leading-7 text-[color:var(--text-secondary)]">
                 {row.thesisLine}
               </p>
             </div>
 
             <div>
-              <div className="eyebrow">Decision read</div>
+              <div className="eyebrow">What Is Driving It</div>
               <p className="mt-2 max-w-[32ch] text-sm leading-7 text-[color:var(--text-secondary)]">
                 {row.decisionLine}
               </p>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div>
-              <div className="eyebrow">Trust</div>
-              <div className="mt-2">
-                <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
-              </div>
-            </div>
-
+          <div className="flex items-end">
             <div className="flex items-center justify-between gap-3">
               <div className="text-xs text-[color:var(--text-tertiary)]">{row.updatedLabel}</div>
               <Link href={row.href} className="button-secondary">

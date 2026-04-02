@@ -314,6 +314,59 @@ function decisionLineFromOutputs(outputs: PrimaryOutputs | null | undefined): st
   return 'The setup is investable only if the positive case survives a harder trust and fragility check.'
 }
 
+function cleanSentence(value: string | undefined | null): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function rankingHeadline(subnet: SubnetSummary): string {
+  const outputs = subnet.primary_outputs
+  const positive = cleanSentence(subnet.analysis_preview?.top_positive_drivers?.[0]?.short_explanation)
+  const negative = cleanSentence(subnet.analysis_preview?.top_negative_drags?.[0]?.short_explanation)
+
+  if (!outputs) {
+    return 'The ranking is provisional because the latest scored output is still missing.'
+  }
+
+  const quality = outputs.fundamental_quality
+  const mispricing = outputs.mispricing_signal
+  const fragility = outputs.fragility_risk
+  const confidence = outputs.signal_confidence
+
+  if (quality >= 70 && fragility <= 35) {
+    return positive || 'This name ranks well because quality is already visible and the downside profile is still relatively contained.'
+  }
+  if (mispricing >= 65 && confidence >= 55) {
+    return positive || 'This name ranks on a real valuation gap, and the evidence is good enough for that gap to matter.'
+  }
+  if (quality >= 65 && mispricing < 50) {
+    return 'This ranking is being earned more by business quality than by a large valuation disconnect, so upside depends on execution compounding from here.'
+  }
+  if (fragility >= 65) {
+    return negative || 'The rank is being held back because the stress profile is still fragile enough to cap position quality.'
+  }
+  if (confidence < 50) {
+    return 'The score is interesting, but the rank is capped by evidence quality and how much confidence we can place in the read.'
+  }
+
+  return positive || 'The current rank reflects a mixed but investable setup where quality, upside, and fragility are still in balance.'
+}
+
+function rankingCatalystLine(subnet: SubnetSummary): string {
+  const positive = cleanSentence(subnet.analysis_preview?.top_positive_drivers?.[0]?.short_explanation)
+  const negative = cleanSentence(subnet.analysis_preview?.top_negative_drags?.[0]?.short_explanation)
+  const uncertainty = cleanSentence(subnet.analysis_preview?.key_uncertainties?.[0]?.short_explanation)
+
+  const catalystPieces = [positive, negative ? `Watch item: ${negative}` : '', uncertainty ? `Key uncertainty: ${uncertainty}` : '']
+    .filter(Boolean)
+    .slice(0, 3)
+
+  if (catalystPieces.length) {
+    return catalystPieces.join(' ')
+  }
+
+  return decisionLineFromOutputs(subnet.primary_outputs)
+}
+
 function opportunityRead(subnet: SubnetSummary): string {
   if (!subnet.primary_outputs) return 'No active opportunity read until the subnet is rescored.'
   if (mispricingValue(subnet) >= 70) return 'The model still sees a large expectation gap worth active research.'
@@ -379,8 +432,8 @@ export function toUniverseRow(subnet: SubnetSummary): UniverseRowViewModel {
     netuidLabel: `SN${subnet.netuid}`,
     modelLabel: modelLabelValue(subnet),
     modelLabelTone: modelLabelTone(modelLabelValue(subnet)),
-    thesisLine: subnet.thesis ?? 'No concise thesis has been produced for this run yet.',
-    decisionLine: decisionLineFromOutputs(subnet.primary_outputs),
+    thesisLine: rankingHeadline(subnet),
+    decisionLine: rankingCatalystLine(subnet),
     signals: getSignalStats(subnet.primary_outputs),
     opportunityNotes: positives,
     riskNotes: negatives,
