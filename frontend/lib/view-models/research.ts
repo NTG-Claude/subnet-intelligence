@@ -58,6 +58,12 @@ export interface UniverseRowViewModel {
   riskNotes: ResearchHint[]
   uncertaintyNotes: ResearchHint[]
   statusFlags: RowFlag[]
+  metricReasons: {
+    strength: string
+    upside: string
+    risk: string
+    evidence: string
+  }
   opportunityRead: string
   qualityRead: string
   fragilityRead: string
@@ -471,6 +477,161 @@ function uncertaintyClause(name: string): string {
   }
 }
 
+function plainEnglishReason(name: string, mode: 'positive' | 'negative' | 'uncertainty'): string {
+  switch (name) {
+    case 'fundamental_health':
+      return mode === 'positive'
+        ? 'the subnet looks more durable and useful than most peers'
+        : 'the business quality is not as durable as the best names'
+    case 'market_legitimacy':
+      return mode === 'positive'
+        ? 'the market already treats it like a credible network'
+        : 'the market still does not fully treat it like a proven network'
+    case 'structural_validity':
+      return mode === 'positive'
+        ? 'the setup still looks investable rather than distorted'
+        : 'the setup still has structural weak points'
+    case 'confidence_factor':
+      return mode === 'positive'
+        ? 'the main signals broadly point in the same direction'
+        : 'the evidence does not line up cleanly yet'
+    case 'thesis_confidence':
+      return mode === 'positive'
+        ? 'the overall story hangs together without too many leaps'
+        : 'the overall story still relies on assumptions that need proving'
+    case 'market_confidence':
+      return mode === 'positive'
+        ? 'price and market behavior are not fighting the thesis'
+        : 'market behavior is not giving much confirmation yet'
+    case 'data_confidence':
+      return mode === 'positive'
+        ? 'there is enough clean data to form a usable view'
+        : 'the data picture is still too patchy'
+    case 'opportunity_underreaction':
+    case 'base_opportunity':
+      return mode === 'positive'
+        ? 'the market still seems to be underestimating part of the story'
+        : 'the market is not giving much of a discount right now'
+    case 'fragility':
+      return mode === 'positive'
+        ? 'the subnet is holding up reasonably well under pressure'
+        : 'the setup can still break under stress'
+    case 'reserve_change':
+      return 'more capital is not yet leading to a clearly better market response'
+    case 'liquidity_improvement_rate':
+      return 'trading conditions are not improving fast enough yet'
+    case 'reserve_growth_without_price':
+      return 'better fundamentals are not yet clearly showing up in price'
+    case 'quality_acceleration':
+      return mode === 'positive'
+        ? 'quality is still moving in the right direction'
+        : 'improvement has slowed and is no longer accelerating'
+    case 'price_response_lag_to_quality_shift':
+      return 'the market may already be catching up to the improvement'
+    case 'expected_price_response_gap':
+      return 'the rerating gap is smaller than in the best upside names'
+    case 'emission_to_sticky_usage_conversion':
+      return 'token emissions are not yet turning into lasting usage'
+    case 'post_incentive_retention':
+      return 'it is still unclear whether users stay once incentives fade'
+    case 'emission_efficiency':
+      return 'new emissions are not producing enough real usage'
+    case 'cohort_quality_edge':
+      return 'it does not have a big lead over comparable subnets'
+    case 'discarded_inputs':
+      return mode === 'uncertainty'
+        ? 'some messy inputs had to be thrown out, so the picture is incomplete'
+        : 'some messy inputs had to be thrown out'
+    case 'external_data_reliability':
+      return 'there is still not much outside evidence to confirm the story'
+    case 'validator_data_reliability':
+      return 'validator-side evidence is thinner than ideal'
+    case 'history_data_reliability':
+      return 'the historical record is still shallower than you would want'
+    default: {
+      const fallback = metricPhrase(name)
+      return fallback || `${name.replace(/_/g, ' ')} is affecting the read`
+    }
+  }
+}
+
+function shortMetricReason(subnet: SubnetSummary, metric: 'strength' | 'upside' | 'risk' | 'evidence'): string {
+  const positives = subnet.analysis_preview?.top_positive_drivers ?? []
+  const drags = subnet.analysis_preview?.top_negative_drags ?? []
+  const uncertainties = subnet.analysis_preview?.key_uncertainties ?? []
+  const outputs = subnet.primary_outputs
+
+  if (!outputs) return 'Awaiting a fresh model run.'
+
+  if (metric === 'strength') {
+    const support =
+      positives.find((item) =>
+        ['fundamental_health', 'market_legitimacy', 'structural_validity', 'quality_acceleration'].includes(contributorName(item)),
+      ) ?? positives[0]
+    const drag =
+      drags.find((item) =>
+        ['quality_acceleration', 'cohort_quality_edge', 'reserve_growth_without_price'].includes(contributorName(item)),
+      ) ?? drags[0]
+    const parts = []
+    if (support) parts.push(sentenceCase(plainEnglishReason(contributorName(support), 'positive')))
+    if (outputs.fundamental_quality < 55 && drag) parts.push(`Held back because ${plainEnglishReason(contributorName(drag), 'negative')}.`)
+    return parts.join('. ') || 'Business quality looks middle-of-the-pack right now.'
+  }
+
+  if (metric === 'upside') {
+    const support =
+      positives.find((item) =>
+        ['opportunity_underreaction', 'base_opportunity', 'confidence_factor'].includes(contributorName(item)),
+      ) ?? positives[0]
+    const drag =
+      drags.find((item) =>
+        ['reserve_change', 'liquidity_improvement_rate', 'reserve_growth_without_price', 'expected_price_response_gap'].includes(
+          contributorName(item),
+        ),
+      ) ?? drags[0]
+    const parts = []
+    if (support) parts.push(sentenceCase(plainEnglishReason(contributorName(support), 'positive')))
+    if (drag) parts.push(`The gap is smaller because ${plainEnglishReason(contributorName(drag), 'negative')}.`)
+    return parts.join('. ') || 'There is some upside, but not a big disconnect.'
+  }
+
+  if (metric === 'risk') {
+    const support =
+      positives.find((item) => ['fragility', 'structural_validity', 'market_legitimacy'].includes(contributorName(item))) ??
+      positives[0]
+    const drag =
+      drags.find((item) =>
+        ['fragility', 'emission_to_sticky_usage_conversion', 'post_incentive_retention', 'emission_efficiency'].includes(
+          contributorName(item),
+        ),
+      ) ?? drags[0]
+    if (outputs.fragility_risk <= 35 && support) {
+      return `${sentenceCase(plainEnglishReason(contributorName(support), 'positive'))}.`
+    }
+    if (drag) {
+      return `${sentenceCase(plainEnglishReason(contributorName(drag), 'negative'))}.`
+    }
+    return 'Risk looks manageable, but not especially low.'
+  }
+
+  const support =
+    positives.find((item) =>
+      ['confidence_factor', 'data_confidence', 'market_confidence', 'thesis_confidence'].includes(contributorName(item)),
+    ) ?? positives[0]
+  const uncertainty =
+    uncertainties.find((item) =>
+      ['discarded_inputs', 'external_data_reliability', 'validator_data_reliability', 'history_data_reliability'].includes(item.name),
+    ) ?? uncertainties[0]
+
+  if (outputs.signal_confidence >= 55 && support) {
+    return `${sentenceCase(plainEnglishReason(contributorName(support), 'positive'))}.`
+  }
+  if (uncertainty) {
+    return `${sentenceCase(plainEnglishReason(uncertainty.name, 'uncertainty'))}.`
+  }
+  return 'The read is usable, but not fully clean.'
+}
+
 function metricProfile(outputs: PrimaryOutputs): string {
   const quality = outputs.fundamental_quality
   const mispricing = outputs.mispricing_signal
@@ -717,6 +878,12 @@ export function toUniverseRow(subnet: SubnetSummary): UniverseRowViewModel {
     riskNotes: negatives,
     uncertaintyNotes: warnings,
     statusFlags: buildStatusFlags(subnet),
+    metricReasons: {
+      strength: shortMetricReason(subnet, 'strength'),
+      upside: shortMetricReason(subnet, 'upside'),
+      risk: shortMetricReason(subnet, 'risk'),
+      evidence: shortMetricReason(subnet, 'evidence'),
+    },
     opportunityRead: opportunityRead(subnet),
     qualityRead: qualityRead(subnet),
     fragilityRead: fragilityRead(subnet),
