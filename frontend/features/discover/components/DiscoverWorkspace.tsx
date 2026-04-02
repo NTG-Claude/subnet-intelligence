@@ -5,19 +5,13 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import PageHeader from '@/components/ui/PageHeader'
 import { SubnetSummary } from '@/lib/api'
-import { UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
+import { UniverseRowViewModel, UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
 
 import CompareDock from './CompareDock'
 import DecisionRow, { MobileDecisionCard } from './DecisionRow'
 import SidePreviewPanel from './SidePreviewPanel'
 
-const SORT_COLUMNS: { id: UniverseSortId; label: string; align?: 'left' | 'right' }[] = [
-  { id: 'rank', label: 'Rank' },
-  { id: 'quality', label: 'Quality', align: 'right' },
-  { id: 'mispricing', label: 'Mispricing', align: 'right' },
-  { id: 'fragility', label: 'Fragility', align: 'right' },
-  { id: 'confidence', label: 'Confidence', align: 'right' },
-]
+type SortDirection = 'asc' | 'desc'
 
 function queryMatches(subnet: SubnetSummary, query: string): boolean {
   const q = query.toLowerCase()
@@ -30,6 +24,10 @@ function parseIds(value: string | null): number[] {
     .map((part) => Number.parseInt(part, 10))
     .filter((item, index, all) => Number.isFinite(item) && all.indexOf(item) === index)
     .slice(0, 4)
+}
+
+function reverseRows(rows: UniverseRowViewModel[]): UniverseRowViewModel[] {
+  return [...rows].reverse()
 }
 
 export default function DiscoverWorkspace({
@@ -48,6 +46,7 @@ export default function DiscoverWorkspace({
 
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const [sort, setSort] = useState<UniverseSortId>((searchParams.get('sort') as UniverseSortId) ?? 'rank')
+  const [direction, setDirection] = useState<SortDirection>((searchParams.get('dir') as SortDirection) ?? 'asc')
   const [compareIds, setCompareIds] = useState<number[]>(parseIds(searchParams.get('ids')))
   const [focusedId, setFocusedId] = useState<number | null>(null)
 
@@ -55,15 +54,17 @@ export default function DiscoverWorkspace({
     const params = new URLSearchParams()
     if (search.trim()) params.set('q', search.trim())
     if (sort !== 'rank') params.set('sort', sort)
+    if (direction !== 'asc') params.set('dir', direction)
     if (compareIds.length) params.set('ids', compareIds.join(','))
     const next = params.toString()
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
-  }, [compareIds, pathname, router, search, sort])
+  }, [compareIds, direction, pathname, router, search, sort])
 
   const rows = useMemo(() => {
     const searched = search.trim() ? subnets.filter((subnet) => queryMatches(subnet, search)) : subnets
-    return sortUniverseRows(searched.map(toUniverseRow), sort)
-  }, [search, sort, subnets])
+    const sorted = sortUniverseRows(searched.map(toUniverseRow), sort)
+    return direction === 'asc' ? sorted : reverseRows(sorted)
+  }, [direction, search, sort, subnets])
 
   useEffect(() => {
     if (!rows.length) {
@@ -111,6 +112,20 @@ export default function DiscoverWorkspace({
       if (current.length >= 4) return [...current.slice(1), netuid]
       return [...current, netuid]
     })
+  }
+
+  function toggleSort(nextSort: UniverseSortId) {
+    if (sort === nextSort) {
+      setDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSort(nextSort)
+    setDirection('asc')
+  }
+
+  function arrowFor(column: UniverseSortId): string {
+    if (sort !== column) return ''
+    return direction === 'asc' ? '↑' : '↓'
   }
 
   const previewRow = rows.find((row) => row.id === focusedId) ?? null
@@ -163,21 +178,21 @@ export default function DiscoverWorkspace({
             <>
               <div className="hidden md:block">
                 <div className="grid grid-cols-[64px_minmax(0,1.75fr)_76px_76px_76px_88px] gap-3 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
-                  <button type="button" onClick={() => setSort('rank')} className="text-left transition-colors hover:text-[color:var(--text-primary)]">
-                    Rank
+                  <button type="button" onClick={() => toggleSort('rank')} className="text-left transition-colors hover:text-[color:var(--text-primary)]">
+                    Rank {arrowFor('rank')}
                   </button>
                   <div>Subnet</div>
-                  <button type="button" onClick={() => setSort('quality')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
-                    Quality
+                  <button type="button" onClick={() => toggleSort('quality')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
+                    Quality {arrowFor('quality')}
                   </button>
-                  <button type="button" onClick={() => setSort('mispricing')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
-                    Mispricing
+                  <button type="button" onClick={() => toggleSort('mispricing')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
+                    Mispricing {arrowFor('mispricing')}
                   </button>
-                  <button type="button" onClick={() => setSort('fragility')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
-                    Fragility
+                  <button type="button" onClick={() => toggleSort('fragility')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
+                    Fragility {arrowFor('fragility')}
                   </button>
-                  <button type="button" onClick={() => setSort('confidence')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
-                    Confidence
+                  <button type="button" onClick={() => toggleSort('confidence')} className="text-right transition-colors hover:text-[color:var(--text-primary)]">
+                    Confidence {arrowFor('confidence')}
                   </button>
                 </div>
 
