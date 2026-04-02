@@ -85,8 +85,15 @@ def assign_label(
         and confidence > 0.45
         and thesis_confidence > 0.42
         and market_legitimacy > 0.40
-        and concentration < 0.55
         and crowding < 0.35
+        and (
+            concentration < 0.55
+            or (
+                market_legitimacy > 0.65
+                and market_confidence > 0.55
+                and data_confidence > 0.45
+            )
+        )
     ):
         return "Quality Leader", "Quality and resilience are already visible, even if the valuation gap is still modest and the thesis is early."
     if fundamental > 0.56 and fundamental_health > 0.50 and sticky_usage > 0.05 and retention > 0.05 and fragility < 0.55 and thesis_confidence > 0.45:
@@ -99,4 +106,6 @@ def assign_label(
         return "Crowded Reflexive", "The trade is increasingly crowded, reflexive, and vulnerable to reversals rather than driven by fresh underpricing."
     if confidence < 0.40 or data_confidence < 0.35 or thesis_confidence < 0.35 or confidence_capped:
         return "Evidence Limited", "The signal is directionally interesting, but current evidence quality is too thin to treat it as investment-grade."
+    if fundamental > 0.62 and fundamental_health > 0.58 and fragility < 0.35 and market_legitimacy > 0.55 and thesis_confidence > 0.45:
+        return "Quality Leader", "Quality and resilience are visible enough to anchor the case, even if the opportunity still needs tighter entry discipline."
     return "Evidence Limited", "Quality, valuation gap, fragility, and confidence are mixed, so the thesis remains provisional."

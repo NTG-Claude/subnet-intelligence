@@ -361,6 +361,43 @@ def test_high_quality_resilient_case_can_escape_evidence_limited():
     assert "Quality and resilience" in thesis
 
 
+def test_established_quality_case_can_escape_evidence_limited_despite_concentration():
+    bundle = FeatureBundle(
+        raw={
+            "market_relevance_proxy": 0.80,
+            "thesis_confidence": 0.75,
+            "market_confidence": 0.84,
+            "data_confidence": 0.63,
+            "crowding_proxy": 0.31,
+            "validator_dominance": 0.68,
+            "incentive_concentration": 0.68,
+            "price_response_lag_to_quality_shift": 0.015,
+            "emission_to_sticky_usage_conversion": 0.0,
+            "post_incentive_retention": 0.0,
+        },
+        core_blocks={
+            "fundamental_health": 0.69,
+            "market_legitimacy": 0.81,
+        },
+    )
+    signals = PrimarySignals(
+        fundamental_quality=0.71,
+        mispricing_signal=0.36,
+        fragility_risk=0.20,
+        signal_confidence=0.50,
+    )
+
+    label, thesis = assign_label(
+        signals,
+        bundle,
+        _stress(0.15, robustness=0.79),
+        HardRuleResult(activated=[]),
+    )
+
+    assert label == "Quality Leader"
+    assert "valuation gap is still modest" in thesis or "entry discipline" in thesis
+
+
 def test_deep_liquid_concentration_uses_watchlist_caps_not_harsh_cap():
     snapshot = _snapshot(
         tao_in_pool=150000.0,
