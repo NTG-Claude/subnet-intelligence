@@ -211,6 +211,19 @@ export interface CompareSeriesData {
   total_subnets: number
 }
 
+export interface MarketOverviewPoint {
+  computed_at: string
+  total_market_cap_tao: number
+  subnet_count: number
+}
+
+export interface MarketOverviewData {
+  current_market_cap_tao: number
+  change_pct_vs_previous_run: number | null
+  current_subnet_count: number
+  points: MarketOverviewPoint[]
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API}${path}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
@@ -237,3 +250,6 @@ export const fetchLabelBacktests = (days = 90) =>
 
 export const fetchCompareTimeseries = (days = 30) =>
   get<CompareSeriesData>(`/api/v1/compare/timeseries?days=${days}`)
+
+export const fetchMarketOverview = (days = 90) =>
+  get<MarketOverviewData>(`/api/v1/market/overview?days=${days}`)
