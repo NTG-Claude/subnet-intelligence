@@ -48,7 +48,7 @@ function SortHeader({
       type="button"
       onClick={onClick}
       className={[
-        'flex min-w-0 items-center gap-1 transition-colors hover:text-[color:var(--text-primary)]',
+        'flex min-w-0 items-center gap-1 whitespace-nowrap transition-colors hover:text-[color:var(--text-primary)]',
         align === 'right' ? 'justify-end text-right' : 'text-left',
       ].join(' ')}
     >
@@ -60,7 +60,7 @@ function SortHeader({
         ].join(' ')}
         aria-hidden="true"
       >
-        {active ? (direction === 'asc' ? '↑' : '↓') : '↑'}
+        {active ? (direction === 'asc' ? '^' : 'v') : '^'}
       </span>
     </button>
   )
@@ -208,7 +208,7 @@ export default function DiscoverWorkspace({
           {rows.length ? (
             <>
               <div className="hidden md:block">
-                <div className="grid grid-cols-[64px_minmax(0,1.75fr)_76px_76px_76px_88px] gap-3 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
+                <div className="grid grid-cols-[64px_minmax(0,1.35fr)_92px_110px_72px_126px] gap-4 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
                   <SortHeader label="Rank" active={sort === 'rank'} direction={direction} onClick={() => toggleSort('rank')} />
                   <div>Subnet</div>
                   <SortHeader label="Strength" active={sort === 'quality'} direction={direction} align="right" onClick={() => toggleSort('quality')} />
