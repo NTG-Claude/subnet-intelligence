@@ -6,6 +6,7 @@ Async client for repository analysis via api.github.com
 import logging
 import os
 import re
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 GITHUB_API = "https://api.github.com"
 _TOKEN = os.getenv("GITHUB_TOKEN", "")
 _RATE_LIMIT_REMAINING = 5000  # updated from response headers
+_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +83,36 @@ def _update_rate_limit(response: httpx.Response) -> None:
         _RATE_LIMIT_REMAINING = int(remaining)
         if _RATE_LIMIT_REMAINING < 100:
             logger.warning("GitHub rate limit low: %s requests remaining", _RATE_LIMIT_REMAINING)
+
+
+def _is_transient_http_status(status_code: int) -> bool:
+    return status_code in _TRANSIENT_STATUS_CODES
+
+
+async def _get_with_retries(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: Optional[dict] = None,
+    timeout: float = 10.0,
+    attempts: int = 3,
+) -> httpx.Response:
+    last_exc: httpx.HTTPError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            resp = await client.get(url, headers=_headers(), params=params, timeout=timeout)
+            _update_rate_limit(resp)
+            if _is_transient_http_status(resp.status_code) and attempt < attempts:
+                await asyncio.sleep(0.6 * attempt)
+                continue
+            return resp
+        except httpx.RequestError as exc:
+            last_exc = exc
+            if attempt >= attempts:
+                raise
+            await asyncio.sleep(0.6 * attempt)
+    assert last_exc is not None
+    raise last_exc
 
 
 # ---------------------------------------------------------------------------
@@ -222,13 +254,12 @@ async def get_commit_activity_summary(
         page = 1
         while True:
             try:
-                resp = await client.get(
+                resp = await _get_with_retries(
+                    client,
                     url,
-                    headers=_headers(),
                     params={**params, "page": page},
                     timeout=10.0,
                 )
-                _update_rate_limit(resp)
 
                 if resp.status_code in (404, 451):  # not found or unavailable for legal reasons
                     logger.info("Repo %s/%s not accessible (status %s)", owner, repo, resp.status_code)
@@ -297,8 +328,7 @@ async def get_repo_stats(
 
     try:
         try:
-            resp = await client.get(url, headers=_headers(), timeout=10.0)
-            _update_rate_limit(resp)
+            resp = await _get_with_retries(client, url, timeout=10.0)
 
             if resp.status_code in (404, 451):
                 logger.info("Repo %s/%s not accessible (status %s)", owner, repo, resp.status_code)

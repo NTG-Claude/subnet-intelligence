@@ -4,6 +4,7 @@ Tests für github_client.py und subnet_github_mapper.py
 
 import json
 import pytest
+import httpx
 from pathlib import Path
 import shutil
 import uuid
@@ -119,7 +120,6 @@ async def test_get_commits_last_30d_empty_repo():
 
 @pytest.mark.asyncio
 async def test_get_commits_last_30d_http_error():
-    import httpx
     mock_client = AsyncMock()
     mock_resp = MagicMock()
     mock_resp.status_code = 500
@@ -130,6 +130,27 @@ async def test_get_commits_last_30d_http_error():
     mock_client.get = AsyncMock(return_value=mock_resp)
     result = await get_commits_last_30d("owner", "repo", client=mock_client)
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_commit_activity_summary_retries_transient_503():
+    transient = _make_response(503)
+    transient.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "503", request=MagicMock(), response=transient
+    )
+    commits = [_mock_commit("alice")]
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[
+        transient,
+        _make_response(200, commits),
+        _make_response(200, []),
+    ])
+
+    result = await get_commit_activity_summary("owner", "repo", client=mock_client)
+
+    assert result is not None
+    assert result.commits_30d == 1
+    assert mock_client.get.await_count == 2
 
 
 @pytest.mark.asyncio

@@ -17,8 +17,8 @@ import httpx
 
 from collectors.models import RepoActivitySnapshot
 from scorer.bittensor_client import get_all_netuids
-from scorer.database import create_tables, upsert_external_data_snapshot
-from scorer.github_client import get_commit_activity_summary, get_repo_from_url, get_repo_stats
+from scorer.database import create_tables, get_external_data_snapshot_map, upsert_external_data_snapshot
+from scorer.github_client import CommitActivitySummary, RepoStats, get_commit_activity_summary, get_repo_from_url, get_repo_stats
 from scorer.subnet_github_mapper import get_github_coords
 from scorer.taostats_client import TaostatsClient
 
@@ -35,6 +35,7 @@ async def _snapshot_for_netuid(
     netuid: int,
     client: httpx.AsyncClient,
     taostats_links: Optional[dict[int, dict[str, str]]] = None,
+    existing_snapshot: Optional[dict[str, object]] = None,
 ) -> RepoActivitySnapshot:
     fetched_at = datetime.now(timezone.utc).isoformat()
     github_url = None
@@ -54,32 +55,64 @@ async def _snapshot_for_netuid(
         get_commit_activity_summary(coords.owner, coords.repo, client=client),
         get_repo_stats(coords.owner, coords.repo, client=client),
     )
+    commit_fetch_failed = commit_activity is None
+    repo_fetch_failed = repo is None
+    if existing_snapshot and existing_snapshot.get("repo") == coords.repo and existing_snapshot.get("owner") == coords.owner:
+        if commit_activity is None and existing_snapshot.get("last_commit_at"):
+            commit_activity = CommitActivitySummary(
+                owner=coords.owner,
+                repo=coords.repo,
+                commits_30d=int(existing_snapshot.get("commits_30d") or 0),
+                unique_contributors_30d=int(existing_snapshot.get("contributors_30d") or 0),
+                commits_90d=int(existing_snapshot.get("commits_90d") or 0),
+                unique_contributors_90d=int(existing_snapshot.get("contributors_90d") or 0),
+                commits_180d=int(existing_snapshot.get("commits_180d") or 0),
+                unique_contributors_180d=int(existing_snapshot.get("contributors_180d") or 0),
+                last_commit_at=existing_snapshot.get("last_commit_at"),
+            )
+        if repo is None and existing_snapshot.get("last_push"):
+            repo = RepoStats(
+                owner=coords.owner,
+                repo=coords.repo,
+                stars=int(existing_snapshot.get("stars") or 0),
+                forks=int(existing_snapshot.get("forks") or 0),
+                open_issues=int(existing_snapshot.get("open_issues") or 0),
+                last_push=existing_snapshot.get("last_push"),
+            )
+
+    commit_stats = commit_activity
+    repo_stats = repo
     has_recent_activity = bool(
-        commit_activity
+        commit_stats
         and (
-            commit_activity.commits_180d > 0
-            or commit_activity.unique_contributors_180d > 0
-            or commit_activity.last_commit_at
+            commit_stats.commits_180d > 0
+            or commit_stats.unique_contributors_180d > 0
+            or commit_stats.last_commit_at
         )
     )
-    source_status = "active_repo" if has_recent_activity or repo else "mapped_no_data"
+    source_status = "active_repo" if has_recent_activity or repo_stats else "mapped_no_data"
+    if existing_snapshot and (
+        (commit_fetch_failed and existing_snapshot.get("last_commit_at"))
+        or (repo_fetch_failed and existing_snapshot.get("last_push"))
+    ):
+        source_status = "stale_repo"
     return RepoActivitySnapshot(
         github_url=github_url or _github_url(coords.owner, coords.repo),
         owner=coords.owner,
         repo=coords.repo,
         source_status=source_status,
         fetched_at=fetched_at,
-        commits_30d=commit_activity.commits_30d if commit_activity else 0,
-        contributors_30d=commit_activity.unique_contributors_30d if commit_activity else 0,
-        commits_90d=commit_activity.commits_90d if commit_activity else 0,
-        contributors_90d=commit_activity.unique_contributors_90d if commit_activity else 0,
-        commits_180d=commit_activity.commits_180d if commit_activity else 0,
-        contributors_180d=commit_activity.unique_contributors_180d if commit_activity else 0,
-        stars=repo.stars if repo else 0,
-        forks=repo.forks if repo else 0,
-        open_issues=repo.open_issues if repo else 0,
-        last_push=repo.last_push if repo else None,
-        last_commit_at=commit_activity.last_commit_at if commit_activity else None,
+        commits_30d=commit_stats.commits_30d if commit_stats else 0,
+        contributors_30d=commit_stats.unique_contributors_30d if commit_stats else 0,
+        commits_90d=commit_stats.commits_90d if commit_stats else 0,
+        contributors_90d=commit_stats.unique_contributors_90d if commit_stats else 0,
+        commits_180d=commit_stats.commits_180d if commit_stats else 0,
+        contributors_180d=commit_stats.unique_contributors_180d if commit_stats else 0,
+        stars=repo_stats.stars if repo_stats else 0,
+        forks=repo_stats.forks if repo_stats else 0,
+        open_issues=repo_stats.open_issues if repo_stats else 0,
+        last_push=repo_stats.last_push if repo_stats else None,
+        last_commit_at=commit_stats.last_commit_at if commit_stats else None,
     )
 
 
@@ -87,6 +120,7 @@ async def refresh_external_data_snapshots(
     netuids: Optional[list[int]] = None,
 ) -> dict[int, RepoActivitySnapshot]:
     create_tables()
+    existing_snapshots = get_external_data_snapshot_map()
     if netuids is None:
         netuids = await get_all_netuids()
     if not netuids:
@@ -105,7 +139,12 @@ async def refresh_external_data_snapshots(
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for netuid in netuids:
             try:
-                snapshot = await _snapshot_for_netuid(netuid, client, taostats_links=taostats_links)
+                snapshot = await _snapshot_for_netuid(
+                    netuid,
+                    client,
+                    taostats_links=taostats_links,
+                    existing_snapshot=existing_snapshots.get(netuid),
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("External data refresh failed for SN%d: %s", netuid, exc)
                 snapshot = RepoActivitySnapshot(
