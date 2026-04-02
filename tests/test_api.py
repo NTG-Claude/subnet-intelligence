@@ -381,12 +381,71 @@ def test_subnet_history():
     assert "computed_at" in data[0]
 
 
+def test_subnet_detailed_history():
+    history = [
+        {
+            "computed_at": NOW,
+            "score": 75.0,
+            "rank": 1,
+            "score_version": "v5_investment_framework",
+            "raw_data": {
+                "label": "Compounding Quality",
+                "thesis": "test thesis",
+                "analysis": {
+                    "primary_outputs": {
+                        "fundamental_quality": 69.0,
+                        "mispricing_signal": 59.0,
+                        "fragility_risk": 21.0,
+                        "signal_confidence": 79.0,
+                    },
+                    "block_scores": {
+                        "fundamental_health": 70.0,
+                        "opportunity_underreaction": 61.0,
+                    },
+                    "conditioning": {
+                        "reliability": {
+                            "external_data_reliability": 0.8,
+                        }
+                    },
+                    "top_positive_drivers": [{"name": "fundamental_health"}],
+                    "top_negative_drags": [{"name": "base_opportunity"}],
+                },
+            },
+        }
+    ]
+    with patch("api.main.get_score_history", return_value=history), \
+         patch("api.main.get_latest_scores", return_value=SCORES), \
+         patch("api.main._cache_get", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets/1/history/detailed?days=30")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert data[0]["computed_at"] == NOW
+    assert data[0]["label"] == "Compounding Quality"
+    assert data[0]["primary_outputs"]["fundamental_quality"] == 69.0
+    assert data[0]["block_scores"]["fundamental_health"] == 70.0
+    assert data[0]["conditioning_reliability"]["external_data_reliability"] == 0.8
+    assert data[0]["top_positive_drivers"][0]["name"] == "fundamental_health"
+    assert data[0]["top_negative_drags"][0]["name"] == "base_opportunity"
+
+
 def test_subnet_history_not_found():
     with patch("api.main.get_score_history", return_value=[]), \
          patch("api.main.get_latest_scores", return_value=SCORES):
         from api.main import app
         with TestClient(app) as c:
             resp = c.get("/api/v1/subnets/999/history")
+    assert resp.status_code == 404
+
+
+def test_subnet_detailed_history_not_found():
+    with patch("api.main.get_score_history", return_value=[]), \
+         patch("api.main.get_latest_scores", return_value=SCORES):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets/999/history/detailed")
     assert resp.status_code == 404
 
 
