@@ -2,275 +2,331 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import PageHeader from '@/components/ui/PageHeader'
-import StatusChip, { toneClass } from '@/components/ui/StatusChip'
-import MetricCard from '@/components/ui/MetricCard'
-import SignalBar from '@/components/ui/SignalBar'
-import TrustBadge from '@/components/ui/TrustBadge'
+import { CompareSeriesData } from '@/lib/api'
 import { cn } from '@/lib/formatting'
-import { DetailMemoViewModel, MemoSectionItem, SignalStat } from '@/lib/view-models/research'
 
-function parseMetricValue(value: string): number | null {
-  const match = value.match(/-?\d+(\.\d+)?/)
-  if (!match) return null
-  return Number.parseFloat(match[0])
+type MetricKey = 'score' | 'fundamental_quality' | 'mispricing_signal' | 'fragility_risk' | 'signal_confidence'
+
+type ChartSeries = {
+  key: string
+  name: string
+  color: string
+  latestValue: number | null
+  highlighted: boolean
 }
 
-function highlightLabel(values: Array<number | null>, index: number, inverse = false): string | null {
-  const numeric = values.filter((value): value is number => value != null)
-  if (numeric.length < 2 || values[index] == null) return null
-  const target = values[index] as number
-  const best = inverse ? Math.min(...numeric) : Math.max(...numeric)
-  const worst = inverse ? Math.max(...numeric) : Math.min(...numeric)
-  if (target === best && target !== worst) return 'Best'
-  if (target === worst && target !== best) return inverse ? 'Most Fragile' : 'Weakest'
-  return null
+type ChartPoint = {
+  computed_at: string
+  label: string
+  [key: string]: string | number | null
 }
 
-function matrixSectionTitle(title: string, subtitle: string) {
+const HIGHLIGHT_COLORS = ['#ff4fa3', '#67e26f', '#ffb347', '#74b3ff', '#c084fc', '#44d9e6']
+
+const METRIC_CONFIG: Array<{
+  key: MetricKey
+  title: string
+  subtitle: string
+  lowerIsBetter?: boolean
+  formatter: (value: number) => string
+}> = [
+  {
+    key: 'score',
+    title: 'Overall Performance',
+    subtitle: 'Total score across runs. This is the cleanest view of who is trending up or down overall.',
+    formatter: (value) => value.toFixed(1),
+  },
+  {
+    key: 'fundamental_quality',
+    title: 'Strength',
+    subtitle: 'How business quality evolves run by run across the full universe.',
+    formatter: (value) => value.toFixed(1),
+  },
+  {
+    key: 'mispricing_signal',
+    title: 'Upside Gap',
+    subtitle: 'Where the model still sees pricing upside left after each run.',
+    formatter: (value) => value.toFixed(1),
+  },
+  {
+    key: 'fragility_risk',
+    title: 'Risk',
+    subtitle: 'Lower is better. This chart shows which subnets remain hardest to break under stress.',
+    lowerIsBetter: true,
+    formatter: (value) => value.toFixed(1),
+  },
+  {
+    key: 'signal_confidence',
+    title: 'Evidence Quality',
+    subtitle: 'How clean and trustworthy the underlying read looks over time.',
+    formatter: (value) => value.toFixed(1),
+  },
+]
+
+function formatAxisLabel(value: string): string {
+  const date = new Date(value)
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
+}
+
+function formatTooltipLabel(value: string): string {
+  const date = new Date(value)
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function subnetLabel(name: string | null | undefined, netuid: number): string {
+  return name?.trim() || `SN${netuid}`
+}
+
+function buildChartModel(data: CompareSeriesData, metric: MetricKey) {
+  const latestRun = data.runs[data.runs.length - 1]
+  const latestSorted = [...(latestRun?.subnets ?? [])]
+    .filter((item) => item[metric] != null)
+    .sort((left, right) => {
+      const leftValue = left[metric] as number
+      const rightValue = right[metric] as number
+      if (metric === 'fragility_risk') return leftValue - rightValue
+      return rightValue - leftValue
+    })
+
+  const highlightIds = new Set(latestSorted.slice(0, 6).map((item) => item.netuid))
+  const colorById = new Map<number, string>()
+  latestSorted.slice(0, 6).forEach((item, index) => {
+    colorById.set(item.netuid, HIGHLIGHT_COLORS[index] ?? HIGHLIGHT_COLORS[HIGHLIGHT_COLORS.length - 1])
+  })
+
+  const chartData: ChartPoint[] = data.runs.map((run) => {
+    const point: ChartPoint = {
+      computed_at: run.computed_at,
+      label: formatAxisLabel(run.computed_at),
+    }
+    run.subnets.forEach((subnet) => {
+      point[`sn_${subnet.netuid}`] = subnet[metric]
+    })
+    return point
+  })
+
+  const series: ChartSeries[] = (latestRun?.subnets ?? [])
+    .filter((subnet) => subnet[metric] != null)
+    .map((subnet) => ({
+      key: `sn_${subnet.netuid}`,
+      name: subnetLabel(subnet.name, subnet.netuid),
+      color: colorById.get(subnet.netuid) ?? '#58708a',
+      latestValue: subnet[metric],
+      highlighted: highlightIds.has(subnet.netuid),
+    }))
+    .sort((left, right) => {
+      if (left.highlighted !== right.highlighted) return Number(right.highlighted) - Number(left.highlighted)
+      return (right.latestValue ?? -Infinity) - (left.latestValue ?? -Infinity)
+    })
+
+  return {
+    chartData,
+    series,
+    highlights: series.filter((item) => item.highlighted),
+  }
+}
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+  formatter,
+}: {
+  active?: boolean
+  payload?: Array<{ dataKey?: string; value?: number; color?: string; name?: string }>
+  label?: string
+  formatter: (value: number) => string
+}) {
+  if (!active || !payload?.length || !label) return null
+
+  const topItems = payload
+    .filter((item): item is { dataKey?: string; value: number; color?: string; name?: string } => typeof item.value === 'number')
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 6)
+
   return (
-    <div className="mb-4">
-      <div className="section-title">{title}</div>
-      <p className="mt-1 text-sm text-[color:var(--text-secondary)]">{subtitle}</p>
-    </div>
-  )
-}
-
-function compareGridClass(count: number): string {
-  if (count === 2) return 'xl:grid-cols-2'
-  if (count === 3) return 'xl:grid-cols-3'
-  return 'xl:grid-cols-4'
-}
-
-function trustComparisonLabel(values: Array<number | null>, index: number, inverse = false): string | null {
-  const numeric = values.filter((value): value is number => value != null)
-  if (numeric.length < 2 || values[index] == null) return null
-  const target = values[index] as number
-  const best = inverse ? Math.min(...numeric) : Math.max(...numeric)
-  const worst = inverse ? Math.max(...numeric) : Math.min(...numeric)
-  if (target === best && target !== worst) return inverse ? 'Cleanest' : 'Strongest'
-  if (target === worst && target !== best) return inverse ? 'Most Incomplete' : 'Weakest'
-  return null
-}
-
-function InsightColumn({ title, items, empty }: { title: string; items: MemoSectionItem[]; empty: string }) {
-  return (
-    <div className="space-y-3">
-      <div className="eyebrow">{title}</div>
-      {items.length ? (
-        items.slice(0, 4).map((item, index) => (
-          <div key={`${item.title}-${index}`} className="surface-subtle p-3">
-            <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
-            <div className="mt-1 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</div>
-            {item.meta ? <div className="mt-2 text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{item.meta}</div> : null}
+    <div className="rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(7,14,20,0.94)] p-3 shadow-2xl">
+      <div className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{formatTooltipLabel(label)}</div>
+      <div className="mt-3 space-y-2">
+        {topItems.map((item) => (
+          <div key={item.dataKey} className="flex items-center justify-between gap-4 text-sm">
+            <div className="flex items-center gap-2 text-[color:var(--text-secondary)]">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+              <span>{item.name}</span>
+            </div>
+            <span className="font-mono text-[color:var(--text-primary)]">{formatter(item.value)}</span>
           </div>
-        ))
-      ) : (
-        <div className="surface-subtle p-3 text-sm text-[color:var(--text-tertiary)]">{empty}</div>
-      )}
+        ))}
+      </div>
     </div>
   )
 }
 
-export default function CompareWorkspace({ memos }: { memos: DetailMemoViewModel[] }) {
-  const [differencesOnly, setDifferencesOnly] = useState(false)
+function MetricRunChart({
+  title,
+  subtitle,
+  chartData,
+  series,
+  highlights,
+  formatter,
+  lowerIsBetter,
+  dense,
+}: {
+  title: string
+  subtitle: string
+  chartData: ChartPoint[]
+  series: ChartSeries[]
+  highlights: ChartSeries[]
+  formatter: (value: number) => string
+  lowerIsBetter?: boolean
+  dense?: boolean
+}) {
+  return (
+    <section className="surface-panel p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="section-title">{title}</div>
+          <p className="mt-1 text-sm text-[color:var(--text-secondary)]">{subtitle}</p>
+        </div>
+        {lowerIsBetter ? (
+          <div className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">Lower is better</div>
+        ) : null}
+      </div>
 
-  const signalRows = useMemo(
-    () =>
-      ['fundamental_quality', 'mispricing_signal', 'fragility_risk', 'signal_confidence']
-        .map((key) => ({
-          label: memos[0]?.signals.find((signal) => signal.key === key)?.label ?? key,
-          inverse: key === 'fragility_risk',
-          values: memos.map((memo) => memo.signals.find((signal) => signal.key === key) ?? null),
-        }))
-        .filter((row) =>
-          differencesOnly
-            ? new Set(row.values.map((value) => value?.value?.toFixed(1) ?? 'na')).size > 1
-            : true,
-        ),
-    [differencesOnly, memos],
+      <div className={cn('h-[360px] w-full', dense && 'h-[300px]')}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 16, right: 18, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="rgba(138, 163, 184, 0.14)" vertical={false} />
+            <XAxis
+              dataKey="computed_at"
+              tickFormatter={formatAxisLabel}
+              minTickGap={28}
+              stroke="rgba(138, 163, 184, 0.45)"
+              tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+            />
+            <YAxis
+              stroke="rgba(138, 163, 184, 0.45)"
+              tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+              tickFormatter={formatter}
+              width={52}
+            />
+            <Tooltip content={<CustomTooltip formatter={formatter} />} />
+            {series.map((line) => (
+              <Line
+                key={line.key}
+                type="monotone"
+                dataKey={line.key}
+                name={line.name}
+                stroke={line.color}
+                strokeWidth={line.highlighted ? 2.2 : 0.9}
+                strokeOpacity={line.highlighted ? 0.95 : 0.18}
+                dot={false}
+                connectNulls
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="mt-4">
+        <div className="eyebrow">Latest Leaders</div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {highlights.map((item) => (
+            <div key={item.key} className="flex items-center justify-between rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.6)] px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                <span className="truncate text-sm text-[color:var(--text-primary)]">{item.name}</span>
+              </div>
+              <span className="shrink-0 font-mono text-sm text-[color:var(--text-secondary)]">
+                {item.latestValue != null ? formatter(item.latestValue) : 'n/a'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   )
+}
 
-  const trustRows = useMemo(
-    () => {
-      const keys = ['Signal confidence', 'Data confidence', 'Market confidence', 'Thesis confidence', 'Reconstructed inputs', 'Discarded inputs']
-      return keys
-        .map((label) => ({
-          label,
-          values: memos.map((memo) => {
-            const source = [...memo.confidenceHeadline, ...memo.visibilityItems.map((item) => ({ label: item.title, value: item.body, tone: item.tone }))]
-            return source.find((item) => item.label === label || item.label === label.replace('inputs', 'Inputs') || item.label === label.replace('confidence', 'confidence')) ?? null
-          }),
-        }))
-        .filter((row) =>
-          differencesOnly
-            ? new Set(row.values.map((value) => value?.value ?? 'na')).size > 1
-            : true,
-        )
-    },
-    [differencesOnly, memos],
+export default function CompareWorkspace({ data }: { data: CompareSeriesData }) {
+  const [days, setDays] = useState<'14' | '30' | '90'>('30')
+
+  const slicedData = useMemo(() => {
+    if (days === '90') return data
+    const cutoff = days === '14' ? 14 : 30
+    const since = Date.now() - cutoff * 24 * 60 * 60 * 1000
+    return {
+      ...data,
+      runs: data.runs.filter((run) => new Date(run.computed_at).getTime() >= since),
+    }
+  }, [data, days])
+
+  const metricCharts = useMemo(
+    () =>
+      METRIC_CONFIG.map((metric) => ({
+        ...metric,
+        ...buildChartModel(slicedData, metric.key),
+      })),
+    [slicedData],
   )
 
   return (
     <div className="space-y-6 pb-16">
       <PageHeader
-        title="Compare subnets"
-        subtitle="Use aligned metrics to determine which names are strongest, weakest, most fragile, or least trustworthy before you spend time on the full memo."
+        title="Compare runs"
+        subtitle="Five clean run-over-run charts show how the whole subnet universe evolves across score, strength, upside, risk, and evidence quality."
         actions={
           <>
             <Link href="/" className="button-secondary">
               Back to discover
             </Link>
-            <button type="button" onClick={() => setDifferencesOnly((current) => !current)} className={cn('button-secondary', differencesOnly && 'border-[color:var(--confidence-border)] bg-[color:var(--confidence-surface)] text-[color:var(--confidence-strong)]')}>
-              Highlight differences only
-            </button>
+            <div className="flex items-center gap-2 rounded-full border border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.7)] p-1">
+              {(['14', '30', '90'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setDays(option)}
+                  className={cn(
+                    'rounded-full px-3 py-1.5 text-xs font-medium tracking-[0.16em] text-[color:var(--text-secondary)] transition-colors',
+                    days === option && 'bg-[color:var(--surface-2)] text-[color:var(--text-primary)]',
+                  )}
+                >
+                  {option}D
+                </button>
+              ))}
+            </div>
           </>
         }
+        stats={[
+          { label: 'Runs', value: String(slicedData.runs.length) },
+          { label: 'Subnets', value: String(slicedData.total_subnets) },
+        ]}
       />
 
-      <section className="surface-panel p-5 sm:p-6">
-        {matrixSectionTitle('Summary', 'Compare the decision framing, overall rank, and current trust state before drilling into individual metrics.')}
-        <div className={cn('grid gap-4', compareGridClass(memos.length))}>
-          {memos.map((memo) => (
-            <div key={memo.netuidLabel} className="surface-subtle p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusChip tone="neutral">{memo.netuidLabel}</StatusChip>
-                <StatusChip tone={memo.modelLabelTone}>{memo.modelLabel}</StatusChip>
-              </div>
-              <Link href={memo.href} className="mt-3 block text-2xl font-semibold tracking-tight text-[color:var(--text-primary)] hover:text-[color:var(--mispricing-strong)]">
-                {memo.name}
-              </Link>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{memo.decisionLine}</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <MetricCard label="Rank" value={memo.rankLabel} />
-                <MetricCard label="Percentile" value={memo.percentileLabel} />
-                <MetricCard label="Updated" value={memo.updatedLabel} />
-                <MetricCard label="Trust" value={<TrustBadge flags={memo.summaryFlags} awaitingRun={memo.awaitingRun} />} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="surface-panel p-5 sm:p-6">
-        {matrixSectionTitle('Signal Comparison', 'Aligned signal bars emphasize strongest quality, biggest mispricing, lowest fragility, and strongest confidence.')}
-        <div className="space-y-6">
-          {signalRows.map((row) => {
-            const values = row.values.map((item) => item?.value ?? null)
-            return (
-              <div key={row.label} className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="section-title text-base">{row.label}</div>
-                  {row.inverse ? <span className="text-xs text-[color:var(--text-tertiary)]">Lower is better</span> : null}
-                </div>
-                <div className={cn('grid gap-4', compareGridClass(memos.length))}>
-                  {row.values.map((signal, index) => (
-                    <div key={`${memos[index].netuidLabel}-${row.label}`} className="surface-subtle p-4">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium text-[color:var(--text-primary)]">{memos[index].name}</div>
-                        {highlightLabel(values, index, row.inverse) ? (
-                          <span className={cn('rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.18em]', toneClass(row.inverse ? 'fragility' : 'quality'))}>
-                            {highlightLabel(values, index, row.inverse)}
-                          </span>
-                        ) : null}
-                      </div>
-                      {signal ? <SignalBar signal={signal as SignalStat} /> : <div className="surface-subtle p-3 text-sm text-[color:var(--text-tertiary)]">No score available.</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="surface-panel p-5 sm:p-6">
-        {matrixSectionTitle('Trust Comparison', 'Trust matters as much as upside. This section calls out confidence strength, repaired telemetry, discarded inputs, and stale or incomplete evidence.')}
-        <div className="space-y-4">
-          {trustRows.map((row) => {
-            const values = row.values.map((item) => parseMetricValue(item?.value ?? ''))
-            return (
-              <div key={row.label} className="space-y-3 border-t border-[color:var(--border-subtle)] pt-4 first:border-t-0 first:pt-0">
-                <div className="text-sm font-medium text-[color:var(--text-primary)]">{row.label}</div>
-                <div className={cn('grid gap-4', compareGridClass(memos.length))}>
-                  {memos.map((memo, index) => {
-                    const inverse = row.label.includes('Discarded') || row.label.includes('Reconstructed')
-                    const label = trustComparisonLabel(values, index, inverse)
-                    return (
-                      <div key={`${memo.netuidLabel}-${row.label}`} className="surface-subtle p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm text-[color:var(--text-secondary)]">{memo.name}</div>
-                          {label ? (
-                            <span className={cn('rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.18em]', toneClass(inverse ? 'warning' : 'quality'))}>
-                              {label}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-2 text-lg font-semibold text-[color:var(--text-primary)]">{row.values[index]?.value ?? 'n/a'}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="surface-panel p-5 sm:p-6">
-        {matrixSectionTitle('Upside vs Break Risk', 'Compare the main reasons a subnet can work against the specific ways the thesis can break.')}
-        <div className={cn('grid gap-4', compareGridClass(memos.length))}>
-          {memos.map((memo) => (
-            <div key={memo.netuidLabel} className="surface-subtle p-4">
-              <div className="mb-4 text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.name}</div>
-              <div className="grid gap-4">
-                <InsightColumn title="Top drivers" items={memo.interesting} empty="No positive drivers surfaced." />
-                <InsightColumn title="Top drags" items={memo.breaks} empty="No drags surfaced." />
-                <InsightColumn title="Thesis breakers" items={memo.breaks.filter((item) => item.title === 'Thesis breaker')} empty="No explicit thesis breakers surfaced." />
-                <InsightColumn title="Fragility contributors" items={memo.fragilityContributors} empty="No fragility contributors surfaced." />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="surface-panel p-5 sm:p-6">
-        {matrixSectionTitle('Stress and Execution', 'Stress drawdown, liquidity, market context, and operating fragility help determine whether the upside survives real-world conditions.')}
-        <div className={cn('grid gap-4', compareGridClass(memos.length))}>
-          {memos.map((memo) => (
-            <div key={memo.netuidLabel} className="surface-subtle p-4">
-              <div className="text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.name}</div>
-              <div className="mt-4 grid gap-3">
-                {memo.stressItems.map((item, index) => (
-                  <MetricCard key={`${item.title}-${index}`} label={item.title} value={item.body} meta={item.meta} accent={item.tone === 'neutral' ? 'default' : item.tone} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="surface-panel p-5 sm:p-6">
-        {matrixSectionTitle('Links and Next Actions', 'Use the compare read to decide which memos deserve deeper attention or external corroboration.')}
-        <div className={cn('grid gap-4', compareGridClass(memos.length))}>
-          {memos.map((memo) => (
-            <div key={memo.netuidLabel} className="surface-subtle p-4">
-              <div className="text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.name}</div>
-              <div className="mt-4 flex flex-col gap-2">
-                <Link href={memo.href} className="button-primary">
-                  Open research memo
-                </Link>
-                {memo.links.map((link) => (
-                  <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="button-secondary">
-                    {link.label}
-                  </a>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {!slicedData.runs.length ? (
+        <section className="surface-panel p-10 text-center text-sm text-[color:var(--text-secondary)]">
+          No run history available yet for the selected window.
+        </section>
+      ) : (
+        <>
+          <MetricRunChart {...metricCharts[0]} />
+          <div className="grid gap-6 xl:grid-cols-2">
+            {metricCharts.slice(1).map((chart) => {
+              const { key, ...chartProps } = chart
+              return <MetricRunChart key={key} {...chartProps} dense />
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

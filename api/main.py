@@ -23,6 +23,9 @@ from api.models import (
     BacktestLabelSummary,
     BacktestObservation,
     BacktestResponse,
+    CompareSeriesResponse,
+    CompareSeriesRunPoint,
+    CompareSeriesSubnetPoint,
     DetailedScoreHistoryPoint,
     DistributionBucket,
     DistributionResponse,
@@ -572,6 +575,57 @@ async def leaderboard(
     top = [_with_meta(r) for r in all_rows[:20]]
     bottom = [_with_meta(r) for r in all_rows[-5:]]
     result = LeaderboardResponse(top=top, bottom=bottom)
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.get(
+    "/api/v1/compare/timeseries",
+    response_model=CompareSeriesResponse,
+    summary="Run-over-run universe series for compare charts",
+    tags=["Compare"],
+)
+async def compare_timeseries(
+    request: Request,
+    days: int = Query(30, ge=1, le=180),
+    _: None = Depends(_check_rate_limit),
+) -> CompareSeriesResponse:
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("compare_timeseries", days, rows=all_rows)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    history_rows = [row for row in get_scores_since(days=days) if _is_investable_row(row)]
+    meta_by_netuid = get_all_metadata()
+    grouped: dict[str, list[CompareSeriesSubnetPoint]] = defaultdict(list)
+
+    for row in history_rows:
+        raw_data = row.get("raw_data") or {}
+        analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
+        outputs = analysis.get("primary_outputs") or raw_data.get("primary_outputs") or {}
+        metadata = meta_by_netuid.get(row["netuid"]) or {}
+        grouped[row["computed_at"]].append(
+            CompareSeriesSubnetPoint(
+                netuid=row["netuid"],
+                name=metadata.get("name") or _override_name_map().get(row["netuid"]),
+                score=row["score"],
+                fundamental_quality=outputs.get("fundamental_quality"),
+                mispricing_signal=outputs.get("mispricing_signal"),
+                fragility_risk=outputs.get("fragility_risk"),
+                signal_confidence=outputs.get("signal_confidence"),
+            )
+        )
+
+    runs = [
+        CompareSeriesRunPoint(
+            computed_at=computed_at,
+            subnets=sorted(points, key=lambda point: point.netuid),
+        )
+        for computed_at, points in sorted(grouped.items())
+    ]
+    latest_count = len(runs[-1].subnets) if runs else 0
+    result = CompareSeriesResponse(runs=runs, total_subnets=latest_count)
     _cache_set(cache_key, result)
     return result
 

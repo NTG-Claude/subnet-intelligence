@@ -191,6 +191,26 @@ export interface BacktestData {
   }[]
 }
 
+export interface CompareSeriesSubnetPoint {
+  netuid: number
+  name: string | null
+  score: number
+  fundamental_quality: number | null
+  mispricing_signal: number | null
+  fragility_risk: number | null
+  signal_confidence: number | null
+}
+
+export interface CompareSeriesRunPoint {
+  computed_at: string
+  subnets: CompareSeriesSubnetPoint[]
+}
+
+export interface CompareSeriesData {
+  runs: CompareSeriesRunPoint[]
+  total_subnets: number
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API}${path}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
@@ -214,3 +234,6 @@ export const fetchLatestRun = () =>
 
 export const fetchLabelBacktests = (days = 90) =>
   get<BacktestData>(`/api/v1/backtests/labels?days=${days}`)
+
+export const fetchCompareTimeseries = (days = 30) =>
+  get<CompareSeriesData>(`/api/v1/compare/timeseries?days=${days}`)
