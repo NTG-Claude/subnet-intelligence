@@ -1,4 +1,5 @@
 from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
+from features.components_opportunity import build_opportunity_components
 from explain.engine import build_explanation
 from features.metrics import compute_raw_features, normalize_features
 from features.types import AxisScores, PrimarySignals
@@ -278,3 +279,77 @@ def test_small_input_changes_do_not_create_large_score_jumps():
     assert abs(base.primary_signals.mispricing_signal - tweaked.primary_signals.mispricing_signal) < 0.30
     assert abs(base.primary_signals.fragility_risk - tweaked.primary_signals.fragility_risk) < 0.20
     assert abs(base.primary_signals.signal_confidence - tweaked.primary_signals.signal_confidence) < 0.12
+
+
+def test_participation_without_crowding_retains_level_support_for_established_subnet():
+    history = [
+        HistoricalFeaturePoint(
+            timestamp="2026-03-28T00:00:00+00:00",
+            alpha_price_tao=9.7,
+            tao_in_pool=18_900.0,
+            active_ratio=0.58,
+            participation_breadth=0.50,
+            validator_participation=0.72,
+            incentive_distribution_quality=0.69,
+            market_structure_floor=0.71,
+            fundamental_quality=0.64,
+        ),
+        HistoricalFeaturePoint(
+            timestamp="2026-03-29T00:00:00+00:00",
+            alpha_price_tao=9.9,
+            tao_in_pool=19_200.0,
+            active_ratio=0.59,
+            participation_breadth=0.50,
+            validator_participation=0.73,
+            incentive_distribution_quality=0.70,
+            market_structure_floor=0.72,
+            fundamental_quality=0.65,
+        ),
+        HistoricalFeaturePoint(
+            timestamp="2026-03-30T00:00:00+00:00",
+            alpha_price_tao=10.0,
+            tao_in_pool=19_350.0,
+            active_ratio=0.60,
+            participation_breadth=0.51,
+            validator_participation=0.73,
+            incentive_distribution_quality=0.70,
+            market_structure_floor=0.72,
+            fundamental_quality=0.66,
+        ),
+    ]
+
+    bundle = compute_raw_features(
+        _snapshot(
+            alpha_price_tao=10.05,
+            tao_in_pool=19_450.0,
+            alpha_in_pool=1_950.0,
+            active_neurons_7d=7,
+            history=history,
+        )
+    )
+
+    assert bundle.raw["participation_without_crowding"] > 0.15
+
+
+def test_low_underreaction_is_softened_before_becoming_base_opportunity_drag():
+    components = build_opportunity_components(
+        raw={},
+        normalized={
+            "quality_change": 0.0,
+            "quality_acceleration": 0.0,
+            "reserve_change": 0.0,
+            "reserve_growth_without_price": 0.0,
+            "price_response_lag_to_quality_shift": 0.0,
+            "expected_price_response_gap": 0.0,
+            "participation_without_crowding": 0.18,
+            "participation_breadth": 0.52,
+            "crowding_proxy": 0.28,
+            "active_ratio": 0.70,
+            "validator_participation": 0.68,
+            "cohort_implied_fair_value_gap": 0.14,
+            "underreaction_score": 0.08,
+        },
+    )
+
+    assert components["raw_opportunity_underreaction"] < 0.5
+    assert components["opportunity_underreaction"] > components["raw_opportunity_underreaction"]

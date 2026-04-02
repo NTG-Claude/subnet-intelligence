@@ -219,6 +219,15 @@ def _latest_trend_change(history: list[float], periods: int = 4) -> float | None
     return slope / scale
 
 
+def _recent_mean(history: list[float], periods: int) -> float | None:
+    if not history:
+        return None
+    sample = history[-periods:]
+    if not sample:
+        return None
+    return fmean(sample)
+
+
 def _change_vs_history(current: float, history: list[float]) -> float | None:
     if not history:
         return None
@@ -226,6 +235,40 @@ def _change_vs_history(current: float, history: list[float]) -> float | None:
     if abs(anchor) <= 1e-9:
         return None
     return (current - anchor) / abs(anchor)
+
+
+def _smoothed_change_vs_history(current: float, history: list[float], short_periods: int = 2, long_periods: int = 5) -> float | None:
+    if not history:
+        return None
+    short_mean = _recent_mean(history, short_periods)
+    long_mean = _recent_mean(history, long_periods)
+    anchor_candidates = [value for value in (short_mean, long_mean) if value is not None]
+    if not anchor_candidates:
+        return None
+    if len(anchor_candidates) == 1:
+        anchor = anchor_candidates[0]
+    else:
+        anchor = 0.65 * anchor_candidates[0] + 0.35 * anchor_candidates[1]
+    if abs(anchor) <= 1e-9:
+        return None
+    return (current - anchor) / abs(anchor)
+
+
+def _blended_acceleration(history: list[float]) -> float | None:
+    acceleration = _acceleration(history)
+    short_trend = _latest_trend_change(history, periods=4)
+    long_trend = _latest_trend_change(history, periods=6)
+    components = []
+    if acceleration is not None:
+        components.append((0.45, acceleration))
+    if short_trend is not None:
+        components.append((0.35, short_trend))
+    if long_trend is not None:
+        components.append((0.20, long_trend))
+    if not components:
+        return None
+    total_weight = sum(weight for weight, _ in components)
+    return sum(weight * value for weight, value in components) / max(total_weight, 1e-9)
 
 
 def _history_anchor(history: list[float], fallback: float = 0.0) -> float:
@@ -530,19 +573,19 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         incentive_distribution_quality,
         market_structure_floor,
     )
-    raw_price_change = _change_vs_history(c["alpha_price_tao"], price_history)
+    raw_price_change = _smoothed_change_vs_history(c["alpha_price_tao"], price_history)
     price_change = None if raw_price_change is None else raw_price_change * price_signal_reliability
-    active_change = _change_vs_history(active_ratio, active_history)
-    breadth_change = _change_vs_history(participation_breadth, breadth_history)
-    validator_change = _change_vs_history(validator_participation, validator_history)
-    structure_change = _change_vs_history(market_structure_floor, structure_history)
-    quality_change = _change_vs_history(quality_current, quality_history)
-    emission_change = _change_vs_history(c["emission_per_block_tao"], emission_history)
-    reserve_change = _change_vs_history(c["tao_in_pool"], flow_history)
-    concentration_change = _change_vs_history(concentration_now, concentration_history)
-    liquidity_change = _change_vs_history(avg_slippage or 0.0, liquidity_history) if avg_slippage is not None else None
+    active_change = _smoothed_change_vs_history(active_ratio, active_history)
+    breadth_change = _smoothed_change_vs_history(participation_breadth, breadth_history)
+    validator_change = _smoothed_change_vs_history(validator_participation, validator_history)
+    structure_change = _smoothed_change_vs_history(market_structure_floor, structure_history)
+    quality_change = _smoothed_change_vs_history(quality_current, quality_history)
+    emission_change = _smoothed_change_vs_history(c["emission_per_block_tao"], emission_history)
+    reserve_change = _smoothed_change_vs_history(c["tao_in_pool"], flow_history)
+    concentration_change = _smoothed_change_vs_history(concentration_now, concentration_history)
+    liquidity_change = _smoothed_change_vs_history(avg_slippage or 0.0, liquidity_history) if avg_slippage is not None else None
     quality_level_change = _latest_trend_change(quality_history)
-    quality_acceleration = _acceleration(quality_history)
+    quality_acceleration = _blended_acceleration(quality_history)
     if quality_acceleration is None:
         quality_acceleration = quality_level_change
     elif quality_level_change is not None:
@@ -552,7 +595,16 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         liquidity_improvement_rate = (reserve_change or 0.0) - max(liquidity_change or 0.0, 0.0)
     validator_diversity_trend = None if concentration_change is None else -concentration_change
     realized_price_response = max(price_change or 0.0, 0.0)
-    price_response_lag_to_quality_shift = max(0.0, max(quality_change or 0.0, quality_acceleration or 0.0) - realized_price_response)
+    quality_momentum_for_lag = max(
+        0.60 * max(quality_change or 0.0, 0.0) + 0.40 * max(quality_acceleration or 0.0, 0.0),
+        0.0,
+    )
+    price_response_lag_to_quality_shift = max(
+        0.0,
+        quality_momentum_for_lag
+        + 0.20 * max(quality_level_change or 0.0, 0.0)
+        - 0.75 * realized_price_response,
+    )
     emission_to_sticky_usage_conversion = max(
         0.0,
         0.50 * max(active_change or 0.0, 0.0)
@@ -570,9 +622,11 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     reserve_growth_without_price = max(0.0, (reserve_change or 0.0) - realized_price_response)
     participation_without_crowding = max(
         0.0,
-        0.50 * max(active_change or 0.0, 0.0)
-        + 0.30 * max(breadth_change or 0.0, 0.0)
-        + 0.20 * max(validator_diversity_trend or 0.0, 0.0),
+        0.35 * max(active_change or 0.0, 0.0)
+        + 0.20 * max(breadth_change or 0.0, 0.0)
+        + 0.15 * max(validator_diversity_trend or 0.0, 0.0)
+        + 0.20 * clamp01(0.55 * active_ratio + 0.45 * participation_breadth)
+        + 0.10 * clamp01(1.0 - 0.75 * concentration_now),
     )
     reversal_risk = max(0.0, (price_change or 0.0) - max(quality_change or 0.0, 0.0))
     crowding_proxy = clamp01(
@@ -654,7 +708,11 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         post_incentive_retention,
     )
     realized_reserve_response = max(reserve_change or 0.0, 0.0)
-    expected_price_response_gap = (expected_price_response - realized_price_response) * price_signal_reliability
+    expected_price_response_gap = max(
+        0.0,
+        (0.75 * expected_price_response + 0.25 * max(quality_momentum_for_lag, 0.0))
+        - 0.85 * realized_price_response,
+    ) * price_signal_reliability
     expected_reserve_response_gap = expected_reserve_response - realized_reserve_response
     fair_value_anchor = clamp01(
         0.40 * market_relevance
@@ -1150,7 +1208,18 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
                 {"name": "market_legitimacy", "signed_contribution": round((market_legitimacy - 0.5) * 0.14, 4), "direction": "positive" if market_legitimacy >= 0.5 else "negative", "short_explanation": "Market legitimacy modestly lifts or caps the quality score.", "source_block": "core_blocks"},
             ],
             "mispricing_signal": [
-                {"name": "base_opportunity", "signed_contribution": round((opportunity_underreaction - 0.5) * 0.5, 4), "direction": "positive" if opportunity_underreaction >= 0.5 else "negative", "short_explanation": "Observed underreaction forms the base opportunity.", "source_block": "core_blocks"},
+                {
+                    "name": "base_opportunity",
+                    "signed_contribution": round(
+                        (opportunity_underreaction - 0.5) * 0.5
+                        if opportunity_underreaction >= 0.5
+                        else -(0.5 - opportunity_underreaction) * 0.25,
+                        4,
+                    ),
+                    "direction": "positive" if opportunity_underreaction >= 0.5 else "negative",
+                    "short_explanation": "Observed underreaction forms the base opportunity.",
+                    "source_block": "core_blocks",
+                },
                 {"name": "confidence_factor", "signed_contribution": round((confidence_factor - 0.5) * 0.25, 4), "direction": "positive" if confidence_factor >= 0.5 else "negative", "short_explanation": "Data and thesis confidence scale the opportunity rather than replacing it.", "source_block": "core_blocks"},
                 {"name": "structural_validity_factor", "signed_contribution": round((structural_validity_factor - 0.5) * 0.25, 4), "direction": "positive" if structural_validity_factor >= 0.5 else "negative", "short_explanation": "Market structure validates whether the opportunity is investable.", "source_block": "core_blocks"},
                 {"name": "small_penalties", "signed_contribution": round(-small_penalties * 0.16, 4), "direction": "negative" if small_penalties > 0 else "neutral", "short_explanation": "Small penalties only address clear overreaction, crowding, or legitimacy breaks.", "source_block": "primary_signals"},
