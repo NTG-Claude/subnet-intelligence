@@ -70,7 +70,7 @@ def _stress(max_drawdown: float, robustness: float = 0.1) -> StressTestResult:
     )
 
 
-def test_micro_pool_apy_forces_overrewarded_structure_rule():
+def test_micro_pool_apy_forces_overrewarded_rule():
     snapshot = _snapshot(
         active_neurons_7d=8,
         tao_in_pool=10.0,
@@ -88,7 +88,7 @@ def test_micro_pool_apy_forces_overrewarded_structure_rule():
     )
     rules = evaluate_hard_rules(snapshot, bundle)
     assert "micro_pool_apy_caps_total_score" in rules.activated
-    assert rules.force_label == "Overrewarded Structure"
+    assert rules.force_label == "Overrewarded"
     assert rules.total_cap is not None and rules.total_cap <= 0.12
 
 
@@ -202,7 +202,7 @@ def test_fragile_repricing_blocks_top_mispricing():
     assert rules.confidence_cap is not None and rules.confidence_cap <= 0.48
 
 
-def test_inactive_subnet_forces_dereg_candidate():
+def test_inactive_subnet_forces_dereg_risk():
     snapshot = _snapshot(
         tao_in_pool=5000.0,
         emission_per_block_tao=0.01,
@@ -229,11 +229,11 @@ def test_inactive_subnet_forces_dereg_candidate():
         opportunity_gap=0.3,
     )
     label, thesis = assign_label(axes, bundle, _stress(0.05, robustness=0.8), rules)
-    assert label == "Dereg Candidate"
+    assert label == "Dereg Risk"
     assert "replacement risk" in thesis
 
 
-def test_thin_liquidity_forces_overrewarded_structure_label():
+def test_thin_liquidity_forces_overrewarded_label():
     snapshot = _snapshot(
         tao_in_pool=30.0,
         emission_per_block_tao=0.02,
@@ -260,10 +260,10 @@ def test_thin_liquidity_forces_overrewarded_structure_label():
         opportunity_gap=-0.1,
     )
     label, _ = assign_label(axes, bundle, _stress(0.22, robustness=0.35), rules)
-    assert label == "Overrewarded Structure"
+    assert label == "Overrewarded"
 
 
-def test_concentration_alone_does_not_force_overrewarded_structure():
+def test_concentration_alone_does_not_force_overrewarded():
     snapshot = _snapshot(
         tao_in_pool=5000.0,
         emission_per_block_tao=0.03,
@@ -290,7 +290,7 @@ def test_concentration_alone_does_not_force_overrewarded_structure():
         opportunity_gap=0.05,
     )
     label, _ = assign_label(axes, bundle, _stress(0.21, robustness=0.3), rules)
-    assert label == "Under Review"
+    assert label == "Evidence Limited"
 
 
 def test_consensus_hollow_forces_consensus_hollow_label():
@@ -324,7 +324,7 @@ def test_consensus_hollow_forces_consensus_hollow_label():
     assert label == "Consensus Hollow"
 
 
-def test_high_quality_resilient_case_can_escape_under_review():
+def test_high_quality_resilient_case_can_escape_evidence_limited():
     bundle = FeatureBundle(
         raw={
             "market_relevance_proxy": 0.48,
@@ -357,7 +357,7 @@ def test_high_quality_resilient_case_can_escape_under_review():
         HardRuleResult(activated=[]),
     )
 
-    assert label == "Early Quality Build"
+    assert label == "Quality Leader"
     assert "Quality and resilience" in thesis
 
 
@@ -727,7 +727,7 @@ def test_moderate_market_structure_breach_uses_watchlist_caps():
     assert rules.fragility_floor == 0.72
 
 
-def test_liquid_hyped_subnet_can_be_reflexive_crowded_trade():
+def test_liquid_hyped_subnet_can_be_crowded_reflexive():
     snapshot = _snapshot(
         tao_in_pool=100000.0,
         emission_per_block_tao=0.03,
@@ -756,11 +756,11 @@ def test_liquid_hyped_subnet_can_be_reflexive_crowded_trade():
         opportunity_gap=-0.04,
     )
     label, thesis = assign_label(axes, bundle, _stress(0.23, robustness=0.57), rules)
-    assert label == "Reflexive Crowded Trade"
+    assert label == "Crowded Reflexive"
     assert "crowded" in thesis.lower()
 
 
-def test_label_logic_can_use_v2_blocks_for_hidden_compounder():
+def test_label_logic_can_use_v2_blocks_for_compounding_quality():
     bundle = FeatureBundle(
         raw={
             "validator_dominance": 0.22,
@@ -791,11 +791,11 @@ def test_label_logic_can_use_v2_blocks_for_hidden_compounder():
 
     label, thesis = assign_label(signals, bundle, _stress(0.08, robustness=0.82), HardRuleResult(activated=[]))
 
-    assert label == "Hidden Compounder"
+    assert label == "Compounding Quality"
     assert "compounding" in thesis.lower()
 
 
-def test_label_logic_uses_v2_confidence_artifacts_for_under_review():
+def test_label_logic_uses_v2_confidence_artifacts_for_evidence_limited():
     bundle = FeatureBundle(
         raw={
             "validator_dominance": 0.20,
@@ -826,5 +826,5 @@ def test_label_logic_uses_v2_confidence_artifacts_for_under_review():
 
     label, thesis = assign_label(signals, bundle, _stress(0.10, robustness=0.74), HardRuleResult(activated=[]))
 
-    assert label == "Under Review"
+    assert label == "Evidence Limited"
     assert "evidence quality" in thesis.lower()

@@ -403,7 +403,7 @@ def build_scores(snapshots: list[RawSubnetSnapshot]) -> dict[int, ScoreArtifacts
             )
             axes = _legacy_axes_from_primary(fallback_primary, bundle, stress.robustness)
             score = _stabilize_priority_with_history(snapshot, bundle, _ranking_priority_score(fallback_primary, bundle))
-            label = "Under Review"
+            label = "Evidence Limited"
             thesis = (
                 "Latest telemetry is incomplete, so the framework falls back to the subnet's recently validated "
                 "investment state instead of mistaking the data gap for structural deterioration."

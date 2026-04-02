@@ -151,9 +151,9 @@ export const UNIVERSE_LENSES: UniverseLens[] = [
   },
   {
     id: 'under-review',
-    title: 'Under review / telemetry-gap',
-    description: 'Awaiting runs, repaired inputs, discarded inputs, or partial outputs.',
-    emptyMessage: 'No under-review names are visible in the current universe.',
+    title: 'Evidence limited / telemetry-gap',
+    description: 'Low-confidence names, repaired inputs, discarded inputs, or partial outputs.',
+    emptyMessage: 'No evidence-limited or telemetry-gap names are visible in the current universe.',
   },
 ]
 

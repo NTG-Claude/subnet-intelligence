@@ -63,21 +63,21 @@ def assign_label(
 
     if rules.force_label == "Consensus Hollow":
         return "Consensus Hollow", "Validator alignment exists, but the underlying signal is too uninformative to trust as investment evidence."
-    if rules.force_label == "Dereg Candidate":
-        return "Dereg Candidate", "Participation, liquidity, and survivability remain too weak, leaving elevated replacement risk for any investment thesis."
-    if rules.force_label == "Overrewarded Structure":
-        return "Overrewarded Structure", "Liquidity and ownership structure are too fragile for the current reward and pricing profile."
+    if rules.force_label == "Dereg Risk":
+        return "Dereg Risk", "Participation, liquidity, and survivability remain too weak, leaving elevated replacement risk for any investment thesis."
+    if rules.force_label == "Overrewarded":
+        return "Overrewarded", "Liquidity and ownership structure are too fragile for the current reward and pricing profile."
 
     if inactive or dereg_risk > 0.60:
-        return "Dereg Candidate", "The structure is still too vulnerable to participation loss or replacement, leaving clear replacement risk in the thesis."
+        return "Dereg Risk", "The structure is still too vulnerable to participation loss or replacement, leaving clear replacement risk in the thesis."
     if micro_pool or (thin_liquidity and crowding > 0.40):
-        return "Overrewarded Structure", "Capital is paying for yield optics before the market structure is deep enough to support them."
+        return "Overrewarded", "Capital is paying for yield optics before the market structure is deep enough to support them."
     if fragility > 0.72 and concentration > 0.55:
-        return "Fragile Yield Trap", "Economics may look attractive, but concentration, thin liquidity, and reversal risk make the setup brittle."
+        return "Fragile Yield", "Economics may look attractive, but concentration, thin liquidity, and reversal risk make the setup brittle."
     if fundamental > 0.72 and fundamental_health > 0.70 and mispricing > 0.64 and fragility < 0.38 and confidence > 0.58 and market_confidence > 0.55:
-        return "Hidden Compounder", "Quality is compounding faster than price, with enough durability and evidence quality to matter."
+        return "Compounding Quality", "Quality is compounding faster than price, with enough durability and evidence quality to matter."
     if fundamental > 0.60 and opportunity_underreaction > 0.55 and mispricing > 0.58 and price_lag > 0.10 and confidence > 0.48 and market_legitimacy > 0.45:
-        return "Underappreciated Infrastructure", "Structural improvement is visible in participation and liquidity, but market recognition is still lagging."
+        return "Underpriced Quality", "Structural improvement is visible in participation and liquidity, but market recognition is still lagging."
     if (
         fundamental > 0.62
         and fundamental_health > 0.58
@@ -88,15 +88,15 @@ def assign_label(
         and concentration < 0.55
         and crowding < 0.35
     ):
-        return "Early Quality Build", "Quality and resilience are already visible, even if the valuation gap is still modest and the thesis is early."
+        return "Quality Leader", "Quality and resilience are already visible, even if the valuation gap is still modest and the thesis is early."
     if fundamental > 0.56 and fundamental_health > 0.50 and sticky_usage > 0.05 and retention > 0.05 and fragility < 0.55 and thesis_confidence > 0.45:
-        return "Early Quality Build", "Usage and retention are improving in a way that looks earned rather than purely incentive-driven."
+        return "Quality Leader", "Usage and retention are improving in a way that looks earned rather than purely incentive-driven."
     if (
         (crowding > 0.55 and fragility > 0.50 and mispricing < 0.50)
         or (crowding > 0.50 and concentration > 0.58 and stress.max_drawdown > 0.20)
         or (concentration > 0.58 and fragility > 0.55 and mispricing < 0.50 and stress.max_drawdown > 0.20)
     ):
-        return "Reflexive Crowded Trade", "The trade is increasingly crowded, reflexive, and vulnerable to reversals rather than driven by fresh underpricing."
+        return "Crowded Reflexive", "The trade is increasingly crowded, reflexive, and vulnerable to reversals rather than driven by fresh underpricing."
     if confidence < 0.40 or data_confidence < 0.35 or thesis_confidence < 0.35 or confidence_capped:
-        return "Under Review", "The signal is directionally interesting, but current evidence quality is too thin to treat it as investment-grade."
-    return "Under Review", "Quality, valuation gap, fragility, and confidence are mixed, so the thesis remains provisional."
+        return "Evidence Limited", "The signal is directionally interesting, but current evidence quality is too thin to treat it as investment-grade."
+    return "Evidence Limited", "Quality, valuation gap, fragility, and confidence are mixed, so the thesis remains provisional."

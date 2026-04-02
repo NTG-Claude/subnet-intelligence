@@ -107,7 +107,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         fragility_floor = 0.85 if fragility_floor is None else max(fragility_floor, 0.85)
         legacy_score_cap = 0.24 if legacy_score_cap is None else min(legacy_score_cap, 0.24)
         force_negative_label = True
-        force_label = "Dereg Candidate"
+        force_label = "Dereg Risk"
 
     if pool_depth < 100 or max_slippage > 0.35:
         activated.append("thin_liquidity_caps_fragility")
@@ -116,7 +116,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         fragility_floor = 0.82 if fragility_floor is None else max(fragility_floor, 0.82)
         legacy_score_cap = 0.16 if legacy_score_cap is None else min(legacy_score_cap, 0.16)
         force_negative_label = True
-        force_label = force_label or "Overrewarded Structure"
+        force_label = force_label or "Overrewarded"
 
     if pool_depth < 250 and staking_apy > 150:
         activated.append("micro_pool_apy_caps_total_score")
@@ -126,7 +126,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         fragility_floor = 0.88 if fragility_floor is None else max(fragility_floor, 0.88)
         legacy_score_cap = 0.12 if legacy_score_cap is None else min(legacy_score_cap, 0.12)
         force_negative_label = True
-        force_label = force_label or "Overrewarded Structure"
+        force_label = force_label or "Overrewarded"
 
     if pool_depth < 7_500 and staking_apy > 150:
         activated.append("small_pool_yield_intensity_caps_confidence")
@@ -190,7 +190,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         fragility_floor = 0.78 if fragility_floor is None else max(fragility_floor, 0.78)
         legacy_score_cap = 0.34 if legacy_score_cap is None else min(legacy_score_cap, 0.34)
         force_negative_label = True
-        force_label = force_label or "Overrewarded Structure"
+        force_label = force_label or "Overrewarded"
     elif moderate_market_structure_breach:
         activated.append("market_structure_floor_watchlist")
         quality_cap = 0.42 if quality_cap is None else min(quality_cap, 0.42)
@@ -206,7 +206,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         fragility_floor = 0.75 if fragility_floor is None else max(fragility_floor, 0.75)
         legacy_score_cap = 0.32 if legacy_score_cap is None else min(legacy_score_cap, 0.32)
         force_negative_label = True
-        force_label = "Dereg Candidate"
+        force_label = "Dereg Risk"
 
     liquid_flagship_concentration = (
         pool_depth >= 50_000
@@ -276,7 +276,7 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         fragility_floor = 0.80 if fragility_floor is None else max(fragility_floor, 0.80)
         legacy_score_cap = 0.24 if legacy_score_cap is None else min(legacy_score_cap, 0.24)
         force_negative_label = True
-        force_label = force_label or "Dereg Candidate"
+        force_label = force_label or "Dereg Risk"
 
     if confidence_inputs < 0.30 and update_freshness < 0.30:
         activated.append("thin_evidence_caps_confidence")

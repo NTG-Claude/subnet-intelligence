@@ -102,7 +102,7 @@ def test_incomplete_snapshot_uses_recent_history_instead_of_dereg_penalty():
     artifacts = build_scores([snapshot])[4]
 
     assert artifacts.score > 25.0
-    assert artifacts.label == "Under Review"
+    assert artifacts.label == "Evidence Limited"
     assert "telemetry_gap_uses_recent_history" in artifacts.explanation["activated_hard_rules"]
 
 

@@ -24,7 +24,7 @@ SCORES = [
         "rank": i, "computed_at": NOW, "score_version": "v1",
         "alpha_price_tao": float(i),
         "raw_data": {
-            "label": "Hidden Compounder" if i == 1 else "Under Review",
+            "label": "Compounding Quality" if i == 1 else "Evidence Limited",
             "thesis": "test thesis",
             "analysis": {
                 "primary_outputs": {
@@ -275,7 +275,7 @@ def test_list_subnets_uses_override_name_fallback():
         {
             **SCORES[0],
             "netuid": 64,
-            "raw_data": {"label": "Under Review", "thesis": "test thesis", "analysis": {}},
+            "raw_data": {"label": "Evidence Limited", "thesis": "test thesis", "analysis": {}},
         }
     ]
     with patch("api.main.get_latest_scores", return_value=rows), \
@@ -315,7 +315,7 @@ def test_get_subnet_normalizes_schema_stale_analysis_fields():
     stale_row = {
         **SCORES[0],
         "raw_data": {
-            "label": "Under Review",
+            "label": "Evidence Limited",
             "thesis": "test thesis",
             "analysis": {
                 "primary_outputs": {
@@ -470,7 +470,7 @@ def test_backtest_labels():
             "score_version": "v1",
             "alpha_price_tao": 1.0,
             "raw_data": {
-                "label": "Hidden Compounder",
+                "label": "Compounding Quality",
                 "analysis": {
                     "primary_outputs": {
                         "fundamental_quality": 71.0,
@@ -497,7 +497,7 @@ def test_backtest_labels():
             "score_version": "v1",
             "alpha_price_tao": 1.2,
             "raw_data": {
-                "label": "Hidden Compounder",
+                "label": "Compounding Quality",
                 "analysis": {
                     "primary_outputs": {
                         "fundamental_quality": 74.0,
@@ -520,7 +520,7 @@ def test_backtest_labels():
     data = resp.json()
     assert data["observations"] == 1
     assert "relative_forward_return_vs_tao_30d" in data["targets"]
-    assert data["labels"][0]["label"] == "Hidden Compounder"
+    assert data["labels"][0]["label"] == "Compounding Quality"
 
 
 def test_live_cache_key_changes_when_new_run_arrives():

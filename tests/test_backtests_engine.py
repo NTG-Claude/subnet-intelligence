@@ -9,7 +9,7 @@ def test_backtest_summary_exposes_investment_targets_and_primary_outputs():
             "alpha_price_tao": 1.0,
             "computed_at": "2026-03-01T00:00:00+00:00",
             "raw_data": {
-                "label": "Hidden Compounder",
+                "label": "Compounding Quality",
                 "analysis": {
                     "primary_outputs": {
                         "fundamental_quality": 72.0,
@@ -34,7 +34,7 @@ def test_backtest_summary_exposes_investment_targets_and_primary_outputs():
             "alpha_price_tao": 1.15,
             "computed_at": "2026-04-01T00:00:00+00:00",
             "raw_data": {
-                "label": "Hidden Compounder",
+                "label": "Compounding Quality",
                 "analysis": {
                     "primary_outputs": {
                         "fundamental_quality": 75.0,

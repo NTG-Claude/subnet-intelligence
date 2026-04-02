@@ -84,7 +84,7 @@ def test_explainability_uses_block_and_primary_contributors():
         bundle.axes or AxisScores(0.0, 0.0, 0.0, 0.0, 0.0),
         stress,
         HardRuleResult(activated=[]),
-        "Under Review",
+        "Evidence Limited",
         "Synthetic test thesis",
     )
 
@@ -121,7 +121,7 @@ def test_explainability_treats_high_fragility_as_negative_drag():
         bundle.axes or AxisScores(0.0, 0.0, 0.0, 0.0, 0.0),
         stress,
         HardRuleResult(activated=[]),
-        "Under Review",
+        "Evidence Limited",
         "Synthetic fragile thesis",
     )
 
