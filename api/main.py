@@ -23,6 +23,7 @@ from api.models import (
     BacktestLabelSummary,
     BacktestObservation,
     BacktestResponse,
+    DetailedScoreHistoryPoint,
     DistributionBucket,
     DistributionResponse,
     ErrorResponse,
@@ -247,6 +248,27 @@ def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse
     )
 
 
+def _row_to_detailed_history_point(row: dict) -> DetailedScoreHistoryPoint:
+    raw_data = row.get("raw_data") or {}
+    analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
+    primary_outputs = analysis.get("primary_outputs") or raw_data.get("primary_outputs")
+    conditioning = analysis.get("conditioning") or {}
+    reliability = conditioning.get("reliability") or {}
+    return DetailedScoreHistoryPoint(
+        computed_at=row["computed_at"],
+        score=row["score"],
+        rank=row.get("rank"),
+        score_version=row.get("score_version", "v1"),
+        label=raw_data.get("label"),
+        thesis=raw_data.get("thesis"),
+        primary_outputs=PrimaryOutputsResponse(**primary_outputs) if primary_outputs else None,
+        block_scores=analysis.get("block_scores") or {},
+        conditioning_reliability=reliability,
+        top_positive_drivers=analysis.get("top_positive_drivers") or [],
+        top_negative_drags=analysis.get("top_negative_drags") or analysis.get("top_negative_drivers") or [],
+    )
+
+
 def _sort_value(row: dict, sort_by: str, meta_by_netuid: dict[int, dict]) -> Any:
     raw_data = row.get("raw_data") or {}
     primary_outputs = raw_data.get("analysis", {}).get("primary_outputs") or raw_data.get("primary_outputs") or {}
@@ -467,6 +489,34 @@ async def get_subnet_history(
         )
         for h in history_raw
     ]
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.get(
+    "/api/v1/subnets/{netuid}/history/detailed",
+    response_model=list[DetailedScoreHistoryPoint],
+    summary="Detailed score history with primary signals and block-level analysis",
+    tags=["Subnets"],
+    responses={404: {"model": ErrorResponse}},
+)
+async def get_subnet_history_detailed(
+    request: Request,
+    netuid: int,
+    days: int = Query(30, ge=1, le=365),
+    _: None = Depends(_check_rate_limit),
+) -> list[DetailedScoreHistoryPoint]:
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("history_detailed", netuid, days, rows=all_rows)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    history_raw = get_score_history(netuid, days=days)
+    if not history_raw:
+        raise HTTPException(status_code=404, detail=f"No history for subnet {netuid}")
+
+    result = [_row_to_detailed_history_point(row) for row in history_raw]
     _cache_set(cache_key, result)
     return result
 

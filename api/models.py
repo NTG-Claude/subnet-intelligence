@@ -59,6 +59,20 @@ class ScoreHistoryPoint(BaseModel):
     rank: Optional[int] = None
 
 
+class DetailedScoreHistoryPoint(BaseModel):
+    computed_at: str
+    score: float
+    rank: Optional[int] = None
+    score_version: str = "v1"
+    label: Optional[str] = None
+    thesis: Optional[str] = None
+    primary_outputs: Optional[PrimaryOutputsResponse] = None
+    block_scores: dict = Field(default_factory=dict)
+    conditioning_reliability: dict = Field(default_factory=dict)
+    top_positive_drivers: list[dict] = Field(default_factory=list)
+    top_negative_drags: list[dict] = Field(default_factory=list)
+
+
 class SubnetDetailResponse(BaseModel):
     netuid: int
     name: Optional[str] = None
