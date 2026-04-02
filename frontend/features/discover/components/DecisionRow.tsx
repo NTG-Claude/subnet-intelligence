@@ -31,7 +31,7 @@ export default function DecisionRow({
       onMouseEnter={onFocus}
       onFocus={onFocus}
     >
-      <td className="px-3 py-4">
+      <td className="px-4 py-4 align-top">
         <button
           type="button"
           aria-pressed={selected}
@@ -46,11 +46,11 @@ export default function DecisionRow({
           {selected ? 'x' : '+'}
         </button>
       </td>
-      <td className="px-3 py-4">
+      <td className="px-4 py-4 align-top">
         <div className="text-lg font-semibold text-[color:var(--text-primary)]">{row.rankLabel}</div>
         <div className="text-xs text-[color:var(--text-tertiary)]">{row.percentileLabel}</div>
       </td>
-      <td className="px-3 py-4">
+      <td className="px-4 py-4 align-top">
         <div className="flex flex-wrap items-center gap-2">
           <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
           <StatusChip tone={row.modelLabelTone}>{row.modelLabel}</StatusChip>
@@ -58,23 +58,27 @@ export default function DecisionRow({
         <Link href={row.href} className="mt-3 block text-lg font-semibold tracking-tight text-[color:var(--text-primary)] hover:text-[color:var(--mispricing-strong)]">
           {row.name}
         </Link>
-        <p className="mt-2 max-w-md text-sm leading-6 text-[color:var(--text-secondary)]">{row.thesisLine}</p>
+        <p className="mt-2 max-w-[26ch] text-sm leading-6 text-[color:var(--text-secondary)] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:4] overflow-hidden">
+          {row.thesisLine}
+        </p>
       </td>
-      <td className="px-3 py-4">
-        <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</p>
+      <td className="px-4 py-4 align-top">
+        <p className="max-w-[24ch] text-sm leading-6 text-[color:var(--text-secondary)] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:4] overflow-hidden">
+          {row.decisionLine}
+        </p>
       </td>
       {row.signals.map((signal) => (
-        <td key={signal.key} className="min-w-[140px] px-3 py-4">
+        <td key={signal.key} className="px-4 py-4 align-top">
           <SignalBar signal={signal} compact />
         </td>
       ))}
-      <td className="px-3 py-4">
+      <td className="px-4 py-4 align-top">
         <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
       </td>
-      <td className="px-3 py-4">
+      <td className="px-4 py-4 align-top">
         <div className="text-sm text-[color:var(--text-secondary)]">{row.updatedLabel}</div>
       </td>
-      <td className="px-3 py-4">
+      <td className="px-4 py-4 align-top">
         <div className="flex flex-col gap-2">
           <Link href={row.href} className="button-secondary">
             Research
