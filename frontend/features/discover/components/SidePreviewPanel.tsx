@@ -29,8 +29,8 @@ export default function SidePreviewPanel({
   return (
     <aside className="surface-panel sticky top-24 hidden h-fit p-5 xl:block">
       {row ? (
-        <div className="space-y-5">
-          <div className="space-y-3">
+        <div className="space-y-4">
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
               <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
@@ -40,9 +40,9 @@ export default function SidePreviewPanel({
                 <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</h2>
               </div>
 
-              <div className="min-w-[108px] shrink-0 rounded-[var(--radius-md)] border border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] px-4 py-3 text-right">
+              <div className="min-w-[100px] shrink-0 rounded-[var(--radius-md)] border border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] px-3 py-2.5 text-right">
                 <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">Score</div>
-                <div className="mt-2 font-mono text-2xl font-semibold text-[color:var(--text-primary)]">{row.scoreLabel}</div>
+                <div className="mt-1.5 font-mono text-xl font-semibold text-[color:var(--text-primary)]">{row.scoreLabel}</div>
               </div>
             </div>
           </div>
@@ -55,39 +55,39 @@ export default function SidePreviewPanel({
               </div>
             </div>
           ) : metricDeltas ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="eyebrow">Metric Change</div>
-              <div className="grid gap-3">
-                <div className="surface-subtle p-4">
+              <div className="grid gap-2">
+                <div className="surface-subtle p-3">
                   <div className="eyebrow">Quality</div>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="mt-2 grid grid-cols-3 gap-2">
                     <DeltaPill label="1d" delta={metricDeltas.strength['1d']} tone="quality" />
                     <DeltaPill label="7d" delta={metricDeltas.strength['7d']} tone="quality" />
                     <DeltaPill label="30d" delta={metricDeltas.strength['30d']} tone="quality" />
                   </div>
                 </div>
 
-                <div className="surface-subtle p-4">
+                <div className="surface-subtle p-3">
                   <div className="eyebrow">Opportunity</div>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="mt-2 grid grid-cols-3 gap-2">
                     <DeltaPill label="1d" delta={metricDeltas.upside['1d']} tone="mispricing" />
                     <DeltaPill label="7d" delta={metricDeltas.upside['7d']} tone="mispricing" />
                     <DeltaPill label="30d" delta={metricDeltas.upside['30d']} tone="mispricing" />
                   </div>
                 </div>
 
-                <div className="surface-subtle p-4">
+                <div className="surface-subtle p-3">
                   <div className="eyebrow">Risk</div>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="mt-2 grid grid-cols-3 gap-2">
                     <DeltaPill label="1d" delta={metricDeltas.risk['1d']} tone="fragility" invert />
                     <DeltaPill label="7d" delta={metricDeltas.risk['7d']} tone="fragility" invert />
                     <DeltaPill label="30d" delta={metricDeltas.risk['30d']} tone="fragility" invert />
                   </div>
                 </div>
 
-                <div className="surface-subtle p-4">
+                <div className="surface-subtle p-3">
                   <div className="eyebrow">Confidence</div>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="mt-2 grid grid-cols-3 gap-2">
                     <DeltaPill label="1d" delta={metricDeltas.evidence['1d']} tone="confidence" />
                     <DeltaPill label="7d" delta={metricDeltas.evidence['7d']} tone="confidence" />
                     <DeltaPill label="30d" delta={metricDeltas.evidence['30d']} tone="confidence" />
@@ -141,10 +141,10 @@ function DeltaPill({
           : 'text-[color:var(--fragility-strong)]'
 
   return (
-    <div className="rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.55)] px-3 py-2">
+    <div className="rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.55)] px-3 py-1.5">
       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">{label}</div>
-      <div className={`mt-2 font-mono text-sm font-semibold ${stateClass}`}>{display}</div>
-      <div className="mt-1 text-[11px] text-[color:var(--text-tertiary)]">{delta.hasHistory ? 'vs then' : 'no data'}</div>
+      <div className={`mt-1.5 font-mono text-sm font-semibold ${stateClass}`}>{display}</div>
+      <div className="mt-0.5 text-[11px] text-[color:var(--text-tertiary)]">{delta.hasHistory ? 'vs then' : 'no data'}</div>
     </div>
   )
 }
