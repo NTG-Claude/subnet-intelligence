@@ -47,7 +47,7 @@ export default function DecisionRow({
   return (
     <article
       className={cn(
-        'grid cursor-default grid-cols-[64px_minmax(0,1.3fr)_84px_78px_92px_72px_92px_116px_minmax(0,0.9fr)] items-center gap-4 border-t border-[color:var(--border-subtle)] px-4 py-2.5 transition-colors sm:px-5',
+        'grid cursor-default grid-cols-[64px_minmax(0,1.4fr)_84px_78px_92px_72px_92px_116px] items-center gap-4 border-t border-[color:var(--border-subtle)] px-4 py-2.5 transition-colors sm:px-5',
         focused && 'bg-[color:rgba(19,32,44,0.42)]',
         selected && 'border-l-2 border-l-[color:var(--mispricing-strong)] pl-[14px] sm:pl-[18px]',
         pinned && 'bg-[color:rgba(19,32,44,0.56)]',
@@ -74,17 +74,6 @@ export default function DecisionRow({
       <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
       <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
       <div className={cn('min-w-0 truncate text-[12px] font-semibold', toneClass(row.investability.tone))}>{row.investability.label}</div>
-      <div className="flex min-w-0 flex-wrap gap-1">
-        {row.warningFlags.length ? (
-          row.warningFlags.slice(0, 2).map((flag) => (
-            <StatusChip key={flag.label} tone={flag.tone}>
-              {flag.label}
-            </StatusChip>
-          ))
-        ) : (
-          <span className="text-[11px] text-[color:var(--text-tertiary)]">Clear</span>
-        )}
-      </div>
     </article>
   )
 }
