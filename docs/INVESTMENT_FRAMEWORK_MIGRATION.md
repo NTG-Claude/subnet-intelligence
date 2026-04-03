@@ -159,6 +159,13 @@ UI-Prinzipien fuer die Research-Seite:
 - oben nur die kompakte Summary und die vier Primaersignale
 - darunter die Interpretationsebene
 - tiefe Contributors, Stress-Szenarien, Conditioning und Raw Context bleiben zugaenglich, aber sekundaer
+- die Research-Seite selbst ist jetzt als Memo aufgebaut:
+  kompakter Header, ein einheitlicher Executive-Summary-Block, ein zentraler
+  Signal-Strip, eine kleine Context Row, danach genau zwei kuratierte
+  Hauptsektionen fuer `Market Structure` und `Evidence And Reliability`
+- die Score-Erklaerung im Hauptfluss wurde bewusst auf `Top 3 Supports` und
+  `Top 3 Drags` reduziert; groessere Contributor-Dumps leben nur noch in den
+  Diagnostics
 # Scoring refinement note
 
 The current scoring framework still keeps the main score as the primary ranking anchor, but the screening logic is now intentionally less permissive in two places:
