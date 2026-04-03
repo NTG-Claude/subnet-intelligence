@@ -356,6 +356,49 @@ def test_low_underreaction_is_softened_before_becoming_base_opportunity_drag():
     assert components["opportunity_underreaction"] > components["raw_opportunity_underreaction"]
 
 
+def test_fair_value_gap_can_lift_opportunity_when_direct_lag_is_only_modest():
+    weaker = build_opportunity_components(
+        raw={},
+        normalized={
+            "quality_change": 0.10,
+            "quality_acceleration": 0.12,
+            "reserve_change": 0.08,
+            "reserve_growth_without_price": 0.10,
+            "price_response_lag_to_quality_shift": 0.14,
+            "expected_price_response_gap": 0.10,
+            "participation_without_crowding": 0.42,
+            "participation_breadth": 0.56,
+            "crowding_proxy": 0.26,
+            "active_ratio": 0.70,
+            "validator_participation": 0.72,
+            "cohort_implied_fair_value_gap": 0.18,
+            "underreaction_score": 0.12,
+        },
+    )
+    stronger = build_opportunity_components(
+        raw={},
+        normalized={
+            "quality_change": 0.10,
+            "quality_acceleration": 0.12,
+            "reserve_change": 0.08,
+            "reserve_growth_without_price": 0.10,
+            "price_response_lag_to_quality_shift": 0.14,
+            "expected_price_response_gap": 0.10,
+            "participation_without_crowding": 0.42,
+            "participation_breadth": 0.56,
+            "crowding_proxy": 0.26,
+            "active_ratio": 0.70,
+            "validator_participation": 0.72,
+            "cohort_implied_fair_value_gap": 0.72,
+            "underreaction_score": 0.12,
+        },
+    )
+
+    assert stronger["fair_value_gap_light"] > weaker["fair_value_gap_light"]
+    assert stronger["raw_opportunity_underreaction"] > weaker["raw_opportunity_underreaction"]
+    assert stronger["opportunity_underreaction"] > weaker["opportunity_underreaction"]
+
+
 def test_external_proxies_remain_secondary_inside_thesis_confidence():
     base_components = {
         "market_relevance": 0.66,

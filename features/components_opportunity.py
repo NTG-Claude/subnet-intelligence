@@ -36,15 +36,15 @@ def build_opportunity_components(raw: dict[str, float | None], normalized: dict[
     # Keep fair-value style cohort proxies secondary. They are still useful for
     # screening, but weaker than direct breadth/liquidity/quality evidence.
     fair_value_gap_light = clamp01(
-        0.35 * normalized.get("cohort_implied_fair_value_gap", 0.0)
-        + 0.65 * normalized.get("underreaction_score", 0.0)
+        0.50 * normalized.get("cohort_implied_fair_value_gap", 0.0)
+        + 0.50 * normalized.get("underreaction_score", 0.0)
     )
     raw_opportunity_underreaction = clamp01(
-        0.26 * quality_momentum
-        + 0.22 * reserve_momentum
-        + 0.24 * price_lag
-        + 0.18 * uncrowded_participation
-        + 0.10 * fair_value_gap_light
+        0.24 * quality_momentum
+        + 0.20 * reserve_momentum
+        + 0.22 * price_lag
+        + 0.16 * uncrowded_participation
+        + 0.18 * fair_value_gap_light
     )
     opportunity_underreaction = _stabilize_underreaction(raw_opportunity_underreaction)
     return {
