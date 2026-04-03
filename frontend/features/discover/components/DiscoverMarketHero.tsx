@@ -54,6 +54,7 @@ export default function DiscoverMarketHero({
   const latestValue = market.current_market_cap_tao
   const change = market.change_pct_vs_previous_run
   const positive = (change ?? 0) >= 0
+  const hasHistory = market.points.length > 1
 
   return (
     <section className="surface-panel overflow-hidden p-0">
@@ -108,40 +109,51 @@ export default function DiscoverMarketHero({
         <div className="relative min-h-[340px] border-t border-[color:var(--border-subtle)] xl:min-h-[460px] xl:border-l xl:border-t-0">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(0,236,214,0.14),_transparent_42%),linear-gradient(180deg,rgba(10,16,20,0.3),rgba(10,16,20,0))]" />
           <div className="relative h-full p-4 sm:p-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={market.points} margin={{ top: 12, right: 8, left: 0, bottom: 4 }}>
-                <defs>
-                  <linearGradient id="marketHeroFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#00e6d6" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#00e6d6" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="rgba(138, 163, 184, 0.12)" vertical={false} />
-                <XAxis
-                  dataKey="computed_at"
-                  tickFormatter={formatAxisDate}
-                  minTickGap={28}
-                  stroke="rgba(138, 163, 184, 0.45)"
-                  tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
-                />
-                <YAxis
-                  tickFormatter={formatMarketCap}
-                  width={78}
-                  stroke="rgba(138, 163, 184, 0.45)"
-                  tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
-                />
-                <Tooltip content={<MarketTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="total_market_cap_tao"
-                  stroke="#00e6d6"
-                  strokeWidth={2}
-                  fill="url(#marketHeroFill)"
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {hasHistory ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={market.points} margin={{ top: 12, right: 8, left: 0, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="marketHeroFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00e6d6" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#00e6d6" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(138, 163, 184, 0.12)" vertical={false} />
+                  <XAxis
+                    dataKey="computed_at"
+                    tickFormatter={formatAxisDate}
+                    minTickGap={28}
+                    stroke="rgba(138, 163, 184, 0.45)"
+                    tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+                  />
+                  <YAxis
+                    tickFormatter={formatMarketCap}
+                    width={78}
+                    stroke="rgba(138, 163, 184, 0.45)"
+                    tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+                  />
+                  <Tooltip content={<MarketTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="total_market_cap_tao"
+                    stroke="#00e6d6"
+                    strokeWidth={2}
+                    fill="url(#marketHeroFill)"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.42)] px-6 text-center">
+                <div>
+                  <div className="text-sm font-medium text-[color:var(--text-primary)]">Current market cap loaded</div>
+                  <div className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">
+                    Historical market-cap points are not available yet, so the trend chart will appear once that run history is exposed.
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
