@@ -21,6 +21,17 @@ class PrimaryOutputsResponse(BaseModel):
     signal_confidence: float
 
 
+class ResearchSummaryResponse(BaseModel):
+    setup_status: str
+    setup_read: str
+    why_now: str
+    main_constraint: str
+    break_condition: str
+    market_capacity: str
+    evidence_strength: str
+    relative_peer_context: str
+
+
 class SubnetSummaryResponse(BaseModel):
     netuid: int
     name: Optional[str] = None
@@ -134,6 +145,7 @@ class SubnetDetailResponse(BaseModel):
         json_schema_extra={"deprecated": True},
     )
     thesis: Optional[str] = None
+    research_summary: Optional[ResearchSummaryResponse] = None
     analysis: Optional[dict] = None
 
 
