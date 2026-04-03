@@ -107,12 +107,11 @@ function buildPreviewMetricDeltas(data: CompareSeriesData | null, netuid: number
   }
 }
 
-function buildRankDeltaMap(data: CompareSeriesData | null): Map<number, RankDelta> {
+function buildRankDeltaMap(subnets: SubnetSummary[], data: CompareSeriesData | null): Map<number, RankDelta> {
   if (!data || data.runs.length < 2) return new Map()
 
-  const latestRun = data.runs[data.runs.length - 1]
   const previousRun = data.runs[data.runs.length - 2]
-  if (!latestRun || !previousRun) return new Map()
+  if (!previousRun) return new Map()
 
   const previousRanks = new Map(
     [...previousRun.subnets]
@@ -121,10 +120,10 @@ function buildRankDeltaMap(data: CompareSeriesData | null): Map<number, RankDelt
   )
 
   return new Map(
-    latestRun.subnets.map((subnet, index) => {
-      const currentRank = index + 1
+    subnets.map((subnet) => {
+      const currentRank = subnet.rank
       const previousRank = previousRanks.get(subnet.netuid)
-      if (!previousRank) return [subnet.netuid, null]
+      if (!previousRank || currentRank == null) return [subnet.netuid, null]
       return [
         subnet.netuid,
         {
@@ -317,7 +316,7 @@ export default function DiscoverWorkspace({
   const previewId = pinnedId ?? focusedId
   const previewRow = rows.find((row) => row.id === previewId) ?? null
   const metricDeltas = useMemo(() => buildPreviewMetricDeltas(timeseries, previewRow?.id ?? null), [previewRow?.id, timeseries])
-  const rankDeltaMap = useMemo(() => buildRankDeltaMap(timeseries), [timeseries])
+  const rankDeltaMap = useMemo(() => buildRankDeltaMap(subnets, timeseries), [subnets, timeseries])
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
     .filter((item): item is SubnetSummary => Boolean(item))
