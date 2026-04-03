@@ -31,6 +31,7 @@ function toneClass(tone: SignalTone): string {
 
 export default function DecisionRow({
   row,
+  rankDelta,
   selected,
   focused,
   pinned,
@@ -38,6 +39,7 @@ export default function DecisionRow({
   onSelect,
 }: {
   row: UniverseRowViewModel
+  rankDelta: { change: number; previousRank: number } | null
   selected: boolean
   focused: boolean
   pinned: boolean
@@ -58,7 +60,10 @@ export default function DecisionRow({
       onClick={onSelect}
     >
       <div className="min-w-0 font-mono">
-        <div className="text-base font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
+        <div className="flex items-center gap-2">
+          <div className="text-base font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
+          <RankDeltaBadge rankDelta={rankDelta} />
+        </div>
       </div>
 
       <div className="min-w-0">
@@ -75,6 +80,29 @@ export default function DecisionRow({
       <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
       <div className={cn('min-w-0 truncate text-[12px] font-semibold', toneClass(row.investability.tone))}>{row.investability.label}</div>
     </article>
+  )
+}
+
+function RankDeltaBadge({ rankDelta }: { rankDelta: { change: number; previousRank: number } | null }) {
+  if (!rankDelta || rankDelta.change === 0) return null
+
+  const improved = rankDelta.change > 0
+  const arrow = improved ? '↑' : '↓'
+  const magnitude = Math.abs(rankDelta.change)
+
+  return (
+    <div
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+        improved
+          ? 'bg-[color:var(--quality-surface)] text-[color:var(--quality-strong)]'
+          : 'bg-[color:var(--fragility-surface)] text-[color:var(--fragility-strong)]',
+      )}
+      title={`Previous rank #${rankDelta.previousRank}`}
+    >
+      <span aria-hidden="true">{arrow}</span>
+      <span>{magnitude}</span>
+    </div>
   )
 }
 
