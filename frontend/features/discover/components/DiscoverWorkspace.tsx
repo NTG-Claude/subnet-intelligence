@@ -8,8 +8,8 @@ import { CompareSeriesData, fetchCompareTimeseries, MarketOverviewData, SubnetSu
 import { UniverseRowViewModel, UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
 
 import CompareDock from './CompareDock'
+import DecisionRow, { DISCOVER_TABLE_GRID, MobileDecisionCard } from './DecisionRow'
 import DiscoverMarketHero from './DiscoverMarketHero'
-import DecisionRow, { MobileDecisionCard } from './DecisionRow'
 import SidePreviewPanel from './SidePreviewPanel'
 
 type SortDirection = 'asc' | 'desc'
@@ -287,14 +287,6 @@ export default function DiscoverWorkspace({
     }
   }, [initialTimeseries])
 
-  function toggleCompare(netuid: number) {
-    setCompareIds((current) => {
-      if (current.includes(netuid)) return current.filter((id) => id !== netuid)
-      if (current.length >= 4) return [...current.slice(1), netuid]
-      return [...current, netuid]
-    })
-  }
-
   function toggleSort(nextSort: UniverseSortId) {
     if (sort === nextSort) {
       setDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
@@ -377,7 +369,7 @@ export default function DiscoverWorkspace({
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <section className="surface-panel overflow-hidden p-0">
           <div className="flex items-center justify-between gap-4 border-b border-[color:var(--border-subtle)] px-4 py-3 sm:px-5">
             <div>
@@ -392,7 +384,12 @@ export default function DiscoverWorkspace({
           {rows.length ? (
             <>
               <div className="hidden md:block">
-                <div className="grid grid-cols-[64px_minmax(0,1.4fr)_84px_78px_92px_72px_92px_116px] gap-4 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
+                <div
+                  className={[
+                    'grid gap-x-5 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-5 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)]',
+                    DISCOVER_TABLE_GRID,
+                  ].join(' ')}
+                >
                   <SortHeader label="Rank" active={sort === 'rank'} direction={direction} onClick={() => toggleSort('rank')} />
                   <div>Subnet</div>
                   <SortHeader label="Score" active={sort === 'score'} direction={direction} align="right" onClick={() => toggleSort('score')} />
@@ -437,11 +434,7 @@ export default function DiscoverWorkspace({
           )}
         </section>
 
-        <SidePreviewPanel
-          row={previewRow}
-          metricDeltas={metricDeltas}
-          metricHistoryStatus={timeseriesStatus}
-        />
+        <SidePreviewPanel row={previewRow} metricDeltas={metricDeltas} metricHistoryStatus={timeseriesStatus} />
       </section>
 
       <CompareDock items={compareItems} onRemove={(id) => setCompareIds((current) => current.filter((item) => item !== id))} />
