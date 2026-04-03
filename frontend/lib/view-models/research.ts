@@ -32,7 +32,7 @@ export interface UniverseLens {
   emptyMessage: string
 }
 
-export type UniverseSortId = 'rank' | 'mispricing' | 'quality' | 'confidence' | 'fragility' | 'updated'
+export type UniverseSortId = 'rank' | 'score' | 'mispricing' | 'quality' | 'confidence' | 'fragility' | 'updated'
 
 export interface UniverseSortOption {
   id: UniverseSortId
@@ -177,6 +177,7 @@ export const UNIVERSE_LENSES: UniverseLens[] = [
 
 export const UNIVERSE_SORTS: UniverseSortOption[] = [
   { id: 'rank', label: 'Rank' },
+  { id: 'score', label: 'Score' },
   { id: 'mispricing', label: 'Opportunity' },
   { id: 'quality', label: 'Quality' },
   { id: 'confidence', label: 'Confidence' },
@@ -944,6 +945,7 @@ export function toUniverseRow(subnet: SubnetSummary): UniverseRowViewModel {
     updatedAtMs: parseTimestamp(subnet.computed_at),
     sortValues: {
       rank: -(subnet.rank ?? 9999),
+      score: subnet.score,
       mispricing: mispricingValue(subnet),
       quality: qualityValue(subnet),
       confidence: confidenceValue(subnet),
@@ -958,9 +960,9 @@ export function sortUniverseRows(rows: UniverseRowViewModel[], sortId: UniverseS
     if (sortId === 'rank') {
       const aRank = a.rankLabel === 'n/a' ? 9999 : Number(a.rankLabel.replace('#', ''))
       const bRank = b.rankLabel === 'n/a' ? 9999 : Number(b.rankLabel.replace('#', ''))
-      return aRank - bRank || b.sortValues.confidence - a.sortValues.confidence
+      return aRank - bRank || a.id - b.id
     }
-    return b.sortValues[sortId] - a.sortValues[sortId] || a.id - b.id
+    return a.sortValues[sortId] - b.sortValues[sortId] || a.id - b.id
   })
 }
 
