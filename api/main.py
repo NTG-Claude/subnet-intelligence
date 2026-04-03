@@ -221,6 +221,11 @@ def _normalize_analysis_payload(analysis: Optional[dict]) -> Optional[dict]:
     return normalized
 
 
+def _current_visibility_entries(visibility: dict, bucket: str) -> list[str]:
+    entries = visibility.get(bucket) or []
+    return [entry for entry in entries if not str(entry).startswith("history.")]
+
+
 def _warning_flags(raw_data: dict, analysis: dict | None, primary_outputs: dict | None) -> list[str]:
     flags: list[str] = []
     conditioning = (analysis or {}).get("conditioning") or {}
@@ -238,9 +243,9 @@ def _warning_flags(raw_data: dict, analysis: dict | None, primary_outputs: dict 
         flags.append("thin_liquidity")
     if (raw_metrics.get("performance_driven_by_few_actors") or 0.0) >= 0.6:
         flags.append("concentration")
-    if len(visibility.get("discarded") or []) > 0:
+    if len(_current_visibility_entries(visibility, "discarded")) > 0:
         flags.append("telemetry_gap")
-    elif len(visibility.get("reconstructed") or []) > 0:
+    elif len(_current_visibility_entries(visibility, "reconstructed")) > 0:
         flags.append("reconstructed_inputs")
     if (block_scores.get("market_legitimacy") or 100.0) < 45:
         flags.append("weak_market_structure")

@@ -212,6 +212,45 @@ def test_list_subnets_includes_investability_status_and_warning_flags():
     assert "telemetry_gap" in row["warning_flags"]
 
 
+def test_list_subnets_ignores_history_only_visibility_gaps():
+    rows = [
+        {
+            **SCORES[0],
+            "raw_data": {
+                **SCORES[0]["raw_data"],
+                "analysis": {
+                    **SCORES[0]["raw_data"]["analysis"],
+                    "conditioning": {
+                        "visibility": {
+                            "discarded": ["history.alpha_price_tao", "history.market_structure_floor"],
+                            "reconstructed": ["history.opportunity_gap"],
+                        }
+                    },
+                },
+                "raw_metrics": {
+                    "slippage_10_tao": 0.01,
+                    "performance_driven_by_few_actors": 0.10,
+                },
+            },
+        }
+    ]
+    with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=rows), \
+         patch("api.main._get_metadata", return_value=None), \
+         patch("api.main._cache_get", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets")
+
+    assert resp.status_code == 200
+    row = resp.json()["subnets"][0]
+    assert "telemetry_gap" not in row["warning_flags"]
+    assert "reconstructed_inputs" not in row["warning_flags"]
+
+
 def test_list_subnets_excludes_root_subnet():
     rows = [ROOT_ROW, *SCORES]
     with patch("api.main.get_latest_scores", return_value=rows), \
