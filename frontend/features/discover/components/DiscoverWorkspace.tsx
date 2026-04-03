@@ -21,6 +21,7 @@ type PreviewMetricDeltas = {
   risk: Record<MetricDeltaWindow, MetricDelta>
   evidence: Record<MetricDeltaWindow, MetricDelta>
 }
+type RankDelta = { change: number; previousRank: number } | null
 
 function queryMatches(subnet: SubnetSummary, query: string): boolean {
   const q = query.toLowerCase()
@@ -104,6 +105,35 @@ function buildPreviewMetricDeltas(data: CompareSeriesData | null, netuid: number
       '30d': metricDelta(data, netuid, 'signal_confidence', 30),
     },
   }
+}
+
+function buildRankDeltaMap(data: CompareSeriesData | null): Map<number, RankDelta> {
+  if (!data || data.runs.length < 2) return new Map()
+
+  const latestRun = data.runs[data.runs.length - 1]
+  const previousRun = data.runs[data.runs.length - 2]
+  if (!latestRun || !previousRun) return new Map()
+
+  const previousRanks = new Map(
+    [...previousRun.subnets]
+      .sort((left, right) => right.score - left.score || left.netuid - right.netuid)
+      .map((subnet, index) => [subnet.netuid, index + 1]),
+  )
+
+  return new Map(
+    latestRun.subnets.map((subnet, index) => {
+      const currentRank = index + 1
+      const previousRank = previousRanks.get(subnet.netuid)
+      if (!previousRank) return [subnet.netuid, null]
+      return [
+        subnet.netuid,
+        {
+          change: previousRank - currentRank,
+          previousRank,
+        },
+      ]
+    }),
+  )
 }
 
 function SortHeader({
@@ -287,6 +317,7 @@ export default function DiscoverWorkspace({
   const previewId = pinnedId ?? focusedId
   const previewRow = rows.find((row) => row.id === previewId) ?? null
   const metricDeltas = useMemo(() => buildPreviewMetricDeltas(timeseries, previewRow?.id ?? null), [previewRow?.id, timeseries])
+  const rankDeltaMap = useMemo(() => buildRankDeltaMap(timeseries), [timeseries])
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
     .filter((item): item is SubnetSummary => Boolean(item))
@@ -378,6 +409,7 @@ export default function DiscoverWorkspace({
                     <DecisionRow
                       key={row.id}
                       row={row}
+                      rankDelta={rankDeltaMap.get(row.id) ?? null}
                       selected={compareIds.includes(row.id)}
                       focused={previewId === row.id}
                       pinned={pinnedId === row.id}

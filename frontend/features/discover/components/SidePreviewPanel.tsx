@@ -61,36 +61,36 @@ export default function SidePreviewPanel({
                 <div className="surface-subtle p-3">
                   <div className="eyebrow">Quality</div>
                   <div className="mt-2 grid grid-cols-3 gap-2">
-                    <DeltaPill label="1d" delta={metricDeltas.strength['1d']} tone="quality" />
-                    <DeltaPill label="7d" delta={metricDeltas.strength['7d']} tone="quality" />
-                    <DeltaPill label="30d" delta={metricDeltas.strength['30d']} tone="quality" />
+                    <DeltaPill label="1d" delta={metricDeltas.strength['1d']} />
+                    <DeltaPill label="7d" delta={metricDeltas.strength['7d']} />
+                    <DeltaPill label="30d" delta={metricDeltas.strength['30d']} />
                   </div>
                 </div>
 
                 <div className="surface-subtle p-3">
                   <div className="eyebrow">Opportunity</div>
                   <div className="mt-2 grid grid-cols-3 gap-2">
-                    <DeltaPill label="1d" delta={metricDeltas.upside['1d']} tone="mispricing" />
-                    <DeltaPill label="7d" delta={metricDeltas.upside['7d']} tone="mispricing" />
-                    <DeltaPill label="30d" delta={metricDeltas.upside['30d']} tone="mispricing" />
+                    <DeltaPill label="1d" delta={metricDeltas.upside['1d']} />
+                    <DeltaPill label="7d" delta={metricDeltas.upside['7d']} />
+                    <DeltaPill label="30d" delta={metricDeltas.upside['30d']} />
                   </div>
                 </div>
 
                 <div className="surface-subtle p-3">
                   <div className="eyebrow">Risk</div>
                   <div className="mt-2 grid grid-cols-3 gap-2">
-                    <DeltaPill label="1d" delta={metricDeltas.risk['1d']} tone="fragility" invert />
-                    <DeltaPill label="7d" delta={metricDeltas.risk['7d']} tone="fragility" invert />
-                    <DeltaPill label="30d" delta={metricDeltas.risk['30d']} tone="fragility" invert />
+                    <DeltaPill label="1d" delta={metricDeltas.risk['1d']} invert />
+                    <DeltaPill label="7d" delta={metricDeltas.risk['7d']} invert />
+                    <DeltaPill label="30d" delta={metricDeltas.risk['30d']} invert />
                   </div>
                 </div>
 
                 <div className="surface-subtle p-3">
                   <div className="eyebrow">Confidence</div>
                   <div className="mt-2 grid grid-cols-3 gap-2">
-                    <DeltaPill label="1d" delta={metricDeltas.evidence['1d']} tone="confidence" />
-                    <DeltaPill label="7d" delta={metricDeltas.evidence['7d']} tone="confidence" />
-                    <DeltaPill label="30d" delta={metricDeltas.evidence['30d']} tone="confidence" />
+                    <DeltaPill label="1d" delta={metricDeltas.evidence['1d']} />
+                    <DeltaPill label="7d" delta={metricDeltas.evidence['7d']} />
+                    <DeltaPill label="30d" delta={metricDeltas.evidence['30d']} />
                   </div>
                 </div>
               </div>
@@ -122,12 +122,10 @@ export default function SidePreviewPanel({
 function DeltaPill({
   label,
   delta,
-  tone,
   invert = false,
 }: {
   label: MetricDeltaWindow
   delta: MetricDelta
-  tone: 'quality' | 'mispricing' | 'fragility' | 'confidence'
   invert?: boolean
 }) {
   const display = formatDelta(delta.value)
@@ -137,7 +135,7 @@ function DeltaPill({
       : delta.value === 0
         ? 'text-[color:var(--text-primary)]'
         : isPositive(delta.value, invert)
-          ? toneClass(tone)
+          ? 'text-[color:var(--quality-strong)]'
           : 'text-[color:var(--fragility-strong)]'
 
   return (
@@ -158,17 +156,4 @@ function formatDelta(value: number | null): string {
 
 function isPositive(value: number, invert: boolean): boolean {
   return invert ? value < 0 : value > 0
-}
-
-function toneClass(tone: 'quality' | 'mispricing' | 'fragility' | 'confidence'): string {
-  switch (tone) {
-    case 'quality':
-      return 'text-[color:var(--quality-strong)]'
-    case 'mispricing':
-      return 'text-[color:var(--mispricing-strong)]'
-    case 'fragility':
-      return 'text-[color:var(--fragility-strong)]'
-    case 'confidence':
-      return 'text-[color:var(--confidence-strong)]'
-  }
 }
