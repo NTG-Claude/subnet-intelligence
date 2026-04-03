@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import MetricCard from '@/components/ui/MetricCard'
-import { MarketOverviewData, SubnetSummary } from '@/lib/api'
+import { CompareSeriesData, fetchCompareTimeseries, MarketOverviewData, SubnetSummary } from '@/lib/api'
 import { UniverseRowViewModel, UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
 
 import CompareDock from './CompareDock'
@@ -13,6 +13,14 @@ import DecisionRow, { MobileDecisionCard } from './DecisionRow'
 import SidePreviewPanel from './SidePreviewPanel'
 
 type SortDirection = 'asc' | 'desc'
+type MetricDeltaWindow = '1d' | '7d' | '30d'
+type MetricDelta = { value: number | null; hasHistory: boolean }
+type PreviewMetricDeltas = {
+  strength: Record<MetricDeltaWindow, MetricDelta>
+  upside: Record<MetricDeltaWindow, MetricDelta>
+  risk: Record<MetricDeltaWindow, MetricDelta>
+  evidence: Record<MetricDeltaWindow, MetricDelta>
+}
 
 function queryMatches(subnet: SubnetSummary, query: string): boolean {
   const q = query.toLowerCase()
@@ -31,26 +39,80 @@ function reverseRows(rows: UniverseRowViewModel[]): UniverseRowViewModel[] {
   return [...rows].reverse()
 }
 
-function rankMap(rows: UniverseRowViewModel[], key: 'quality' | 'mispricing' | 'confidence' | 'fragility') {
-  const ordered = [...rows].sort((a, b) => {
-    if (key === 'fragility') {
-      const aValue = a.signals.find((item) => item.key === 'fragility_risk')?.value ?? Number.POSITIVE_INFINITY
-      const bValue = b.signals.find((item) => item.key === 'fragility_risk')?.value ?? Number.POSITIVE_INFINITY
-      return aValue - bValue || a.id - b.id
-    }
+function emptyDelta(): MetricDelta {
+  return { value: null, hasHistory: false }
+}
 
-    const signalKey =
-      key === 'quality'
-        ? 'fundamental_quality'
-        : key === 'mispricing'
-          ? 'mispricing_signal'
-          : 'signal_confidence'
-    const aValue = a.signals.find((item) => item.key === signalKey)?.value ?? Number.NEGATIVE_INFINITY
-    const bValue = b.signals.find((item) => item.key === signalKey)?.value ?? Number.NEGATIVE_INFINITY
-    return bValue - aValue || a.id - b.id
-  })
+function emptyPreviewMetricDeltas(): PreviewMetricDeltas {
+  return {
+    strength: { '1d': emptyDelta(), '7d': emptyDelta(), '30d': emptyDelta() },
+    upside: { '1d': emptyDelta(), '7d': emptyDelta(), '30d': emptyDelta() },
+    risk: { '1d': emptyDelta(), '7d': emptyDelta(), '30d': emptyDelta() },
+    evidence: { '1d': emptyDelta(), '7d': emptyDelta(), '30d': emptyDelta() },
+  }
+}
 
-  return new Map(ordered.map((row, index) => [row.id, index + 1]))
+function nearestRunAtOrBefore(data: CompareSeriesData, targetTime: number) {
+  let match: CompareSeriesData['runs'][number] | null = null
+  for (const run of data.runs) {
+    const runTime = Date.parse(run.computed_at)
+    if (!Number.isFinite(runTime) || runTime > targetTime) continue
+    match = run
+  }
+  return match
+}
+
+function metricDelta(
+  data: CompareSeriesData,
+  netuid: number,
+  metric: 'fundamental_quality' | 'mispricing_signal' | 'fragility_risk' | 'signal_confidence',
+  days: number,
+): MetricDelta {
+  const latestRun = data.runs[data.runs.length - 1]
+  if (!latestRun) return emptyDelta()
+
+  const latestPoint = latestRun.subnets.find((item) => item.netuid === netuid)
+  const latestValue = latestPoint?.[metric]
+  if (latestValue == null) return emptyDelta()
+
+  const referenceRun = nearestRunAtOrBefore(data, Date.parse(latestRun.computed_at) - days * 24 * 60 * 60 * 1000)
+  if (!referenceRun) return emptyDelta()
+
+  const referencePoint = referenceRun.subnets.find((item) => item.netuid === netuid)
+  const referenceValue = referencePoint?.[metric]
+  if (referenceValue == null) return emptyDelta()
+
+  return {
+    value: Number((latestValue - referenceValue).toFixed(1)),
+    hasHistory: true,
+  }
+}
+
+function buildPreviewMetricDeltas(data: CompareSeriesData | null, netuid: number | null): PreviewMetricDeltas | null {
+  if (!data || !netuid) return null
+
+  return {
+    strength: {
+      '1d': metricDelta(data, netuid, 'fundamental_quality', 1),
+      '7d': metricDelta(data, netuid, 'fundamental_quality', 7),
+      '30d': metricDelta(data, netuid, 'fundamental_quality', 30),
+    },
+    upside: {
+      '1d': metricDelta(data, netuid, 'mispricing_signal', 1),
+      '7d': metricDelta(data, netuid, 'mispricing_signal', 7),
+      '30d': metricDelta(data, netuid, 'mispricing_signal', 30),
+    },
+    risk: {
+      '1d': metricDelta(data, netuid, 'fragility_risk', 1),
+      '7d': metricDelta(data, netuid, 'fragility_risk', 7),
+      '30d': metricDelta(data, netuid, 'fragility_risk', 30),
+    },
+    evidence: {
+      '1d': metricDelta(data, netuid, 'signal_confidence', 1),
+      '7d': metricDelta(data, netuid, 'signal_confidence', 7),
+      '30d': metricDelta(data, netuid, 'signal_confidence', 30),
+    },
+  }
 }
 
 function SortHeader({
@@ -111,6 +173,7 @@ export default function DiscoverWorkspace({
   const [compareIds, setCompareIds] = useState<number[]>(parseIds(searchParams.get('ids')))
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const [pinnedId, setPinnedId] = useState<number | null>(null)
+  const [timeseries, setTimeseries] = useState<CompareSeriesData | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -172,6 +235,25 @@ export default function DiscoverWorkspace({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [focusedId, router, rows])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadTimeseries() {
+      try {
+        const next = await fetchCompareTimeseries(35)
+        if (!cancelled) setTimeseries(next)
+      } catch {
+        if (!cancelled) setTimeseries(null)
+      }
+    }
+
+    void loadTimeseries()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   function toggleCompare(netuid: number) {
     setCompareIds((current) => {
       if (current.includes(netuid)) return current.filter((id) => id !== netuid)
@@ -200,20 +282,10 @@ export default function DiscoverWorkspace({
 
   const previewId = pinnedId ?? focusedId
   const previewRow = rows.find((row) => row.id === previewId) ?? null
-  const metricRanks = useMemo(() => {
-    if (!previewRow) return null
-    const strengthRanks = rankMap(rows, 'quality')
-    const upsideRanks = rankMap(rows, 'mispricing')
-    const riskRanks = rankMap(rows, 'fragility')
-    const evidenceRanks = rankMap(rows, 'confidence')
-    return {
-      strength: strengthRanks.get(previewRow.id) ?? rows.length,
-      upside: upsideRanks.get(previewRow.id) ?? rows.length,
-      risk: riskRanks.get(previewRow.id) ?? rows.length,
-      evidence: evidenceRanks.get(previewRow.id) ?? rows.length,
-      total: rows.length,
-    }
-  }, [previewRow, rows])
+  const metricDeltas = useMemo(
+    () => buildPreviewMetricDeltas(timeseries, previewRow?.id ?? null) ?? emptyPreviewMetricDeltas(),
+    [previewRow?.id, timeseries],
+  )
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
     .filter((item): item is SubnetSummary => Boolean(item))
@@ -320,10 +392,8 @@ export default function DiscoverWorkspace({
                   <MobileDecisionCard
                     key={row.id}
                     row={row}
-                    selected={compareIds.includes(row.id)}
                     focused={focusedId === row.id}
                     onFocus={() => setFocusedId(row.id)}
-                    onToggleCompare={toggleCompare}
                   />
                 ))}
               </div>
@@ -337,9 +407,7 @@ export default function DiscoverWorkspace({
 
         <SidePreviewPanel
           row={previewRow}
-          metricRanks={metricRanks}
-          selected={previewRow ? compareIds.includes(previewRow.id) : false}
-          onToggleCompare={toggleCompare}
+          metricDeltas={metricDeltas}
         />
       </section>
 

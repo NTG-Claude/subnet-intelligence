@@ -80,16 +80,12 @@ export default function DecisionRow({
 
 export function MobileDecisionCard({
   row,
-  selected,
   focused,
   onFocus,
-  onToggleCompare,
 }: {
   row: UniverseRowViewModel
-  selected: boolean
   focused: boolean
   onFocus: () => void
-  onToggleCompare: (id: number) => void
 }) {
   return (
     <article
@@ -144,16 +140,6 @@ export function MobileDecisionCard({
       <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
 
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onToggleCompare(row.id)}
-          className={cn(
-            'button-secondary',
-            selected && 'border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] text-[color:var(--mispricing-strong)]',
-          )}
-        >
-          {selected ? 'Remove from compare' : 'Add to compare'}
-        </button>
         <Link href={row.href} className="button-primary">
           Open research
         </Link>
