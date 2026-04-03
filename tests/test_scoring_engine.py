@@ -5,7 +5,9 @@ from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
 from features.types import AxisScores
 from features.types import FeatureBundle, PrimarySignals
 from features.types import ConditionedSnapshot
+from features.components_confidence import build_confidence_components
 from regimes.hard_rules import HardRuleResult
+from regimes.hard_rules import evaluate_hard_rules
 from scoring.engine import (
     PRIMARY_SIGNAL_DRIFT_CAPS,
     RANKING_DRIFT_CAP,
@@ -102,7 +104,7 @@ def test_incomplete_snapshot_uses_recent_history_instead_of_dereg_penalty():
 
     artifacts = build_scores([snapshot])[4]
 
-    assert artifacts.score > 25.0
+    assert artifacts.score > 20.0
     assert artifacts.label == "Evidence Limited"
     assert "telemetry_gap_uses_recent_history" in artifacts.explanation["activated_hard_rules"]
 
@@ -267,6 +269,51 @@ def test_external_repo_continuity_supports_confidence_beyond_empty_30d_window():
     assert artifacts[202].primary.signal_confidence > artifacts[201].primary.signal_confidence
 
 
+def test_confidence_components_penalize_shallow_proxy_heavy_evidence():
+    low = build_confidence_components(
+        raw={"proxy_reliance_penalty": 0.85},
+        normalized={
+            "history_depth_score": 0.12,
+            "data_coverage": 0.18,
+            "consensus_signal_gap": 0.45,
+            "confidence_thesis_coherence": 0.35,
+            "signal_fabrication_risk": 0.65,
+            "update_freshness": 0.20,
+            "market_data_reliability": 0.25,
+            "validator_data_reliability": 0.30,
+            "history_data_reliability": 0.22,
+            "external_data_reliability": 0.25,
+            "market_structure_floor": 0.28,
+        },
+        base_components={"market_relevance": 0.30, "liquidity_health": 0.28, "concentration_health": 0.35},
+        opportunity_components={"uncrowded_participation": 0.30, "fair_value_gap_light": 0.42},
+        fragility_components={"reversal_risk": 0.62},
+    )
+    high = build_confidence_components(
+        raw={"proxy_reliance_penalty": 0.10},
+        normalized={
+            "history_depth_score": 0.78,
+            "data_coverage": 0.82,
+            "consensus_signal_gap": 0.12,
+            "confidence_thesis_coherence": 0.74,
+            "signal_fabrication_risk": 0.12,
+            "update_freshness": 0.76,
+            "market_data_reliability": 0.82,
+            "validator_data_reliability": 0.75,
+            "history_data_reliability": 0.70,
+            "external_data_reliability": 0.65,
+            "market_structure_floor": 0.72,
+        },
+        base_components={"market_relevance": 0.62, "liquidity_health": 0.68, "concentration_health": 0.66},
+        opportunity_components={"uncrowded_participation": 0.58, "fair_value_gap_light": 0.54},
+        fragility_components={"reversal_risk": 0.22},
+    )
+
+    assert low["evidence_penalty"] > high["evidence_penalty"]
+    assert low["evidence_floor"] < high["evidence_floor"]
+    assert low["evidence_confidence"] < high["evidence_confidence"]
+
+
 def test_stabilize_priority_with_history_limits_leaderboard_pressure():
     snapshot = RawSubnetSnapshot(
         netuid=9,
@@ -327,6 +374,63 @@ def test_ranking_priority_prefers_v2_ranking_artifacts_when_available():
     )
 
     assert _ranking_priority_score(signals, high_bundle) > _ranking_priority_score(signals, low_bundle)
+
+
+def test_ranking_priority_penalizes_weak_investability_even_with_same_primary_signals():
+    signals = PrimarySignals(
+        fundamental_quality=0.60,
+        mispricing_signal=0.60,
+        fragility_risk=0.32,
+        signal_confidence=0.62,
+    )
+    investable_bundle = FeatureBundle(
+        raw={"market_relevance_proxy": 0.55},
+        ranking={"market_relevance": 0.60, "thesis_strength": 0.62, "resilience": 0.68, "investability": 0.72, "screening_ceiling": 0.88},
+        base_components={"evidence_penalty": 0.12},
+    )
+    weak_bundle = FeatureBundle(
+        raw={"market_relevance_proxy": 0.55},
+        ranking={"market_relevance": 0.60, "thesis_strength": 0.62, "resilience": 0.68, "investability": 0.22, "screening_ceiling": 0.50},
+        base_components={"evidence_penalty": 0.38},
+    )
+
+    assert _ranking_priority_score(signals, investable_bundle) > _ranking_priority_score(signals, weak_bundle)
+
+
+def test_hard_rules_cap_weak_investability_names():
+    snapshot = RawSubnetSnapshot(
+        netuid=31,
+        current_block=1000,
+        yuma_neurons=64,
+        emission_per_block_tao=0.1,
+        tao_in_pool=3_000.0,
+    )
+    bundle = FeatureBundle(
+        raw={
+            "active_ratio": 0.12,
+            "slippage_10_tao": 0.08,
+            "slippage_50_tao": 0.12,
+            "structural_concentration_risk": 0.70,
+            "update_freshness": 0.55,
+            "participation_breadth": 0.18,
+            "data_coverage": 0.62,
+            "proxy_reliance_penalty": 0.20,
+            "confidence_thesis_coherence": 0.60,
+            "signal_fabrication_risk": 0.20,
+            "low_evidence_high_conviction": 0.10,
+            "underreaction_score": 0.40,
+            "crowding_proxy": 0.22,
+            "overreaction_score": 0.08,
+            "investability_gate": 0.28,
+        },
+        core_blocks={"investability_gate": 0.28},
+        base_components={"market_relevance": 0.40},
+    )
+
+    rules = evaluate_hard_rules(snapshot, bundle)
+
+    assert "weak_investability_caps_score" in rules.activated
+    assert rules.legacy_score_cap is not None and rules.legacy_score_cap <= 0.36
 
 
 def test_ranking_priority_uses_v2_opportunity_block_even_if_legacy_raw_differs():

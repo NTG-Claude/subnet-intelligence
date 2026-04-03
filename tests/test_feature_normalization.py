@@ -766,11 +766,8 @@ def test_crowded_repricing_discount_penalizes_crowded_large_names():
     )
 
     assert balanced_bundle.core_blocks["crowded_structure_watchlist"] < crowded_bundle.core_blocks["crowded_structure_watchlist"]
-    assert crowded_bundle.core_blocks["opportunity_underreaction"] >= balanced_bundle.core_blocks["opportunity_underreaction"]
-    balanced_discount = balanced_bundle.core_blocks["opportunity_underreaction"] - balanced_bundle.primary_signals.mispricing_signal
-    crowded_discount = crowded_bundle.core_blocks["opportunity_underreaction"] - crowded_bundle.primary_signals.mispricing_signal
-
-    assert crowded_discount > balanced_discount
+    assert crowded_bundle.core_blocks["opportunity_underreaction"] <= balanced_bundle.core_blocks["opportunity_underreaction"]
+    assert crowded_bundle.primary_signals.mispricing_signal < balanced_bundle.primary_signals.mispricing_signal
 
 
 def test_crowded_expectation_saturation_reduces_underreaction_for_popular_large_names():
