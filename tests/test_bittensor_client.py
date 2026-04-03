@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from scorer.bittensor_client import (
     SubnetIdentity,
     SubnetMetrics,
+    _fetch_metrics,
     _decode_bytes,
     _decode_identity_val,
     _fetch_current_block,
@@ -104,6 +105,60 @@ def test_subnet_metrics_defaults():
     assert m.n_validators == 0
     assert m.registration_allowed is False
     assert m.immunity_period == 0
+
+
+def test_fetch_metrics_requests_full_metagraph():
+    meta = MagicMock()
+    meta.n = 0
+    mock_st = MagicMock()
+    mock_st.metagraph.return_value = meta
+
+    with patch("scorer.bittensor_client._subtensor", return_value=mock_st):
+        _fetch_metrics(netuid=8, current_block=5_000_000)
+
+    mock_st.metagraph.assert_called_once_with(netuid=8, lite=False)
+
+
+def test_fetch_metrics_preserves_validator_matrices_for_yuma_validators():
+    meta = MagicMock()
+    meta.n = 3
+    meta.hotkeys = ["hk1", "hk2", "hk3"]
+    meta.coldkeys = ["ck1", "ck2", "ck3"]
+    meta.S = [100.0, 80.0, 40.0]
+    meta.I = [0.4, 0.35, 0.25]
+    meta.last_update = [5_000_000, 5_000_000, 4_950_000]
+    meta.validator_permit = [True, True, False]
+    meta.mechanism_ids = [0, 0, 1]
+    meta.W = [
+        [0.0, 0.7, 0.3],
+        [0.4, 0.6, 0.0],
+        [0.2, 0.2, 0.6],
+    ]
+    meta.B = [
+        [0.5, 0.5, 0.0],
+        [0.3, 0.7, 0.0],
+        [0.2, 0.2, 0.6],
+    ]
+
+    hyper = MagicMock(
+        immunity_period=12,
+        registration_allowed=True,
+        target_regs_per_interval=1,
+        min_burn=0,
+        max_burn=0,
+        difficulty=0,
+    )
+    mock_st = MagicMock()
+    mock_st.metagraph.return_value = meta
+    mock_st.get_subnet_hyperparameters.return_value = hyper
+
+    with patch("scorer.bittensor_client._subtensor", return_value=mock_st):
+        metrics = _fetch_metrics(netuid=8, current_block=5_000_000)
+
+    assert metrics.n_validators == 2
+    assert metrics.validator_stakes == [100.0, 80.0]
+    assert metrics.validator_weight_matrix == [[0.0, 0.7, 0.3], [0.4, 0.6, 0.0]]
+    assert metrics.validator_bond_matrix == [[0.5, 0.5, 0.0], [0.3, 0.7, 0.0]]
 
 
 # ---------------------------------------------------------------------------

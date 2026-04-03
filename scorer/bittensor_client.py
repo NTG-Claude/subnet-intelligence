@@ -173,7 +173,7 @@ def _fetch_metrics(netuid: int, current_block: int) -> SubnetMetrics:
     m = SubnetMetrics(netuid=netuid)
     try:
         st = _subtensor()
-        meta = st.metagraph(netuid=netuid)
+        meta = st.metagraph(netuid=netuid, lite=False)
 
         n = int(meta.n) if hasattr(meta, "n") else len(getattr(meta, "hotkeys", []))
         m.n_total = n
