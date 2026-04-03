@@ -132,6 +132,12 @@ export interface ScoreExplanationItem {
   tone: SignalTone
 }
 
+export interface MemoAnchorItem {
+  label: 'Best Signal' | 'Main Weakness'
+  value: string
+  tone: SignalTone
+}
+
 export interface DetailMemoViewModel {
   name: string
   netuidLabel: string
@@ -147,6 +153,7 @@ export interface DetailMemoViewModel {
   signals: SignalStat[]
   primaryTag: InvestabilityBadge
   secondaryTag?: InvestabilityBadge | null
+  anchorInsights: MemoAnchorItem[]
   executiveSummary: MemoSummaryItem[]
   contextRow: MemoContextItem[]
   marketStructure: MemoInsightItem[]
@@ -277,6 +284,60 @@ function contributorTitle(item: ExplanationContributor): string {
   return item.metric || item.name || item.source_block || 'Contributor'
 }
 
+function contributorDisplayTitle(name: string | undefined | null, mode: 'positive' | 'negative' | 'neutral' = 'neutral'): string {
+  switch (name) {
+    case 'fundamental_health':
+      return 'Durable quality'
+    case 'structural_validity':
+      return 'Investable structure'
+    case 'market_legitimacy':
+      return 'Market support'
+    case 'confidence_factor':
+      return 'Aligned evidence'
+    case 'thesis_confidence':
+      return 'Thesis coherence'
+    case 'market_confidence':
+      return 'Market confirmation'
+    case 'data_confidence':
+      return 'Input quality'
+    case 'base_opportunity':
+    case 'opportunity_underreaction':
+      return 'Valuation gap'
+    case 'fragility':
+      return mode === 'positive' ? 'Controlled downside' : 'Stress risk'
+    case 'reserve_change':
+      return 'Reserve follow-through'
+    case 'liquidity_improvement_rate':
+      return 'Liquidity trend'
+    case 'reserve_growth_without_price':
+      return 'Unrewarded growth'
+    case 'quality_acceleration':
+      return mode === 'negative' ? 'Slowing momentum' : 'Quality momentum'
+    case 'price_response_lag_to_quality_shift':
+      return 'Price catch-up'
+    case 'expected_price_response_gap':
+      return 'Limited rerating gap'
+    case 'emission_to_sticky_usage_conversion':
+      return 'Usage conversion'
+    case 'post_incentive_retention':
+      return 'Retention risk'
+    case 'emission_efficiency':
+      return 'Emission efficiency'
+    case 'cohort_quality_edge':
+      return 'Peer edge'
+    case 'discarded_inputs':
+      return 'Incomplete evidence'
+    case 'external_data_reliability':
+      return 'External confirmation'
+    case 'validator_data_reliability':
+      return 'Validator coverage'
+    case 'history_data_reliability':
+      return 'History depth'
+    default:
+      return sentenceCase((name || 'Contributor').replace(/_/g, ' '))
+  }
+}
+
 function uncertaintyLabel(item: KeyUncertainty): string {
   return item.short_explanation || item.name.replace(/_/g, ' ')
 }
@@ -360,20 +421,20 @@ function modelLabelTone(label: string): SignalTone {
 }
 
 function decisionLineFromOutputs(outputs: PrimaryOutputs | null | undefined): string {
-  if (!outputs) return 'Research is blocked until the latest run emits V2 outputs.'
+  if (!outputs) return 'Fresh scored outputs are still missing, so this read is provisional.'
   if (outputs.mispricing_signal >= 70 && outputs.signal_confidence >= 60 && outputs.fragility_risk <= 45) {
-    return 'Mispricing is visible, confidence is usable, and fragility is not yet crowding out the idea.'
+    return 'The valuation gap is real, the evidence is usable, and downside is still contained.'
   }
   if (outputs.fundamental_quality >= 70 && outputs.fragility_risk <= 45) {
-    return 'Quality is doing the heavy lifting, so the entry depends on whether enough mispricing remains.'
+    return 'Quality is doing the heavy lifting, but the entry still depends on a live rerating gap.'
   }
   if (outputs.fragility_risk >= 65) {
-    return 'The upside case is fragile enough that stress behavior and execution discipline dominate the read.'
+    return 'The upside case is fragile enough that stress and execution now dominate the trade.'
   }
   if (outputs.signal_confidence < 50) {
-    return 'Signals are interesting, but the trust layer is still too soft for a clean high-conviction memo.'
+    return 'The setup is interesting, but the evidence is not clean enough for a full-strength call.'
   }
-  return 'The setup is investable only if the positive case survives a harder trust and fragility check.'
+  return 'The setup has enough going for it, but it still needs cleaner confirmation.'
 }
 
 function cleanSentence(value: string | undefined | null): string {
@@ -383,7 +444,7 @@ function cleanSentence(value: string | undefined | null): string {
 function metricPhrase(name: string | undefined | null): string {
   switch (name) {
     case 'fragility':
-      return 'downside and liquidity stress remain contained'
+      return 'downside and liquidity stress are still contained'
     case 'fundamental_health':
       return 'core operating quality is holding up'
     case 'thesis_confidence':
@@ -602,7 +663,7 @@ function plainEnglishReason(name: string, mode: 'positive' | 'negative' | 'uncer
       return 'the historical record is still shallower than you would want'
     default: {
       const fallback = metricPhrase(name)
-      return fallback || `${name.replace(/_/g, ' ')} is affecting the read`
+      return fallback || `${name.replace(/_/g, ' ')} is still part of the picture`
     }
   }
 }
@@ -1066,7 +1127,7 @@ export function applyUniverseLens(subnets: SubnetSummary[], lensId: string): Sub
 
 function toMemoItems(items: ExplanationContributor[] | undefined, fallbackTone: SignalTone): MemoSectionItem[] {
   return (items ?? []).map((item) => ({
-    title: contributorTitle(item),
+    title: contributorDisplayTitle(contributorName(item)),
     body: contributorLabel(item),
     tone: fallbackTone,
     score: typeof item.signed_contribution === 'number' ? Math.abs(item.signed_contribution) * 100 : null,
@@ -1076,7 +1137,7 @@ function toMemoItems(items: ExplanationContributor[] | undefined, fallbackTone: 
 
 function toUncertaintyItems(items: KeyUncertainty[] | undefined): MemoSectionItem[] {
   return (items ?? []).map((item) => ({
-    title: item.name.replace(/_/g, ' '),
+    title: contributorDisplayTitle(item.name),
     body: uncertaintyLabel(item),
     tone: 'warning',
     score: typeof item.signed_contribution === 'number' ? Math.abs(item.signed_contribution) * 100 : null,
@@ -1184,19 +1245,23 @@ function fallbackResearchSummary(
   return {
     setup_status: setupStatus,
     setup_read: summary.decisionLine,
-    why_now: firstPositive ? `Why now: ${cleanSentence(contributorLabel(firstPositive))}.` : summary.thesisLine,
-    main_constraint: firstNegative
-      ? `The main constraint is ${cleanSentence(contributorLabel(firstNegative)).toLowerCase()}.`
-      : summary.fragilityRead,
+    why_now:
+      firstPositive != null
+        ? sentenceCase(plainEnglishReason(contributorName(firstPositive), 'positive'))
+        : summary.metricReasons.upside,
+    main_constraint:
+      firstNegative != null
+        ? sentenceCase(plainEnglishReason(contributorName(firstNegative), 'negative'))
+        : summary.fragilityRead,
     break_condition: firstBreak
       ? cleanSentence(firstBreak)
       : stressDrawdown != null
-        ? `The setup breaks if stress behavior worsens materially from the current ${stressDrawdown.toFixed(1)}% drawdown path.`
-        : 'The setup breaks if the current positive drivers stop improving or the evidence layer weakens further.',
+        ? `The setup breaks if modeled drawdown pushes materially beyond ${stressDrawdown.toFixed(1)}%.`
+        : 'The setup breaks if the current support fades or the evidence gets weaker.',
     market_capacity: marketCapacity,
     evidence_strength: evidenceStrength,
     relative_peer_context: firstUncertainty
-      ? `${summary.rankLabel !== 'n/a' ? `It currently ranks ${summary.rankLabel}. ` : ''}${cleanSentence(uncertaintyLabel(firstUncertainty))}`
+      ? `${summary.rankLabel !== 'n/a' ? `Ranks ${summary.rankLabel}. ` : ''}${sentenceCase(plainEnglishReason(firstUncertainty.name, 'uncertainty'))}.`
       : `${summary.rankLabel !== 'n/a' ? `It currently ranks ${summary.rankLabel}. ` : ''}${summary.metricReasons.strength}`,
   }
 }
@@ -1232,6 +1297,33 @@ function compactSentence(value: string | null | undefined, fallback: string): st
   const trimmed = firstSentence.replace(/\s+/g, ' ').trim()
   if (!trimmed) return fallback
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`
+}
+
+function trimLeadIn(text: string): string {
+  return text
+    .replace(/^the setup breaks if\s*/i, '')
+    .replace(/^the main constraint is that\s*/i, '')
+    .replace(/^the main constraint is\s*/i, '')
+    .replace(/^why now:\s*/i, '')
+}
+
+function cleanBreakCondition(value: string | null | undefined, fallback: string): string {
+  const sentence = compactSentence(value, fallback)
+  const trimmed = trimLeadIn(sentence).replace(/\.$/, '')
+  return trimmed ? `${sentenceCase(trimmed)}.` : fallback
+}
+
+function buildHeaderSubtitle(
+  researchSummary: ResearchSummaryViewModel,
+  summary: UniverseRowViewModel,
+  topDrag: ExplanationContributor | undefined,
+): string {
+  if (summary.awaitingRun) return 'Fresh scored outputs are missing, so this page is still waiting for a clean read.'
+
+  const setup = compactSentence(researchSummary.setupRead, summary.decisionLine).replace(/\.$/, '')
+  const drag = topDrag ? plainEnglishReason(contributorName(topDrag), 'negative') : ''
+  if (drag) return `${sentenceCase(setup)}, but ${drag}.`
+  return `${sentenceCase(setup)}.`
 }
 
 function formatAbsoluteScore(value: number | null | undefined): string | undefined {
@@ -1273,11 +1365,11 @@ function insightBodyFromContributor(
 function confidenceMetricLabel(name: string): string {
   switch (name) {
     case 'data_confidence':
-      return 'Data Reliability'
+      return 'Input quality'
     case 'market_confidence':
-      return 'Market Reliability'
+      return 'Market support'
     case 'thesis_confidence':
-      return 'Thesis Reliability'
+      return 'Thesis support'
     default:
       return sentenceCase(name.replace(/_/g, ' '))
   }
@@ -1302,7 +1394,7 @@ function buildExecutiveSummary(researchSummary: ResearchSummaryViewModel): MemoS
     },
     {
       label: 'Break Condition',
-      body: compactSentence(researchSummary.breakCondition, 'The setup breaks if the current support stops holding.'),
+      body: cleanBreakCondition(researchSummary.breakCondition, 'The current support stops holding.'),
       tone: 'fragility',
     },
   ]
@@ -1357,10 +1449,10 @@ function buildMarketStructureItems(
       body: compactSentence(
         insightBodyFromContributor(
           marketDrag,
-          'Trading depth is still the main execution constraint.',
+          'Liquidity is adequate for small flows, but not deep enough for size.',
           'negative',
         ),
-        'Trading depth is still the main execution constraint.',
+        'Liquidity is adequate for small flows, but not deep enough for size.',
       ),
       tone: researchSummary.marketCapacity.tone,
     },
@@ -1370,32 +1462,32 @@ function buildMarketStructureItems(
       body: compactSentence(
         insightBodyFromContributor(
           concentrationSignal,
-          'No concentration shock is dominating the read right now.',
+          'Concentration is visible, but it is not the main structural risk.',
           concentrationSignal ? 'negative' : 'uncertainty',
         ),
-        'No concentration shock is dominating the read right now.',
+        'Concentration is visible, but it is not the main structural risk.',
       ),
       tone: concentrationSignal ? 'warning' : 'neutral',
     },
     {
-      label: 'Market Capacity',
+      label: 'Capacity',
       value: researchSummary.marketCapacity.label,
       body: compactSentence(
-        `Current capacity reads ${researchSummary.marketCapacity.label.toLowerCase()} for larger flows.`,
-        'Current capacity is still forming.',
+        `Capital can move through this market at a ${researchSummary.marketCapacity.label.toLowerCase()} level.`,
+        'Capital capacity is still forming.',
       ),
       tone: researchSummary.marketCapacity.tone,
     },
     {
-      label: 'Fragility',
+      label: 'Stress Risk',
       value: analysis?.fragility_class ? sentenceCase(analysis.fragility_class.toLowerCase()) : 'Unknown',
       body: compactSentence(
         insightBodyFromContributor(
           fragilityContributor,
-          'Stress behavior remains part of the execution check.',
+          'Modeled downside is still part of the trade plan.',
           'negative',
         ),
-        'Stress behavior remains part of the execution check.',
+        'Modeled downside is still part of the trade plan.',
       ),
       tone: analysis?.stress_drawdown != null && analysis.stress_drawdown >= 30 ? 'fragility' : 'warning',
     },
@@ -1414,10 +1506,10 @@ function buildEvidenceItems(
 
   return [
     {
-      label: 'Evidence Strength',
+      label: 'Trust Level',
       value: researchSummary.evidenceStrength.label,
       body: compactSentence(
-        `The current read is supported by ${researchSummary.evidenceStrength.label.toLowerCase()} evidence strength.`,
+        `The current read deserves ${researchSummary.evidenceStrength.label.toLowerCase()} trust.`,
         'The current evidence stack is still limited.',
       ),
       tone: researchSummary.evidenceStrength.tone,
@@ -1425,15 +1517,15 @@ function buildEvidenceItems(
     {
       label: 'History Depth',
       value: historyDepth ? historyDepth.body : confidenceLabel(confidence?.thesis_confidence),
-      body: compactSentence(historyDepth?.meta || historyDepth?.body, 'The historical record is still thin.'),
+      body: compactSentence(historyDepth?.meta || 'Missing or repaired history limits conviction.', 'The historical record is still thin.'),
       tone: historyDepth?.tone ?? 'warning',
     },
     {
-      label: 'Data Reliability',
+      label: 'Input Quality',
       value: dataReliability ? dataReliability.body : reliabilityLabel(confidence?.data_confidence != null ? confidence.data_confidence / 100 : null),
       body: compactSentence(
-        dataReliability?.meta || dataReliability?.body,
-        'The data layer is usable, but not fully clean.',
+        dataReliability?.meta || 'The telemetry is usable, but not fully clean.',
+        'The telemetry is usable, but not fully clean.',
       ),
       tone: dataReliability?.tone ?? 'warning',
     },
@@ -1455,11 +1547,29 @@ function buildScoreExplanationItems(
   return (items ?? [])
     .slice(0, 3)
     .map((item) => ({
-      title: sentenceCase(contributorTitle(item).replace(/_/g, ' ')),
+      title: contributorDisplayTitle(contributorName(item), mode === 'positive' ? 'positive' : 'negative'),
       value: formatAbsoluteScore(typeof item.signed_contribution === 'number' ? Math.abs(item.signed_contribution) * 100 : null),
       body: compactSentence(insightBodyFromContributor(item, fallback, mode), fallback),
       tone,
     }))
+}
+
+function buildAnchorInsights(
+  supports: ScoreExplanationItem[],
+  drags: ScoreExplanationItem[],
+): MemoAnchorItem[] {
+  return [
+    {
+      label: 'Best Signal',
+      value: supports[0]?.title ? `${supports[0].title}: ${supports[0].body}` : 'No clear edge stands out yet.',
+      tone: supports[0]?.tone ?? 'quality',
+    },
+    {
+      label: 'Main Weakness',
+      value: drags[0]?.title ? `${drags[0].title}: ${drags[0].body}` : 'No single weakness dominates the case yet.',
+      tone: drags[0]?.tone ?? 'warning',
+    },
+  ]
 }
 
 export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
@@ -1502,12 +1612,12 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     tone: reliabilityTone(value),
     meta:
       key === 'history_data_reliability'
-        ? 'How much clean history is available.'
+        ? 'Clean history available'
         : key === 'market_data_reliability'
-          ? 'How stable the market-side telemetry looks.'
+          ? 'Market telemetry stability'
           : key === 'validator_data_reliability'
-            ? 'How much validator-side evidence is visible.'
-            : 'How much outside corroboration is available.',
+            ? 'Validator-side coverage'
+            : 'Outside confirmation',
   }))
 
   const visibilityItems: MemoSectionItem[] = [
@@ -1515,13 +1625,13 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
       title: 'Reconstructed inputs',
       body: String(visibilityCount(conditioning, 'reconstructed')),
       tone: visibilityCount(conditioning, 'reconstructed') > 0 ? 'warning' : 'neutral',
-      meta: conditioning?.visibility?.reconstructed?.slice(0, 6).join(', '),
+      meta: conditioning?.visibility?.reconstructed?.slice(0, 4).join(', '),
     },
     {
       title: 'Discarded inputs',
       body: String(visibilityCount(conditioning, 'discarded')),
       tone: visibilityCount(conditioning, 'discarded') > 0 ? 'warning' : 'neutral',
-      meta: conditioning?.visibility?.discarded?.slice(0, 6).join(', '),
+      meta: conditioning?.visibility?.discarded?.slice(0, 4).join(', '),
     },
     {
       title: 'Original inputs',
@@ -1532,7 +1642,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
       title: 'Bounded inputs',
       body: String(visibilityCount(conditioning, 'bounded')),
       tone: visibilityCount(conditioning, 'bounded') > 0 ? 'warning' : 'neutral',
-      meta: conditioning?.visibility?.bounded?.slice(0, 6).join(', '),
+      meta: conditioning?.visibility?.bounded?.slice(0, 4).join(', '),
     },
   ]
 
@@ -1552,6 +1662,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     'No single drag dominates the setup yet.',
     'negative',
   )
+  const anchorInsights = buildAnchorInsights(topSupports, topDrags)
   const setupTag = investabilityBadge(subnet.investability_status)
   const secondaryTag: InvestabilityBadge | null =
     researchSummary.evidenceStrength.value === 'high'
@@ -1567,10 +1678,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     scoreLabel: subnet.score.toFixed(1),
     modelLabel: summary.modelLabel,
     modelLabelTone: summary.modelLabelTone,
-    headerSubtitle: compactSentence(
-      researchSummary.setupRead !== summary.decisionLine ? researchSummary.setupRead : subnet.thesis ?? analysis?.thesis ?? summary.decisionLine,
-      summary.decisionLine,
-    ),
+    headerSubtitle: buildHeaderSubtitle(researchSummary, summary, (analysis?.top_negative_drags ?? analysis?.top_negative_drivers ?? [])[0]),
     researchSummary,
     updatedLabel,
     rankLabel: subnet.rank ? `#${subnet.rank}` : 'n/a',
@@ -1581,6 +1689,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
       tone: researchSummary.setupStatus.tone,
     },
     secondaryTag,
+    anchorInsights,
     executiveSummary,
     contextRow,
     marketStructure,
@@ -1603,22 +1712,22 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     ],
     confidenceHeadline: [
       {
-        label: 'Signal confidence',
+        label: 'Overall conviction',
         value: outputs ? outputs.signal_confidence.toFixed(1) : 'n/a',
         tone: confidenceTone(outputs?.signal_confidence),
       },
       {
-        label: 'Data confidence',
+        label: confidenceMetricLabel('data_confidence'),
         value: confidence?.data_confidence != null ? confidence.data_confidence.toFixed(1) : 'n/a',
         tone: confidenceTone(confidence?.data_confidence),
       },
       {
-        label: 'Market confidence',
+        label: confidenceMetricLabel('market_confidence'),
         value: confidence?.market_confidence != null ? confidence.market_confidence.toFixed(1) : 'n/a',
         tone: confidenceTone(confidence?.market_confidence),
       },
       {
-        label: 'Thesis confidence',
+        label: confidenceMetricLabel('thesis_confidence'),
         value: confidence?.thesis_confidence != null ? confidence.thesis_confidence.toFixed(1) : 'n/a',
         tone: confidenceTone(confidence?.thesis_confidence),
       },
@@ -1646,8 +1755,8 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
       score: scenario.drawdown,
     })),
     rawContext: [
-      { title: 'Score version', body: subnet.score_version || 'v2' },
-      { title: 'Score delta 7d', body: subnet.score_delta_7d == null ? 'n/a' : `${subnet.score_delta_7d.toFixed(1)} pts` },
+      { title: 'Version', body: subnet.score_version || 'v2' },
+      { title: '7d score change', body: subnet.score_delta_7d == null ? 'n/a' : `${subnet.score_delta_7d.toFixed(1)} pts` },
       { title: 'Pool depth', body: formatCompactNumber(subnet.tao_in_pool, 0) },
       { title: 'Market cap', body: formatCompactNumber(subnet.market_cap_tao, 0) },
       { title: 'Alpha price', body: formatPrice(subnet.alpha_price_tao) },

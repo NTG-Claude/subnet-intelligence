@@ -52,7 +52,7 @@ function ScoreList({
                 <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
                 {item.value ? <StatusChip tone={item.tone}>{item.value}</StatusChip> : null}
               </div>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
+              <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
             </div>
           ))
         ) : (
@@ -75,15 +75,15 @@ function DiagnosticGrid({
   }
 
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className="grid gap-2.5 lg:grid-cols-2">
       {items.map((item, index) => (
-        <div key={`${item.title}-${index}`} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
+        <div key={`${item.title}-${index}`} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
           <div className="flex flex-wrap items-center gap-2">
             <div className="eyebrow">{item.title}</div>
             {item.score != null ? <StatusChip tone={item.tone ?? 'neutral'}>{item.score.toFixed(1)}</StatusChip> : null}
           </div>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
-          {item.meta ? <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{item.meta}</p> : null}
+          <p className="mt-1.5 text-sm leading-5 text-[color:var(--text-secondary)]">{item.body}</p>
+          {item.meta ? <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">{item.meta}</p> : null}
         </div>
       ))}
     </div>
@@ -108,6 +108,14 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{memo.headerSubtitle}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {memo.anchorInsights.map((item) => (
+                  <div key={item.label} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
+                    <div className="eyebrow">{item.label}</div>
+                    <p className={cn('mt-1.5 text-sm leading-6', toneClass(item.tone))}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -143,7 +151,7 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
       <section className="surface-panel p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
           <div className="section-title">Primary Signals</div>
-          <div className="eyebrow">Quality, opportunity, risk, confidence</div>
+          <div className="eyebrow">Quality, upside, downside, trust</div>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {memo.signals.map((signal) => (
@@ -165,13 +173,13 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
 
       <div className="grid gap-6 xl:grid-cols-2">
         <InsightGrid title="Market Structure" items={memo.marketStructure} />
-        <InsightGrid title="Evidence And Reliability" items={memo.evidenceItems} />
+        <InsightGrid title="Evidence & Trust" items={memo.evidenceItems} />
       </div>
 
       <section className="surface-panel p-5 sm:p-6">
         <div className="section-title">Score Explanation</div>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">
-          The score still anchors the page, but the explanation is limited to the clearest supports and drags.
+          These are the clearest reasons the score is strong or capped.
         </p>
         <div className="mt-5 grid gap-6 xl:grid-cols-2">
           <ScoreList title="Top 3 Supports" items={memo.topSupports} />
@@ -181,7 +189,7 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
 
       <CollapsibleSection
         title="Deep Diagnostics"
-        subtitle="Stress behavior, confidence internals, block scores, and raw context remain available but stay out of the main reading flow."
+        subtitle="Inspection detail for stress, inputs, and scoring. Useful for checking the read, not for leading it."
         defaultOpen={false}
       >
         <div className="space-y-6">
@@ -200,19 +208,19 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
           </div>
 
           <div>
-            <div className="section-title">Confidence Breakdown</div>
+            <div className="section-title">Conviction Breakdown</div>
             <div className="mt-3">
-              <DiagnosticGrid items={memo.confidenceHeadline.map((item) => ({ title: item.label, body: item.value, tone: item.tone, meta: item.meta }))} empty="No confidence headline is available." />
+              <DiagnosticGrid items={memo.confidenceHeadline.map((item) => ({ title: item.label, body: item.value, tone: item.tone, meta: item.meta }))} empty="No conviction summary is available." />
             </div>
             <div className="mt-3">
-              <DiagnosticGrid items={memo.confidenceItems} empty="No confidence breakdown is available." />
+              <DiagnosticGrid items={memo.confidenceItems} empty="No conviction breakdown is available." />
             </div>
           </div>
 
           <div>
-            <div className="section-title">Breakers And Drags</div>
+            <div className="section-title">Failure Points</div>
             <div className="mt-3">
-              <DiagnosticGrid items={memo.breaks} empty="No breakers were emitted for this subnet." />
+              <DiagnosticGrid items={memo.breaks} empty="No failure points were emitted for this subnet." />
             </div>
           </div>
 
@@ -224,9 +232,9 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
           </div>
 
           <div>
-            <div className="section-title">Visibility And Conditioning</div>
+            <div className="section-title">Input Conditioning</div>
             <div className="mt-3">
-              <DiagnosticGrid items={memo.visibilityItems} empty="No visibility diagnostics are available." />
+              <DiagnosticGrid items={memo.visibilityItems} empty="No input conditioning diagnostics are available." />
             </div>
           </div>
 
@@ -238,9 +246,9 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
           </div>
 
           <div>
-            <div className="section-title">Raw Context</div>
+            <div className="section-title">Reference Data</div>
             <div className="mt-3">
-              <DiagnosticGrid items={memo.rawContext} empty="No raw context values are available." />
+              <DiagnosticGrid items={memo.rawContext} empty="No reference data is available." />
             </div>
           </div>
 
