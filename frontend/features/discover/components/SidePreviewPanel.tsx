@@ -20,9 +20,11 @@ type MetricDeltaMap = {
 export default function SidePreviewPanel({
   row,
   metricDeltas,
+  metricHistoryStatus,
 }: {
   row: UniverseRowViewModel | null
   metricDeltas: MetricDeltaMap | null
+  metricHistoryStatus: 'loading' | 'ready' | 'unavailable'
 }) {
   return (
     <aside className="surface-panel sticky top-24 hidden h-fit p-5 xl:block">
@@ -33,17 +35,31 @@ export default function SidePreviewPanel({
               <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
               <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
             </div>
-            <div>
-              <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</h2>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</h2>
+              </div>
+
+              <div className="min-w-[108px] shrink-0 rounded-[var(--radius-md)] border border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] px-4 py-3 text-right">
+                <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">Score</div>
+                <div className="mt-2 font-mono text-2xl font-semibold text-[color:var(--text-primary)]">{row.scoreLabel}</div>
+              </div>
             </div>
           </div>
 
-          {metricDeltas ? (
+          {metricHistoryStatus === 'loading' ? (
+            <div className="space-y-3">
+              <div className="eyebrow">Metric Change</div>
+              <div className="surface-subtle p-4">
+                <div className="text-sm text-[color:var(--text-secondary)]">Loading metric history...</div>
+              </div>
+            </div>
+          ) : metricDeltas ? (
             <div className="space-y-3">
               <div className="eyebrow">Metric Change</div>
               <div className="grid gap-3">
                 <div className="surface-subtle p-4">
-                  <div className="eyebrow">Strength</div>
+                  <div className="eyebrow">Quality</div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <DeltaPill label="1d" delta={metricDeltas.strength['1d']} tone="quality" />
                     <DeltaPill label="7d" delta={metricDeltas.strength['7d']} tone="quality" />
@@ -52,7 +68,7 @@ export default function SidePreviewPanel({
                 </div>
 
                 <div className="surface-subtle p-4">
-                  <div className="eyebrow">Upside Gap</div>
+                  <div className="eyebrow">Opportunity</div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <DeltaPill label="1d" delta={metricDeltas.upside['1d']} tone="mispricing" />
                     <DeltaPill label="7d" delta={metricDeltas.upside['7d']} tone="mispricing" />
@@ -70,13 +86,20 @@ export default function SidePreviewPanel({
                 </div>
 
                 <div className="surface-subtle p-4">
-                  <div className="eyebrow">Evidence Quality</div>
+                  <div className="eyebrow">Confidence</div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <DeltaPill label="1d" delta={metricDeltas.evidence['1d']} tone="confidence" />
                     <DeltaPill label="7d" delta={metricDeltas.evidence['7d']} tone="confidence" />
                     <DeltaPill label="30d" delta={metricDeltas.evidence['30d']} tone="confidence" />
                   </div>
                 </div>
+              </div>
+            </div>
+          ) : metricHistoryStatus === 'unavailable' ? (
+            <div className="space-y-3">
+              <div className="eyebrow">Metric Change</div>
+              <div className="surface-subtle p-4">
+                <div className="text-sm text-[color:var(--text-secondary)]">Metric history is currently unavailable.</div>
               </div>
             </div>
           ) : null}

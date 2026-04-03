@@ -1,10 +1,10 @@
 import DiscoverWorkspace from '@/features/discover/components/DiscoverWorkspace'
-import { fetchLatestRun, fetchMarketOverview, fetchSubnets } from '@/lib/api'
+import { fetchCompareTimeseries, fetchLatestRun, fetchMarketOverview, fetchSubnets } from '@/lib/api'
 
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
-  const [{ subnets }, latest, market] = await Promise.all([
+  const [{ subnets }, latest, market, initialTimeseries] = await Promise.all([
     fetchSubnets(200).catch(() => ({ subnets: [], total: 0 })),
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
     fetchMarketOverview(90).catch(() => ({
@@ -13,6 +13,7 @@ export default async function HomePage() {
       current_subnet_count: 0,
       points: [],
     })),
+    fetchCompareTimeseries(35).catch(() => null),
   ])
 
   const scored = subnets.filter((subnet) => subnet.primary_outputs)
@@ -45,6 +46,7 @@ export default async function HomePage() {
       trackedUniverse={latest.subnet_count || subnets.length}
       awaitingRunCount={awaitingRunCount}
       lowConfidenceCount={lowConfidenceCount}
+      initialTimeseries={initialTimeseries}
     />
   )
 }
