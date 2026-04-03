@@ -153,19 +153,19 @@ function SortHeader({
       type="button"
       onClick={onClick}
       className={[
-        'flex min-w-0 items-center gap-1 whitespace-nowrap transition-colors hover:text-[color:var(--text-primary)]',
+        'flex min-w-0 items-center gap-1.5 whitespace-nowrap font-medium transition-colors hover:text-[color:var(--text-primary)]',
         align === 'right' ? 'justify-end text-right' : 'text-left',
       ].join(' ')}
     >
       <span>{label}</span>
       <span
         className={[
-          'inline-flex w-3 justify-center text-[9px] leading-none',
+          'inline-flex w-3 justify-center text-[10px] leading-none',
           active ? 'text-[color:var(--text-primary)]' : 'text-transparent',
         ].join(' ')}
         aria-hidden="true"
       >
-        {active ? (direction === 'asc' ? '^' : 'v') : '^'}
+        {active ? (direction === 'asc' ? '↑' : '↓') : '↑'}
       </span>
     </button>
   )
@@ -386,18 +386,18 @@ export default function DiscoverWorkspace({
               <div className="hidden md:block">
                 <div
                   className={[
-                    'grid gap-x-5 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-5 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)]',
+                    'grid items-center gap-x-5 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-5 py-3 text-[12px] text-[color:var(--text-secondary)]',
                     DISCOVER_TABLE_GRID,
                   ].join(' ')}
                 >
                   <SortHeader label="Rank" active={sort === 'rank'} direction={direction} onClick={() => toggleSort('rank')} />
-                  <div>Subnet</div>
+                  <div className="font-medium">Subnet</div>
                   <SortHeader label="Score" active={sort === 'score'} direction={direction} align="right" onClick={() => toggleSort('score')} />
                   <SortHeader label="Quality" active={sort === 'quality'} direction={direction} align="right" onClick={() => toggleSort('quality')} />
                   <SortHeader label="Opportunity" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => toggleSort('mispricing')} />
                   <SortHeader label="Risk" active={sort === 'fragility'} direction={direction} align="right" onClick={() => toggleSort('fragility')} />
                   <SortHeader label="Confidence" active={sort === 'confidence'} direction={direction} align="right" onClick={() => toggleSort('confidence')} />
-                  <div>Status</div>
+                  <div className="font-medium">Status</div>
                 </div>
 
                 <div>

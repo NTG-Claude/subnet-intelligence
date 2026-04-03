@@ -7,7 +7,7 @@ import TrustBadge from '@/components/ui/TrustBadge'
 import { cn } from '@/lib/formatting'
 import { SignalTone, UniverseRowViewModel } from '@/lib/view-models/research'
 
-export const DISCOVER_TABLE_GRID = 'grid-cols-[88px_minmax(220px,1.45fr)_96px_96px_116px_88px_112px_140px]'
+export const DISCOVER_TABLE_GRID = 'grid-cols-[88px_minmax(180px,1.15fr)_92px_92px_108px_92px_100px_120px]'
 
 function signalValue(row: UniverseRowViewModel, key: UniverseRowViewModel['signals'][number]['key']): string {
   const signal = row.signals.find((item) => item.key === key)
@@ -72,7 +72,7 @@ export default function DecisionRow({
       <div className="min-w-0">
         <div className="flex min-w-0 items-baseline gap-3">
           <div className="truncate text-[15px] font-semibold text-[color:var(--text-primary)]">{row.name}</div>
-          <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
+          <div className="shrink-0 font-mono text-[11px] tracking-[0.08em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
         </div>
       </div>
 
@@ -81,7 +81,7 @@ export default function DecisionRow({
       <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
       <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
       <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
-      <div className={cn('min-w-0 truncate text-left text-[12px] font-semibold', toneClass(row.investability.tone))}>{row.investability.label}</div>
+      <div className={cn('min-w-0 truncate text-left text-[13px] font-medium', toneClass(row.investability.tone))}>{row.investability.label}</div>
     </article>
   )
 }
