@@ -43,15 +43,6 @@ function emptyDelta(): MetricDelta {
   return { value: null, hasHistory: false }
 }
 
-function emptyPreviewMetricDeltas(): PreviewMetricDeltas {
-  return {
-    strength: { '1d': emptyDelta(), '7d': emptyDelta(), '30d': emptyDelta() },
-    upside: { '1d': emptyDelta(), '7d': emptyDelta(), '30d': emptyDelta() },
-    risk: { '1d': emptyDelta(), '7d': emptyDelta(), '30d': emptyDelta() },
-    evidence: { '1d': emptyDelta(), '7d': emptyDelta(), '30d': emptyDelta() },
-  }
-}
-
 function nearestRunAtOrBefore(data: CompareSeriesData, targetTime: number) {
   let match: CompareSeriesData['runs'][number] | null = null
   for (const run of data.runs) {
@@ -155,6 +146,7 @@ export default function DiscoverWorkspace({
   subnets,
   lastRun,
   market,
+  initialTimeseries,
 }: {
   subnets: SubnetSummary[]
   lastRun: string | null
@@ -162,6 +154,7 @@ export default function DiscoverWorkspace({
   trackedUniverse: number
   awaitingRunCount: number
   lowConfidenceCount: number
+  initialTimeseries: CompareSeriesData | null
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -173,7 +166,10 @@ export default function DiscoverWorkspace({
   const [compareIds, setCompareIds] = useState<number[]>(parseIds(searchParams.get('ids')))
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const [pinnedId, setPinnedId] = useState<number | null>(null)
-  const [timeseries, setTimeseries] = useState<CompareSeriesData | null>(null)
+  const [timeseries, setTimeseries] = useState<CompareSeriesData | null>(initialTimeseries)
+  const [timeseriesStatus, setTimeseriesStatus] = useState<'loading' | 'ready' | 'unavailable'>(
+    initialTimeseries ? 'ready' : 'loading',
+  )
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -241,18 +237,26 @@ export default function DiscoverWorkspace({
     async function loadTimeseries() {
       try {
         const next = await fetchCompareTimeseries(35)
-        if (!cancelled) setTimeseries(next)
+        if (!cancelled) {
+          setTimeseries(next)
+          setTimeseriesStatus('ready')
+        }
       } catch {
-        if (!cancelled) setTimeseries(null)
+        if (!cancelled && !initialTimeseries) {
+          setTimeseries(null)
+          setTimeseriesStatus('unavailable')
+        }
       }
     }
 
-    void loadTimeseries()
+    if (!initialTimeseries) {
+      void loadTimeseries()
+    }
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [initialTimeseries])
 
   function toggleCompare(netuid: number) {
     setCompareIds((current) => {
@@ -282,10 +286,7 @@ export default function DiscoverWorkspace({
 
   const previewId = pinnedId ?? focusedId
   const previewRow = rows.find((row) => row.id === previewId) ?? null
-  const metricDeltas = useMemo(
-    () => buildPreviewMetricDeltas(timeseries, previewRow?.id ?? null) ?? emptyPreviewMetricDeltas(),
-    [previewRow?.id, timeseries],
-  )
+  const metricDeltas = useMemo(() => buildPreviewMetricDeltas(timeseries, previewRow?.id ?? null), [previewRow?.id, timeseries])
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
     .filter((item): item is SubnetSummary => Boolean(item))
@@ -408,6 +409,7 @@ export default function DiscoverWorkspace({
         <SidePreviewPanel
           row={previewRow}
           metricDeltas={metricDeltas}
+          metricHistoryStatus={timeseriesStatus}
         />
       </section>
 
