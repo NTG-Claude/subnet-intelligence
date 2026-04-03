@@ -83,6 +83,10 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
     staking_apy = 0.0
     if pool_depth > 0:
         staking_apy = max(0.0, snapshot.emission_per_block_tao * 7200 * 365 / pool_depth * 100)
+    investability_gate = bundle.core_blocks.get("investability_gate")
+    if investability_gate is None and "investability_gate" in bundle.raw:
+        raw_gate = bundle.raw.get("investability_gate")
+        investability_gate = None if raw_gate is None else float(raw_gate)
     crowded_structure_penalty = _crowded_structure_watchlist(bundle, concentration, staking_apy)
     consensus_hollow = (
         (bundle.raw.get("validator_weight_entropy") or 0.0) > 0.92
@@ -280,8 +284,9 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
 
     if confidence_inputs < 0.30 and update_freshness < 0.30:
         activated.append("thin_evidence_caps_confidence")
-        confidence_cap = 0.35 if confidence_cap is None else min(confidence_cap, 0.35)
-        mispricing_cap = 0.20 if mispricing_cap is None else min(mispricing_cap, 0.20)
+        confidence_cap = 0.30 if confidence_cap is None else min(confidence_cap, 0.30)
+        mispricing_cap = 0.16 if mispricing_cap is None else min(mispricing_cap, 0.16)
+        legacy_score_cap = 0.34 if legacy_score_cap is None else min(legacy_score_cap, 0.34)
 
     if signal_fabrication_risk > 0.58:
         activated.append("signal_fabrication_risk_caps_mispricing")
@@ -299,9 +304,33 @@ def evaluate_hard_rules(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> H
         )
     ):
         activated.append("low_evidence_high_conviction_caps_total")
-        mispricing_cap = 0.32 if mispricing_cap is None else min(mispricing_cap, 0.32)
-        confidence_cap = 0.44 if confidence_cap is None else min(confidence_cap, 0.44)
-        legacy_score_cap = 0.40 if legacy_score_cap is None else min(legacy_score_cap, 0.40)
+        mispricing_cap = 0.24 if mispricing_cap is None else min(mispricing_cap, 0.24)
+        confidence_cap = 0.38 if confidence_cap is None else min(confidence_cap, 0.38)
+        fragility_floor = 0.64 if fragility_floor is None else max(fragility_floor, 0.64)
+        legacy_score_cap = 0.32 if legacy_score_cap is None else min(legacy_score_cap, 0.32)
+
+    if (
+        investability_gate is not None
+        and investability_gate < 0.30
+        and (
+            concentration > 0.68
+            or participation < 0.18
+            or (
+                market_structure_floor < 0.50
+                and max_slippage > 0.07
+            )
+            or (
+                market_relevance < 0.35
+                and market_structure_floor < 0.55
+            )
+        )
+    ):
+        activated.append("weak_investability_caps_score")
+        quality_cap = 0.44 if quality_cap is None else min(quality_cap, 0.44)
+        mispricing_cap = 0.22 if mispricing_cap is None else min(mispricing_cap, 0.22)
+        confidence_cap = 0.42 if confidence_cap is None else min(confidence_cap, 0.42)
+        fragility_floor = 0.70 if fragility_floor is None else max(fragility_floor, 0.70)
+        legacy_score_cap = 0.36 if legacy_score_cap is None else min(legacy_score_cap, 0.36)
 
     if (
         crowding_proxy > 0.48

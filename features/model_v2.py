@@ -430,6 +430,41 @@ def _confidence_thesis_coherence(
     return clamp01(1.0 - contradiction)
 
 
+def _investability_gate(
+    liquidity_health: float,
+    concentration_health: float,
+    participation_health: float,
+    validator_health: float,
+    market_relevance: float,
+    market_confidence: float,
+    evidence_floor: float,
+) -> float:
+    return clamp01(
+        0.24 * liquidity_health
+        + 0.18 * concentration_health
+        + 0.16 * participation_health
+        + 0.12 * validator_health
+        + 0.12 * market_relevance
+        + 0.10 * market_confidence
+        + 0.08 * evidence_floor
+    )
+
+
+def _screening_ceiling(
+    evidence_penalty: float,
+    fragility_block: float,
+    investability_gate: float,
+    crowded_structure_penalty: float,
+) -> float:
+    return clamp01(
+        0.92
+        - 0.28 * evidence_penalty
+        - 0.22 * fragility_block
+        - 0.16 * (1.0 - investability_gate)
+        - 0.10 * crowded_structure_penalty
+    )
+
+
 def _expected_price_response(
     quality_change: float | None,
     reserve_change: float | None,
@@ -1140,7 +1175,41 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         obvious_overreaction_penalty = clamp01(max((bundle.raw.get("overreaction_score") or 0.0) - 0.20, 0.0) / 0.80)
         low_legitimacy_penalty = clamp01(max(0.45 - market_legitimacy, 0.0) / 0.45)
         small_penalties = clamp01(0.40 * obvious_overreaction_penalty + 0.35 * extreme_crowding_penalty + 0.25 * low_legitimacy_penalty)
-        mispricing_signal = clamp01(opportunity_underreaction * confidence_factor * structural_validity_factor - 0.16 * small_penalties)
+        investability_gate = _investability_gate(
+            liquidity_health=base_components["liquidity_health"],
+            concentration_health=base_components["concentration_health"],
+            participation_health=base_components["participation_health"],
+            validator_health=base_components["validator_health"],
+            market_relevance=base_components["market_relevance"],
+            market_confidence=confidence_components["market_confidence"],
+            evidence_floor=confidence_components["evidence_floor"],
+        )
+        screening_ceiling = _screening_ceiling(
+            evidence_penalty=confidence_components["evidence_penalty"],
+            fragility_block=fragility_block,
+            investability_gate=investability_gate,
+            crowded_structure_penalty=crowded_structure_penalty,
+        )
+        confidence_drag = clamp01(
+            0.52 * confidence_components["evidence_penalty"]
+            + 0.28 * max(0.0, 0.55 - confidence_components["evidence_floor"]) / 0.55
+            + 0.20 * max(0.0, 0.60 - confidence_components["market_confidence"]) / 0.60
+        )
+        structural_screen_discount = clamp01(
+            0.46 * (1.0 - investability_gate)
+            + 0.32 * fragility_block
+            + 0.22 * crowded_structure_penalty
+        )
+        raw_mispricing_signal = clamp01(
+            opportunity_underreaction
+            * confidence_factor
+            * structural_validity_factor
+            * (0.82 + 0.18 * investability_gate)
+            - 0.20 * small_penalties
+            - 0.12 * confidence_drag
+            - 0.08 * structural_screen_discount
+        )
+        mispricing_signal = min(raw_mispricing_signal, screening_ceiling)
         signal_confidence = clamp01(
             (
                 0.40 * confidence_components["data_confidence"]
@@ -1169,7 +1238,22 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
         )
         evidence_confidence = min(evidence_confidence, confidence_structural_ceiling)
         adjusted_signal_confidence = min(signal_confidence, confidence_structural_ceiling, adjusted_thesis_confidence, evidence_confidence)
-        signal_confidence = adjusted_signal_confidence
+        signal_confidence = min(
+            adjusted_signal_confidence,
+            clamp01(
+                adjusted_signal_confidence
+                - 0.16 * confidence_components["evidence_penalty"]
+                - 0.10 * (1.0 - investability_gate)
+            ),
+        )
+        fundamental_quality = min(
+            fundamental_quality,
+            clamp01(
+                fundamental_quality
+                * (0.90 + 0.10 * investability_gate)
+                - 0.06 * confidence_components["evidence_penalty"]
+            ),
+        )
         thesis_strength = clamp01(
             0.42 * fundamental_quality
             + 0.33 * mispricing_signal
@@ -1191,12 +1275,16 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             "market_legitimacy": market_legitimacy,
             "confidence_factor": confidence_factor,
             "structural_validity": structural_validity_factor,
+            "investability_gate": investability_gate,
+            "screening_ceiling": screening_ceiling,
             "crowded_structure_watchlist": crowded_structure_watchlist,
         }
         bundle.ranking = {
             "resilience": clamp01(1.0 - fragility_block),
             "market_relevance": base_components["market_relevance"],
             "thesis_strength": thesis_strength,
+            "investability": investability_gate,
+            "screening_ceiling": screening_ceiling,
         }
         bundle.contributions = {
             "fundamental_health": fundamental_contribs,
@@ -1222,13 +1310,16 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
                 },
                 {"name": "confidence_factor", "signed_contribution": round((confidence_factor - 0.5) * 0.25, 4), "direction": "positive" if confidence_factor >= 0.5 else "negative", "short_explanation": "Data and thesis confidence scale the opportunity rather than replacing it.", "source_block": "core_blocks"},
                 {"name": "structural_validity_factor", "signed_contribution": round((structural_validity_factor - 0.5) * 0.25, 4), "direction": "positive" if structural_validity_factor >= 0.5 else "negative", "short_explanation": "Market structure validates whether the opportunity is investable.", "source_block": "core_blocks"},
+                {"name": "investability_gate", "signed_contribution": round((investability_gate - 0.5) * 0.18, 4), "direction": "positive" if investability_gate >= 0.5 else "negative", "short_explanation": "Thin or weakly investable structures now compress the opportunity score.", "source_block": "core_blocks"},
                 {"name": "small_penalties", "signed_contribution": round(-small_penalties * 0.16, 4), "direction": "negative" if small_penalties > 0 else "neutral", "short_explanation": "Small penalties only address clear overreaction, crowding, or legitimacy breaks.", "source_block": "primary_signals"},
+                {"name": "confidence_drag", "signed_contribution": round(-confidence_drag * 0.12, 4), "direction": "negative" if confidence_drag > 0 else "neutral", "short_explanation": "Weak evidence now more clearly constrains enthusiasm.", "source_block": "core_blocks"},
             ],
             "fragility_risk": [{"name": "fragility", "signed_contribution": round((fragility_block - 0.5), 4), "direction": "positive" if fragility_block >= 0.5 else "negative", "short_explanation": "Fragility risk is driven directly by the fragility block.", "source_block": "core_blocks"}],
             "signal_confidence": [
                 {"name": "data_confidence", "signed_contribution": round((confidence_components["data_confidence"] - 0.5) * 0.40, 4), "direction": "positive" if confidence_components["data_confidence"] >= 0.5 else "negative", "short_explanation": "Conditioned data quality is the main confidence driver.", "source_block": "base_components"},
                 {"name": "market_confidence", "signed_contribution": round((confidence_components["market_confidence"] - 0.5) * 0.30, 4), "direction": "positive" if confidence_components["market_confidence"] >= 0.5 else "negative", "short_explanation": "Market structure contributes to confidence when the thesis is executable.", "source_block": "base_components"},
                 {"name": "thesis_confidence", "signed_contribution": round((confidence_components["thesis_confidence"] - 0.5) * 0.30, 4), "direction": "positive" if confidence_components["thesis_confidence"] >= 0.5 else "negative", "short_explanation": "The thesis remains stronger when evidence is coherent and not overly reflexive.", "source_block": "base_components"},
+                {"name": "evidence_penalty", "signed_contribution": round(-confidence_components["evidence_penalty"] * 0.16, 4), "direction": "negative" if confidence_components["evidence_penalty"] > 0 else "neutral", "short_explanation": "Proxy-heavy, shallow, or weak telemetry now reduces confidence more directly.", "source_block": "base_components"},
             ],
         }
         # Keep only the compact public compatibility surface that is still
@@ -1242,6 +1333,10 @@ def normalize_features(raw_bundles: list[FeatureBundle]) -> list[FeatureBundle]:
             "market_confidence": confidence_components["market_confidence"],
             "thesis_confidence": confidence_components["thesis_confidence"],
             "market_legitimacy": market_legitimacy,
+            "evidence_penalty": confidence_components["evidence_penalty"],
+            "evidence_floor": confidence_components["evidence_floor"],
+            "investability_gate": investability_gate,
+            "screening_ceiling": screening_ceiling,
         }
         bundle.raw.update(compatibility_raw)
         primary = PrimarySignals(

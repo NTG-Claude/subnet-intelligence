@@ -8,14 +8,18 @@ def build_confidence_components(
     opportunity_components: dict[str, float],
     fragility_components: dict[str, float],
 ) -> dict[str, float]:
+    proxy_reliance = clamp01(raw.get("proxy_reliance_penalty") or 0.0)
+    signal_fabrication_risk = normalized.get("signal_fabrication_risk", 0.0)
+    market_structure_floor = normalized.get("market_structure_floor", base_components.get("market_relevance", 0.0))
     evidence_depth = clamp01(
-        0.58 * normalized.get("history_depth_score", 0.0)
-        + 0.42 * normalized.get("data_coverage", 0.0)
+        0.52 * normalized.get("history_depth_score", 0.0)
+        + 0.34 * normalized.get("data_coverage", 0.0)
+        + 0.14 * (1.0 - proxy_reliance)
     )
     evidence_consistency = clamp01(
         0.38 * (1.0 - normalized.get("consensus_signal_gap", 0.0))
         + 0.38 * normalized.get("confidence_thesis_coherence", 0.0)
-        + 0.24 * (1.0 - normalized.get("signal_fabrication_risk", 0.0))
+        + 0.24 * (1.0 - signal_fabrication_risk)
     )
     telemetry_quality = clamp01(
         0.30 * normalized.get("update_freshness", 0.0)
@@ -52,6 +56,20 @@ def build_confidence_components(
         + 0.30 * market_confidence
         + 0.30 * thesis_confidence
     )
+    evidence_penalty = clamp01(
+        0.34 * (1.0 - evidence_depth)
+        + 0.22 * (1.0 - telemetry_quality)
+        + 0.18 * proxy_reliance
+        + 0.16 * signal_fabrication_risk
+        + 0.10 * max(0.0, 0.58 - market_structure_floor) / 0.58
+    )
+    evidence_floor = clamp01(
+        0.60 * data_confidence
+        + 0.25 * normalized.get("history_depth_score", 0.0)
+        + 0.15 * normalized.get("data_coverage", 0.0)
+        - 0.18 * proxy_reliance
+        - 0.12 * signal_fabrication_risk
+    )
     return {
         "evidence_depth": evidence_depth,
         "evidence_consistency": evidence_consistency,
@@ -60,4 +78,6 @@ def build_confidence_components(
         "market_confidence": market_confidence,
         "thesis_confidence": thesis_confidence,
         "evidence_confidence": evidence_confidence,
+        "evidence_penalty": evidence_penalty,
+        "evidence_floor": evidence_floor,
     }

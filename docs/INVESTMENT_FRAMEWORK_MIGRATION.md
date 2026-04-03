@@ -134,3 +134,11 @@ Backtests liefern jetzt zielnähere Felder:
 - `concentration_deterioration_risk`
 
 Aktuell sind diese Targets noch proxy-basiert, aber die Architektur ist so gebaut, dass echte TAO-relative Targets später ohne erneuten Großumbau nachgerüstet werden können.
+# Scoring refinement note
+
+The current scoring framework still keeps the main score as the primary ranking anchor, but the screening logic is now intentionally less permissive in two places:
+
+- weak evidence bites harder, so shallow history, reconstructed inputs, proxy-heavy reads, and weak telemetry compress both confidence and score interpretation
+- investability is treated as a lightweight overlay, so thin liquidity, narrow participation, concentration, and weak market structure can cap or discount otherwise attractive-looking setups
+
+This is an incremental refinement rather than a replacement of the score system. The main page remains score-led, while deeper interpretation can still expand on the underlying setup quality later.

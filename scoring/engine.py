@@ -307,24 +307,48 @@ def _ranking_priority_score(signals: PrimarySignals, bundle: FeatureBundle) -> f
     if resilience is None:
         resilience = 1.0 - (bundle.core_blocks.get("fragility") or signals.fragility_risk)
         resilience = max(0.0, min(1.0, resilience))
+    investability = ranking_artifacts.get("investability")
+    if investability is None:
+        investability = (
+            bundle.core_blocks.get("investability_gate")
+            or bundle.raw.get("investability_gate")
+            or 0.0
+        )
+    screening_ceiling = ranking_artifacts.get("screening_ceiling")
+    if screening_ceiling is None:
+        screening_ceiling = (
+            bundle.core_blocks.get("screening_ceiling")
+            or bundle.raw.get("screening_ceiling")
+            or 1.0
+        )
+    evidence_penalty = (
+        bundle.base_components.get("evidence_penalty")
+        or bundle.raw.get("evidence_penalty")
+        or 0.0
+    )
     mispricing_component = base_opportunity if base_opportunity is not None else signals.mispricing_signal
     thesis_component = thesis_strength if thesis_strength is not None else (
         0.45 * signals.fundamental_quality
         + 0.35 * mispricing_component
         + 0.20 * signals.signal_confidence
     )
-    return max(
+    raw_score = max(
         0.0,
         min(
             1.0,
-            0.24 * signals.fundamental_quality
-            + 0.24 * mispricing_component
+            0.26 * signals.fundamental_quality
+            + 0.20 * mispricing_component
             + 0.20 * thesis_component
-            + 0.14 * signals.signal_confidence
+            + 0.16 * signals.signal_confidence
             + 0.10 * resilience
             + 0.08 * market_relevance,
         ),
     )
+    screening_discount = max(
+        0.65,
+        1.0 - 0.14 * (1.0 - investability) - 0.12 * evidence_penalty - 0.08 * max(signals.fragility_risk - 0.55, 0.0) / 0.45,
+    )
+    return min(raw_score * screening_discount, screening_ceiling)
 
 
 def _history_priority_score(snapshot: RawSubnetSnapshot, bundle: FeatureBundle) -> float | None:
