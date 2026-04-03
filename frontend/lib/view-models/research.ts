@@ -272,12 +272,37 @@ function clipHints(items: ResearchHint[], limit: number): ResearchHint[] {
   return items.filter((item) => item.label).slice(0, limit)
 }
 
+function normalizeContributorName(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+}
+
+function isGenericModelPhrase(value: string | null | undefined): boolean {
+  const normalized = normalizeContributorName(value)
+  return [
+    'evidence_penalty',
+    'confidence_drag',
+    'valuation_gap',
+    'controlled_downside',
+    'thesis_coherence',
+    'input_quality',
+    'market_support',
+    'market_confirmation',
+    'aligned_evidence',
+    'durable_quality',
+    'interesting_setup',
+  ].includes(normalized)
+}
+
 function contributorLabel(item: ExplanationContributor): string {
-  return item.short_explanation || item.metric || item.name || item.source_block || 'Unspecified contributor'
+  const key = contributorKey(item)
+  const mapped = plainEnglishReason(key, 'negative') || plainEnglishReason(key, 'positive') || plainEnglishReason(key, 'uncertainty')
+  if (mapped) return mapped
+  if (item.short_explanation && !isGenericModelPhrase(item.short_explanation)) return item.short_explanation
+  return item.metric || item.name || item.source_block || 'Unspecified contributor'
 }
 
 function contributorKey(item: ExplanationContributor): string {
-  return item.name || item.metric || ''
+  return normalizeContributorName(item.name || item.metric || '')
 }
 
 function contributorTitle(item: ExplanationContributor): string {
@@ -285,7 +310,7 @@ function contributorTitle(item: ExplanationContributor): string {
 }
 
 function contributorDisplayTitle(name: string | undefined | null, mode: 'positive' | 'negative' | 'neutral' = 'neutral'): string {
-  switch (name) {
+  switch (normalizeContributorName(name)) {
     case 'fundamental_health':
       return 'The subnet is doing real work'
     case 'structural_validity':
@@ -339,7 +364,10 @@ function contributorDisplayTitle(name: string | undefined | null, mode: 'positiv
 }
 
 function uncertaintyLabel(item: KeyUncertainty): string {
-  return item.short_explanation || item.name.replace(/_/g, ' ')
+  if (item.short_explanation && !isGenericModelPhrase(item.short_explanation)) return item.short_explanation
+  const mapped = plainEnglishReason(item.name, 'uncertainty')
+  if (mapped) return mapped
+  return item.name.replace(/_/g, ' ')
 }
 
 function visibilityCount(conditioning: ConditioningInfo | undefined, bucket: string): number {
@@ -442,7 +470,7 @@ function cleanSentence(value: string | undefined | null): string {
 }
 
 function metricPhrase(name: string | undefined | null): string {
-  switch (name) {
+  switch (normalizeContributorName(name)) {
     case 'fragility':
       return 'it is still holding up reasonably well when the model applies stress'
     case 'fundamental_health':
@@ -509,7 +537,7 @@ function joinClauses(items: string[]): string {
 }
 
 function driverSupportClause(name: string): string {
-  switch (name) {
+  switch (normalizeContributorName(name)) {
     case 'fundamental_health':
       return 'the subnet looks operationally healthier than most peers'
     case 'structural_validity':
@@ -540,7 +568,7 @@ function driverSupportClause(name: string): string {
 }
 
 function driverDragClause(name: string): string {
-  switch (name) {
+  switch (normalizeContributorName(name)) {
     case 'reserve_change':
       return 'more reserves are not yet leading to stronger market follow-through'
     case 'liquidity_improvement_rate':
@@ -576,7 +604,7 @@ function driverDragClause(name: string): string {
 }
 
 function uncertaintyClause(name: string): string {
-  switch (name) {
+  switch (normalizeContributorName(name)) {
     case 'discarded_inputs':
       return 'some inputs had to be thrown out during conditioning, so part of the picture is missing'
     case 'external_data_reliability':
@@ -591,7 +619,7 @@ function uncertaintyClause(name: string): string {
 }
 
 function plainEnglishReason(name: string, mode: 'positive' | 'negative' | 'uncertainty'): string {
-  switch (name) {
+  switch (normalizeContributorName(name)) {
     case 'fundamental_health':
       return mode === 'positive'
         ? 'the subnet looks more operationally durable and useful than most peers, which gives the score a stronger base'
@@ -661,9 +689,29 @@ function plainEnglishReason(name: string, mode: 'positive' | 'negative' | 'uncer
       return 'validator-side evidence is thinner than ideal, so participation quality is harder to confirm'
     case 'history_data_reliability':
       return 'the historical record is still shallower than you would want, so trend-based conclusions are less reliable'
+    case 'evidence_penalty':
+      return 'parts of the evidence base are still too thin, missing, or reconstructed, so the score has to stay more cautious'
+    case 'confidence_drag':
+      return 'the read is still less reliable than it should be for a higher score, so conviction is being held back'
+    case 'valuation_gap':
+      return mode === 'positive'
+        ? 'the market still may be missing part of the story, leaving room for upside'
+        : 'the valuation gap is not wide enough to justify a much stronger score on its own'
+    case 'controlled_downside':
+      return mode === 'negative'
+        ? 'the setup still carries downside that cannot be ignored'
+        : 'the downside still looks reasonably contained for now'
+    case 'thesis_coherence':
+      return mode === 'negative'
+        ? 'the current thesis still has logical gaps or assumptions that need proving'
+        : 'the main pieces of the thesis fit together well enough to support the read'
+    case 'input_quality':
+      return mode === 'negative'
+        ? 'the input data is not clean enough yet for a higher-trust read'
+        : 'the input data looks clean enough to support the current read'
     default: {
       const fallback = metricPhrase(name)
-      return fallback || `${name.replace(/_/g, ' ')} is still an open part of the story`
+      return fallback || ''
     }
   }
 }
