@@ -7,6 +7,8 @@ import TrustBadge from '@/components/ui/TrustBadge'
 import { cn } from '@/lib/formatting'
 import { SignalTone, UniverseRowViewModel } from '@/lib/view-models/research'
 
+export const DISCOVER_TABLE_GRID = 'grid-cols-[88px_minmax(220px,1.45fr)_96px_96px_116px_88px_112px_140px]'
+
 function signalValue(row: UniverseRowViewModel, key: UniverseRowViewModel['signals'][number]['key']): string {
   const signal = row.signals.find((item) => item.key === key)
   return signal?.value == null ? 'n/a' : signal.value.toFixed(1)
@@ -19,7 +21,7 @@ function toneClass(tone: SignalTone): string {
     case 'mispricing':
       return 'text-[color:var(--mispricing-strong)]'
     case 'fragility':
-      return 'text-[color:var(--danger-strong)]'
+      return 'text-[color:var(--fragility-strong)]'
     case 'confidence':
       return 'text-[color:var(--confidence-strong)]'
     case 'warning':
@@ -49,9 +51,10 @@ export default function DecisionRow({
   return (
     <article
       className={cn(
-        'grid cursor-default grid-cols-[64px_minmax(0,1.4fr)_84px_78px_92px_72px_92px_116px] items-center gap-4 border-t border-[color:var(--border-subtle)] px-4 py-2.5 transition-colors sm:px-5',
+        'grid cursor-default items-center gap-x-5 border-t border-[color:var(--border-subtle)] px-5 py-4 transition-colors',
+        DISCOVER_TABLE_GRID,
         focused && 'bg-[color:rgba(19,32,44,0.42)]',
-        selected && 'border-l-2 border-l-[color:var(--mispricing-strong)] pl-[14px] sm:pl-[18px]',
+        selected && 'border-l-2 border-l-[color:var(--mispricing-strong)] pl-4',
         pinned && 'bg-[color:rgba(19,32,44,0.56)]',
       )}
       tabIndex={0}
@@ -61,24 +64,24 @@ export default function DecisionRow({
     >
       <div className="min-w-0 font-mono">
         <div className="flex items-center gap-2">
-          <div className="text-base font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
+          <div className="text-[15px] font-semibold tracking-tight text-[color:var(--text-primary)]">{row.rankLabel}</div>
           <RankDeltaBadge rankDelta={rankDelta} />
         </div>
       </div>
 
       <div className="min-w-0">
         <div className="flex min-w-0 items-baseline gap-3">
-          <div className="truncate text-[15px] font-medium text-[color:var(--text-primary)]">{row.name}</div>
+          <div className="truncate text-[15px] font-semibold text-[color:var(--text-primary)]">{row.name}</div>
           <div className="shrink-0 font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
         </div>
       </div>
 
-      <div className="text-right font-mono text-[13px] font-semibold text-[color:var(--text-primary)]">{row.scoreLabel}</div>
-      <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
-      <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
-      <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
-      <div className="text-right font-mono text-[13px] font-medium text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
-      <div className={cn('min-w-0 truncate text-[12px] font-semibold', toneClass(row.investability.tone))}>{row.investability.label}</div>
+      <div className="text-right font-mono text-[13px] font-semibold tabular-nums text-[color:var(--text-primary)]">{row.scoreLabel}</div>
+      <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
+      <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
+      <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
+      <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
+      <div className={cn('min-w-0 truncate text-left text-[12px] font-semibold', toneClass(row.investability.tone))}>{row.investability.label}</div>
     </article>
   )
 }
@@ -93,7 +96,7 @@ function RankDeltaBadge({ rankDelta }: { rankDelta: { change: number; previousRa
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+        'inline-flex min-w-[42px] items-center justify-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold',
         improved
           ? 'bg-[color:var(--quality-surface)] text-[color:var(--quality-strong)]'
           : 'bg-[color:var(--fragility-surface)] text-[color:var(--fragility-strong)]',
