@@ -134,6 +134,31 @@ Backtests liefern jetzt zielnähere Felder:
 - `concentration_deterioration_risk`
 
 Aktuell sind diese Targets noch proxy-basiert, aber die Architektur ist so gebaut, dass echte TAO-relative Targets später ohne erneuten Großumbau nachgerüstet werden können.
+
+## Research Page Contract
+
+Die Haupttabelle bleibt bewusst score-basiert und dient weiter als Front Door.
+Die Detailseite liefert dagegen die kompakte Research-Interpretation, ohne mit
+Debug-Rohdaten zu eroeffnen.
+
+Das neue Top-Layer fuer `/api/v1/subnets/{netuid}` ist `research_summary`. Es
+nutzt bewusst nicht-personalisierte, deskriptive Sprache und verdichtet die
+vorhandenen V2-Signale in wenige direkt lesbare Felder:
+
+- `setup_status`: `strong_setup | improving_setup | fragile_setup | not_investable`
+- `setup_read`
+- `why_now`
+- `main_constraint`
+- `break_condition`
+- `market_capacity`: `very_low | low | medium | high`
+- `evidence_strength`: `high | medium | low`
+- `relative_peer_context`
+
+UI-Prinzipien fuer die Research-Seite:
+
+- oben nur die kompakte Summary und die vier Primaersignale
+- darunter die Interpretationsebene
+- tiefe Contributors, Stress-Szenarien, Conditioning und Raw Context bleiben zugaenglich, aber sekundaer
 # Scoring refinement note
 
 The current scoring framework still keeps the main score as the primary ranking anchor, but the screening logic is now intentionally less permissive in two places:

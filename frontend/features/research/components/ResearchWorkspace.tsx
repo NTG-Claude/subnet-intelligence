@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+import CollapsibleSection from '@/components/ui/CollapsibleSection'
+import MetricCard from '@/components/ui/MetricCard'
 import PageHeader from '@/components/ui/PageHeader'
 import SignalBar from '@/components/ui/SignalBar'
 import StatusChip from '@/components/ui/StatusChip'
@@ -18,13 +20,6 @@ function toHeaderTone(tone: string | undefined): 'default' | 'warning' | 'succes
   return 'default'
 }
 
-function sentenceParts(items: MemoSectionItem[], limit = 2): string[] {
-  return items
-    .slice(0, limit)
-    .map((item) => item.body.trim())
-    .filter(Boolean)
-}
-
 function normalizeKey(value: string | undefined): string {
   return (value ?? '')
     .trim()
@@ -35,18 +30,6 @@ function normalizeKey(value: string | undefined): string {
 function signalNumber(memo: DetailMemoViewModel, key: string): string {
   const signal = memo.signals.find((item) => item.key === key)
   return signal?.value == null ? 'n/a' : signal.value.toFixed(1)
-}
-
-function buildInvestmentRead(memo: DetailMemoViewModel): string {
-  const positive = sentenceParts(memo.interesting, 1)[0]
-  const risk = sentenceParts(memo.breaks, 1)[0]
-  const uncertainty = sentenceParts(memo.uncertainties, 1)[0]
-
-  const parts = [memo.decisionLine]
-  if (positive) parts.push(`What supports that read today: ${positive}`)
-  if (risk) parts.push(`What still needs to be respected: ${risk}`)
-  if (uncertainty) parts.push(`What can still move the memo: ${uncertainty}`)
-  return parts.join(' ')
 }
 
 function cleanText(value: string): string {
@@ -229,6 +212,48 @@ function NarrativeSection({
   )
 }
 
+function FieldCard({
+  label,
+  body,
+}: {
+  label: string
+  body: string
+}) {
+  return (
+    <div className="surface-subtle p-4">
+      <div className="eyebrow">{label}</div>
+      <p className="mt-2 text-sm leading-7 text-[color:var(--text-secondary)]">{body}</p>
+    </div>
+  )
+}
+
+function ItemGrid({
+  items,
+  empty,
+}: {
+  items: MemoSectionItem[]
+  empty: string
+}) {
+  if (!items.length) {
+    return <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{empty}</p>
+  }
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {items.map((item, index) => (
+        <div key={`${item.title}-${index}`} className="surface-subtle p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="eyebrow">{item.title}</div>
+            {item.score != null ? <StatusChip tone={item.tone ?? 'neutral'}>{item.score.toFixed(1)}</StatusChip> : null}
+          </div>
+          <p className="mt-2 text-sm leading-7 text-[color:var(--text-secondary)]">{item.body}</p>
+          {item.meta ? <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{item.meta}</p> : null}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel }) {
   const rankMetric = pickMetric(memo, 'Rank')
   const updatedMetric = pickMetric(memo, 'Updated')
@@ -273,10 +298,49 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
       />
 
       <section className="surface-panel p-5 sm:p-6">
-        <div className="space-y-5">
-          <div className="surface-subtle p-4">
-            <div className="eyebrow text-[color:var(--mispricing-strong)]">Investment read</div>
-            <p className="mt-2 text-base leading-7 text-[color:var(--text-secondary)]">{buildInvestmentRead(memo)}</p>
+        <div className="space-y-6">
+          <div className="grid gap-3 lg:grid-cols-4">
+            <MetricCard
+              label="Setup Status"
+              value={memo.researchSummary.setupStatus.label}
+              meta={memo.researchSummary.setupRead}
+              accent={memo.researchSummary.setupStatus.tone}
+            />
+            <MetricCard
+              label="Market Capacity"
+              value={memo.researchSummary.marketCapacity.label}
+              meta="Current market depth and size read"
+              accent={memo.researchSummary.marketCapacity.tone}
+            />
+            <MetricCard
+              label="Evidence Strength"
+              value={memo.researchSummary.evidenceStrength.label}
+              meta="How sturdy the current evidence stack looks"
+              accent={memo.researchSummary.evidenceStrength.tone}
+            />
+            <MetricCard
+              label="Peer Context"
+              value={rankMetric?.value ?? memo.rankLabel}
+              meta={memo.percentileLabel === 'n/a' ? 'Relative read still forming' : `${memo.percentileLabel} percentile`}
+              accent="default"
+            />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-3">
+            <FieldCard label="Why Now" body={memo.researchSummary.whyNow} />
+            <FieldCard label="Main Constraint" body={memo.researchSummary.mainConstraint} />
+            <FieldCard label="Break Condition" body={memo.researchSummary.breakCondition} />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="surface-subtle p-4">
+              <div className="eyebrow text-[color:var(--mispricing-strong)]">Setup Read</div>
+              <p className="mt-2 text-base leading-7 text-[color:var(--text-secondary)]">{memo.researchSummary.setupRead}</p>
+            </div>
+            <div className="surface-subtle p-4">
+              <div className="eyebrow">Relative Peer Context</div>
+              <p className="mt-2 text-sm leading-7 text-[color:var(--text-secondary)]">{memo.researchSummary.relativePeerContext}</p>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -284,27 +348,129 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
               <SignalBar key={signal.key} signal={signal} />
             ))}
           </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <NarrativeSection
-              title="Why Strength Looks Like This"
-              body={strengthNarrative}
-            />
-            <NarrativeSection
-              title="Why Upside Gap Looks Like This"
-              body={upsideNarrative}
-            />
-            <NarrativeSection
-              title="Why Risk Looks Like This"
-              body={riskNarrative}
-            />
-            <NarrativeSection
-              title="Why Evidence Quality Looks Like This"
-              body={evidenceNarrative}
-            />
-          </div>
         </div>
       </section>
+
+      <CollapsibleSection
+        title="Signal Interpretation"
+        subtitle="A compact explanation of how the four primary signals currently resolve."
+      >
+        <div className="grid gap-4 xl:grid-cols-2">
+          <NarrativeSection title="Why Strength Looks Like This" body={strengthNarrative} />
+          <NarrativeSection title="Why Upside Gap Looks Like This" body={upsideNarrative} />
+          <NarrativeSection title="Why Risk Looks Like This" body={riskNarrative} />
+          <NarrativeSection title="Why Evidence Quality Looks Like This" body={evidenceNarrative} />
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Drivers And Constraints"
+        subtitle="Primary contributors, drags, and thesis breakers behind the current setup."
+        defaultOpen={false}
+      >
+        <div className="space-y-6">
+          <div>
+            <div className="section-title">Positive Drivers</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.interesting} empty="No positive driver breakdown is available for this subnet yet." />
+            </div>
+          </div>
+
+          {memo.signalContributorSections.map((section) => (
+            <div key={section.title}>
+              <div className="section-title">{section.title}</div>
+              <div className="mt-3">
+                <ItemGrid items={section.items} empty={`No items available for ${section.title.toLowerCase()}.`} />
+              </div>
+            </div>
+          ))}
+
+          <div>
+            <div className="section-title">Breakers And Drags</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.breaks} empty="No thesis breakers or top drags were emitted for this subnet." />
+            </div>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Stress And Confidence"
+        subtitle="Stress behavior, uncertainty, and reliability remain available but secondary."
+        defaultOpen={false}
+      >
+        <div className="space-y-6">
+          <div>
+            <div className="section-title">Stress Snapshot</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.stressItems} empty="No stress outputs are available." />
+            </div>
+          </div>
+
+          <div>
+            <div className="section-title">Stress Scenarios</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.scenarioItems} empty="No stress scenarios were emitted for this subnet." />
+            </div>
+          </div>
+
+          <div>
+            <div className="section-title">Confidence Breakdown</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.confidenceItems} empty="No confidence breakdown is available." />
+            </div>
+          </div>
+
+          <div>
+            <div className="section-title">Key Uncertainties</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.uncertainties} empty="No key uncertainties were emitted for this subnet." />
+            </div>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Research Context"
+        subtitle="Verbose telemetry, block scores, and raw context stay accessible for deeper inspection."
+        defaultOpen={false}
+      >
+        <div className="space-y-6">
+          <div>
+            <div className="section-title">Block Scores</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.blockScores} empty="No block scores are available." />
+            </div>
+          </div>
+
+          <div>
+            <div className="section-title">Visibility And Conditioning</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.visibilityItems} empty="No visibility diagnostics are available." />
+            </div>
+          </div>
+
+          <div>
+            <div className="section-title">Raw Context</div>
+            <div className="mt-3">
+              <ItemGrid items={memo.rawContext} empty="No raw context values are available." />
+            </div>
+          </div>
+
+          {memo.links.length ? (
+            <div>
+              <div className="section-title">External Links</div>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {memo.links.map((link) => (
+                  <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="button-secondary">
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </CollapsibleSection>
     </div>
   )
 }

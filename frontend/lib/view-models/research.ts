@@ -4,6 +4,7 @@ import {
   ExplanationContributor,
   KeyUncertainty,
   PrimaryOutputs,
+  ResearchSummary,
   SubnetDetail,
   SubnetSummary,
 } from '@/lib/api'
@@ -93,6 +94,17 @@ export interface MemoSectionItem {
   meta?: string
 }
 
+export interface ResearchSummaryViewModel {
+  setupStatus: { value: ResearchSummary['setup_status']; label: string; tone: SignalTone }
+  marketCapacity: { value: ResearchSummary['market_capacity']; label: string; tone: SignalTone }
+  evidenceStrength: { value: ResearchSummary['evidence_strength']; label: string; tone: SignalTone }
+  setupRead: string
+  whyNow: string
+  mainConstraint: string
+  breakCondition: string
+  relativePeerContext: string
+}
+
 export interface DetailMemoViewModel {
   name: string
   netuidLabel: string
@@ -101,6 +113,7 @@ export interface DetailMemoViewModel {
   modelLabelTone: SignalTone
   thesis: string
   decisionLine: string
+  researchSummary: ResearchSummaryViewModel
   updatedLabel: string
   rankLabel: string
   percentileLabel: string
@@ -1054,6 +1067,129 @@ function reliabilityTone(value: number): SignalTone {
   return 'fragility'
 }
 
+function setupStatusMeta(value: ResearchSummary['setup_status']): ResearchSummaryViewModel['setupStatus'] {
+  switch (value) {
+    case 'strong_setup':
+      return { value, label: 'Strong setup', tone: 'quality' }
+    case 'improving_setup':
+      return { value, label: 'Improving setup', tone: 'mispricing' }
+    case 'fragile_setup':
+      return { value, label: 'Fragile setup', tone: 'warning' }
+    default:
+      return { value, label: 'Not investable', tone: 'fragility' }
+  }
+}
+
+function marketCapacityMeta(value: ResearchSummary['market_capacity']): ResearchSummaryViewModel['marketCapacity'] {
+  switch (value) {
+    case 'high':
+      return { value, label: 'High', tone: 'quality' }
+    case 'medium':
+      return { value, label: 'Medium', tone: 'mispricing' }
+    case 'low':
+      return { value, label: 'Low', tone: 'warning' }
+    default:
+      return { value, label: 'Very low', tone: 'fragility' }
+  }
+}
+
+function evidenceStrengthMeta(value: ResearchSummary['evidence_strength']): ResearchSummaryViewModel['evidenceStrength'] {
+  switch (value) {
+    case 'high':
+      return { value, label: 'High', tone: 'confidence' }
+    case 'medium':
+      return { value, label: 'Medium', tone: 'warning' }
+    default:
+      return { value, label: 'Low', tone: 'fragility' }
+  }
+}
+
+function fallbackResearchSummary(
+  subnet: SubnetDetail,
+  summary: UniverseRowViewModel,
+  stressDrawdown: number | null | undefined,
+): ResearchSummary {
+  const outputs = subnet.primary_outputs ?? subnet.analysis?.primary_outputs ?? null
+  const analysis = subnet.analysis
+  const firstBreak = analysis?.thesis_breakers?.[0]
+  const firstPositive = analysis?.top_positive_drivers?.[0]
+  const firstNegative = (analysis?.top_negative_drags ?? analysis?.top_negative_drivers ?? [])[0]
+  const firstUncertainty = analysis?.key_uncertainties?.[0]
+
+  let setupStatus: ResearchSummary['setup_status'] = 'not_investable'
+  if (outputs) {
+    if (
+      (subnet.investability_status === 'investable' || subnet.investability_status === 'speculative') &&
+      outputs.fundamental_quality >= 65 &&
+      outputs.mispricing_signal >= 55 &&
+      outputs.fragility_risk <= 45 &&
+      outputs.signal_confidence >= 55
+    ) {
+      setupStatus = 'strong_setup'
+    } else if (outputs.fundamental_quality >= 55 && outputs.signal_confidence >= 45 && outputs.fragility_risk <= 60) {
+      setupStatus = 'improving_setup'
+    } else if (outputs.signal_confidence >= 35 && outputs.fragility_risk <= 75) {
+      setupStatus = 'fragile_setup'
+    }
+  }
+
+  const marketCap = subnet.market_cap_tao ?? 0
+  const poolDepth = subnet.tao_in_pool ?? 0
+  const marketCapacity: ResearchSummary['market_capacity'] =
+    marketCap >= 250000 || poolDepth >= 25000
+      ? 'high'
+      : marketCap >= 75000 || poolDepth >= 7500
+        ? 'medium'
+        : marketCap >= 15000 || poolDepth >= 1500
+          ? 'low'
+          : 'very_low'
+
+  const evidenceStrength: ResearchSummary['evidence_strength'] =
+    (outputs?.signal_confidence ?? 0) >= 65
+      ? 'high'
+      : (outputs?.signal_confidence ?? 0) >= 45
+        ? 'medium'
+        : 'low'
+
+  return {
+    setup_status: setupStatus,
+    setup_read: summary.decisionLine,
+    why_now: firstPositive ? `Why now: ${cleanSentence(contributorLabel(firstPositive))}.` : summary.thesisLine,
+    main_constraint: firstNegative
+      ? `The main constraint is ${cleanSentence(contributorLabel(firstNegative)).toLowerCase()}.`
+      : summary.fragilityRead,
+    break_condition: firstBreak
+      ? cleanSentence(firstBreak)
+      : stressDrawdown != null
+        ? `The setup breaks if stress behavior worsens materially from the current ${stressDrawdown.toFixed(1)}% drawdown path.`
+        : 'The setup breaks if the current positive drivers stop improving or the evidence layer weakens further.',
+    market_capacity: marketCapacity,
+    evidence_strength: evidenceStrength,
+    relative_peer_context: firstUncertainty
+      ? `${summary.rankLabel !== 'n/a' ? `It currently ranks ${summary.rankLabel}. ` : ''}${cleanSentence(uncertaintyLabel(firstUncertainty))}`
+      : `${summary.rankLabel !== 'n/a' ? `It currently ranks ${summary.rankLabel}. ` : ''}${summary.metricReasons.strength}`,
+  }
+}
+
+function buildResearchSummaryViewModel(
+  researchSummary: ResearchSummary | null | undefined,
+  subnet: SubnetDetail,
+  summary: UniverseRowViewModel,
+  stressDrawdown: number | null | undefined,
+): ResearchSummaryViewModel {
+  const resolved = researchSummary ?? fallbackResearchSummary(subnet, summary, stressDrawdown)
+  return {
+    setupStatus: setupStatusMeta(resolved.setup_status),
+    marketCapacity: marketCapacityMeta(resolved.market_capacity),
+    evidenceStrength: evidenceStrengthMeta(resolved.evidence_strength),
+    setupRead: resolved.setup_read,
+    whyNow: resolved.why_now,
+    mainConstraint: resolved.main_constraint,
+    breakCondition: resolved.break_condition,
+    relativePeerContext: resolved.relative_peer_context,
+  }
+}
+
 export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
   const analysis = subnet.analysis
   const outputs = subnet.primary_outputs ?? analysis?.primary_outputs ?? null
@@ -1084,6 +1220,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
       block_scores: analysis?.block_scores,
     },
   })
+  const researchSummary = buildResearchSummaryViewModel(subnet.research_summary, subnet, summary, analysis?.stress_drawdown)
 
   const reliabilityEntries: MemoSectionItem[] = Object.entries(conditioning?.reliability ?? {}).map(([key, value]) => ({
     title: RELIABILITY_LABELS[key] ?? key.replace(/_/g, ' '),
@@ -1136,6 +1273,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     modelLabelTone: summary.modelLabelTone,
     thesis: subnet.thesis ?? analysis?.thesis ?? 'No concise thesis generated yet.',
     decisionLine: summary.decisionLine,
+    researchSummary,
     updatedLabel: formatDateTime(subnet.computed_at),
     rankLabel: subnet.rank ? `#${subnet.rank}` : 'n/a',
     percentileLabel: subnet.percentile != null ? `${subnet.percentile.toFixed(1)}th` : 'n/a',

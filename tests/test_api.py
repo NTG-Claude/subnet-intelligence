@@ -345,6 +345,18 @@ def test_get_subnet_detail():
     assert data["metadata"]["name"] == "subnet-1"
     assert data["investability_status"] is not None
     assert isinstance(data["warning_flags"], list)
+    assert data["research_summary"]["setup_status"] in {
+        "strong_setup",
+        "improving_setup",
+        "fragile_setup",
+        "not_investable",
+    }
+    assert data["research_summary"]["market_capacity"] in {"very_low", "low", "medium", "high"}
+    assert data["research_summary"]["evidence_strength"] in {"low", "medium", "high"}
+    assert data["research_summary"]["why_now"]
+    assert data["research_summary"]["main_constraint"]
+    assert data["research_summary"]["break_condition"]
+    assert data["research_summary"]["relative_peer_context"]
 
 
 def test_list_subnets_uses_override_name_fallback():
@@ -386,6 +398,51 @@ def test_get_root_subnet_detail_still_available():
     assert data["netuid"] == 0
     assert data["rank"] is None
     assert data["label"] == "Root Infrastructure"
+    assert data["research_summary"]["setup_status"] == "not_investable"
+
+
+def test_get_subnet_detail_research_summary_respects_breakers_and_telemetry():
+    row = {
+        **SCORES[0],
+        "market_cap_tao": 82000.0,
+        "tao_in_pool": 9800.0,
+        "raw_data": {
+            **SCORES[0]["raw_data"],
+            "analysis": {
+                **SCORES[0]["raw_data"]["analysis"],
+                "top_positive_drivers": [{"name": "fundamental_health", "short_explanation": "fundamental health is improving"}],
+                "top_negative_drags": [{"name": "reserve_growth_without_price", "short_explanation": "price still lags the fundamentals"}],
+                "key_uncertainties": [{"name": "external_data_reliability", "short_explanation": "external evidence is still thin"}],
+                "thesis_breakers": ["The setup breaks if the market stops rewarding improving quality."],
+                "conditioning": {
+                    "reliability": {
+                        "market_data_reliability": 0.81,
+                        "history_data_reliability": 0.76,
+                    },
+                    "visibility": {"discarded": []},
+                },
+            },
+        },
+    }
+
+    with patch("api.main.get_latest_scores", return_value=[row]), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=[row]), \
+         patch("api.main._get_metadata", return_value=None), \
+         patch("api.main._cache_get", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets/1")
+
+    assert resp.status_code == 200
+    summary = resp.json()["research_summary"]
+    assert summary["market_capacity"] == "medium"
+    assert summary["evidence_strength"] == "high"
+    assert "operating quality" in summary["why_now"].lower()
+    assert "price" in summary["main_constraint"].lower()
+    assert summary["break_condition"] == "The setup breaks if the market stops rewarding improving quality."
 
 
 def test_get_subnet_normalizes_schema_stale_analysis_fields():
@@ -410,7 +467,8 @@ def test_get_subnet_normalizes_schema_stale_analysis_fields():
          patch("api.main.get_score_history", return_value=HISTORY), \
          patch("api.main.get_score_distribution", return_value=[]), \
          patch("api.main.get_scores_since", return_value=[stale_row]), \
-         patch("api.main._get_metadata", return_value=None):
+         patch("api.main._get_metadata", return_value=None), \
+         patch("api.main._cache_get", return_value=None):
         from api.main import app
         with TestClient(app) as c:
             resp = c.get("/api/v1/subnets/1")

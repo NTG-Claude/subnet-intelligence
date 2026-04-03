@@ -36,6 +36,17 @@ export interface PrimaryOutputs {
   signal_confidence: number
 }
 
+export interface ResearchSummary {
+  setup_status: 'strong_setup' | 'improving_setup' | 'fragile_setup' | 'not_investable'
+  setup_read: string
+  why_now: string
+  main_constraint: string
+  break_condition: string
+  market_capacity: 'very_low' | 'low' | 'medium' | 'high'
+  evidence_strength: 'high' | 'medium' | 'low'
+  relative_peer_context: string
+}
+
 export interface DriverItem {
   metric: string
   effect: number
@@ -147,6 +158,7 @@ export interface SubnetDetail {
   /** Deprecated compatibility field. Prefer thesis and V2 explanation data in product UI. */
   label: string | null
   thesis: string | null
+  research_summary?: ResearchSummary | null
   analysis: SubnetAnalysis | null
 }
 

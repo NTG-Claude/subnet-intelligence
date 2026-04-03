@@ -36,6 +36,7 @@ from api.models import (
     MarketOverviewPoint,
     MarketOverviewResponse,
     PrimaryOutputsResponse,
+    ResearchSummaryResponse,
     ScoreBreakdownResponse,
     ScoreHistoryPoint,
     SubnetDetailResponse,
@@ -280,6 +281,206 @@ def _investability_status(row: dict, analysis: dict | None, primary_outputs: dic
     return "speculative"
 
 
+def _contributor_name(item: dict | None) -> str:
+    if not item:
+        return ""
+    return item.get("name") or item.get("metric") or item.get("source_block") or ""
+
+
+def _market_capacity(row: dict) -> str:
+    market_cap = row.get("market_cap_tao") or 0.0
+    pool_depth = row.get("tao_in_pool") or 0.0
+    if market_cap >= 250_000 or pool_depth >= 25_000:
+        return "high"
+    if market_cap >= 75_000 or pool_depth >= 7_500:
+        return "medium"
+    if market_cap >= 15_000 or pool_depth >= 1_500:
+        return "low"
+    return "very_low"
+
+
+def _evidence_strength(analysis: dict | None, primary_outputs: dict | None) -> str:
+    conditioning = (analysis or {}).get("conditioning") or {}
+    reliability = conditioning.get("reliability") or {}
+    values = [value for value in reliability.values() if isinstance(value, (int, float))]
+    avg_reliability = (sum(values) / len(values)) if values else None
+    discarded = len((conditioning.get("visibility") or {}).get("discarded") or [])
+    confidence = (primary_outputs or {}).get("signal_confidence") or 0.0
+
+    if confidence >= 65 and discarded == 0 and (avg_reliability is None or avg_reliability >= 0.7):
+        return "high"
+    if confidence >= 45 and (avg_reliability is None or avg_reliability >= 0.5):
+        return "medium"
+    return "low"
+
+
+def _setup_status(investability_status: str, primary_outputs: dict | None) -> str:
+    if investability_status == "uninvestable" or not primary_outputs:
+        return "not_investable"
+
+    quality = primary_outputs.get("fundamental_quality") or 0.0
+    opportunity = primary_outputs.get("mispricing_signal") or 0.0
+    risk = primary_outputs.get("fragility_risk") or 100.0
+    confidence = primary_outputs.get("signal_confidence") or 0.0
+
+    if quality >= 65 and opportunity >= 55 and risk <= 45 and confidence >= 55:
+        return "strong_setup"
+    if quality >= 55 and confidence >= 45 and risk <= 60:
+        return "improving_setup"
+    if risk <= 75 and confidence >= 35:
+        return "fragile_setup"
+    return "not_investable"
+
+
+def _driver_phrase(name: str, *, negative: bool = False, uncertainty: bool = False) -> str:
+    mapping = {
+        "fundamental_health": "operating quality is holding up",
+        "market_legitimacy": "market structure already treats the subnet as credible",
+        "structural_validity": "the current structure still looks investable",
+        "confidence_factor": "the evidence stack is internally coherent",
+        "thesis_confidence": "the broader setup hangs together without too many leaps",
+        "market_confidence": "market behavior is not fighting the setup",
+        "data_confidence": "data coverage is good enough for a usable read",
+        "base_opportunity": "part of the setup still looks under-recognized",
+        "opportunity_underreaction": "the market still appears to underreact to the setup",
+        "quality_acceleration": "quality is still improving rather than merely holding flat",
+        "fragility": "stress behavior remains manageable",
+        "reserve_change": "reserve growth is not yet producing a stronger market response",
+        "liquidity_improvement_rate": "liquidity is not improving quickly enough",
+        "reserve_growth_without_price": "fundamental progress is not showing up clearly in price",
+        "price_response_lag_to_quality_shift": "the market may already be catching up to the improvement",
+        "expected_price_response_gap": "the rerating gap is narrower than in the best peers",
+        "emission_to_sticky_usage_conversion": "emissions are not yet converting into sticky usage",
+        "post_incentive_retention": "retention still needs to prove itself after incentives cool",
+        "emission_efficiency": "capital is not converting into usage efficiently enough",
+        "cohort_quality_edge": "its quality lead over peers is not overwhelming",
+        "discarded_inputs": "part of the telemetry had to be discarded",
+        "external_data_reliability": "external corroboration is still thin",
+        "validator_data_reliability": "validator-side evidence is thinner than ideal",
+        "history_data_reliability": "the historical record is still shallow",
+    }
+    phrase = mapping.get(name)
+    if not phrase:
+        phrase = name.replace("_", " ").strip() if name else "the current setup is still incomplete"
+    if uncertainty:
+        return phrase
+    if negative:
+        return phrase
+    return phrase
+
+
+def _peer_context(rank: int | None, percentile: float | None, primary_outputs: dict | None) -> str:
+    if not primary_outputs:
+        return "Peer context is provisional because the latest primary outputs are not available yet."
+
+    quality = primary_outputs.get("fundamental_quality") or 0.0
+    opportunity = primary_outputs.get("mispricing_signal") or 0.0
+    risk = primary_outputs.get("fragility_risk") or 100.0
+    confidence = primary_outputs.get("signal_confidence") or 0.0
+
+    parts: list[str] = []
+    if rank is not None and percentile is not None:
+        parts.append(f"It currently ranks #{rank} and sits around the {percentile:.1f}th percentile of the tracked universe.")
+    if quality >= 65:
+        parts.append("Quality is above most peers.")
+    elif quality <= 45:
+        parts.append("Quality is still below the stronger peer group.")
+    if opportunity >= 60:
+        parts.append("The opportunity gap is still wider than most peers.")
+    elif opportunity <= 40:
+        parts.append("The opportunity gap is narrower than most peers.")
+    if risk <= 40:
+        parts.append("Fragility is better controlled than the median peer.")
+    elif risk >= 60:
+        parts.append("Fragility is worse than the median peer.")
+    if confidence < 50:
+        parts.append("Evidence quality is weaker than the more established peer set.")
+    return " ".join(parts)
+
+
+def _build_research_summary(
+    row: dict,
+    analysis: dict | None,
+    primary_outputs: dict | None,
+    investability_status: str,
+    warning_flags: list[str],
+    total: int,
+) -> ResearchSummaryResponse:
+    positives = (analysis or {}).get("top_positive_drivers") or []
+    negatives = (analysis or {}).get("top_negative_drags") or (analysis or {}).get("top_negative_drivers") or []
+    uncertainties = (analysis or {}).get("key_uncertainties") or []
+    thesis_breakers = (analysis or {}).get("thesis_breakers") or []
+    rank = row.get("rank")
+    percentile = _compute_percentile(rank, total)
+    setup_status = _setup_status(investability_status, primary_outputs)
+    evidence_strength = _evidence_strength(analysis, primary_outputs)
+
+    primary_positive = _driver_phrase(_contributor_name(positives[0]) if positives else "")
+    primary_negative = _driver_phrase(_contributor_name(negatives[0]) if negatives else "", negative=True)
+    lead_uncertainty_name = (uncertainties[0] or {}).get("name") if uncertainties else ""
+    lead_uncertainty = _driver_phrase(lead_uncertainty_name, uncertainty=True)
+    stress_drawdown = (analysis or {}).get("stress_drawdown")
+    fragility_class = (analysis or {}).get("fragility_class")
+
+    if not primary_outputs:
+        setup_read = "The current setup is still provisional because the latest primary outputs are missing."
+        why_now = "Research attention is driven more by incomplete visibility than by a confirmed live setup."
+    else:
+        quality = primary_outputs.get("fundamental_quality") or 0.0
+        opportunity = primary_outputs.get("mispricing_signal") or 0.0
+        risk = primary_outputs.get("fragility_risk") or 100.0
+        confidence = primary_outputs.get("signal_confidence") or 0.0
+        if setup_status == "strong_setup":
+            setup_read = "The current setup is strong: quality, opportunity, and evidence all clear a usable threshold without fragility dominating."
+        elif setup_status == "improving_setup":
+            setup_read = "The current setup is improving: the case is taking shape, but one or two signals still need follow-through."
+        elif setup_status == "fragile_setup":
+            setup_read = "The current setup is fragile: some attractive signals are present, but the downside or evidence profile can still overturn the read."
+        else:
+            setup_read = "The current setup is not investable on present evidence because fragility, weak confidence, or missing outputs still dominate."
+
+        why_now = (
+            f"Why now: {primary_positive}."
+            if primary_positive
+            else "Why now: the setup remains on watch because its current score still reflects a live but incomplete signal mix."
+        )
+        if opportunity >= 60 and confidence >= 50:
+            why_now += " The current rerating gap still looks wider than average."
+        elif quality >= 65 and risk <= 45:
+            why_now += " Quality is doing enough work to keep the setup relevant even without a deep discount."
+
+    if primary_negative:
+        main_constraint = f"The main constraint is that {primary_negative}."
+    elif "thin_liquidity" in warning_flags:
+        main_constraint = "The main constraint is that liquidity is still too thin for the rest of the setup to carry the case cleanly."
+    elif lead_uncertainty:
+        main_constraint = f"The main constraint is that {lead_uncertainty}."
+    else:
+        main_constraint = "The main constraint is that the current setup still needs cleaner confirmation."
+
+    if thesis_breakers:
+        break_condition = thesis_breakers[0]
+    elif stress_drawdown is not None:
+        break_condition = (
+            f"The setup breaks if stress behavior reasserts itself; the current modeled drawdown is about {stress_drawdown:.1f}%"
+        )
+    elif fragility_class:
+        break_condition = f"The setup breaks if the current {fragility_class} profile worsens or broadens."
+    else:
+        break_condition = "The setup breaks if the current positive drivers stop improving or the evidence layer weakens further."
+
+    return ResearchSummaryResponse(
+        setup_status=setup_status,
+        setup_read=setup_read,
+        why_now=why_now,
+        main_constraint=main_constraint,
+        break_condition=break_condition,
+        market_capacity=_market_capacity(row),
+        evidence_strength=evidence_strength,
+        relative_peer_context=_peer_context(rank, percentile, primary_outputs),
+    )
+
+
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
     analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
@@ -496,6 +697,14 @@ async def get_subnet(
     detail_primary_outputs = ((analysis_payload or {}).get("primary_outputs"))
     warning_flags = _warning_flags(row.get("raw_data") or {}, analysis_payload, detail_primary_outputs)
     investability_status = _investability_status(row, analysis_payload, detail_primary_outputs)
+    research_summary = _build_research_summary(
+        row=row,
+        analysis=analysis_payload,
+        primary_outputs=detail_primary_outputs,
+        investability_status=investability_status,
+        warning_flags=warning_flags,
+        total=total,
+    )
 
     result = SubnetDetailResponse(
         netuid=netuid,
@@ -524,6 +733,7 @@ async def get_subnet(
         warning_flags=warning_flags,
         label=(row.get("raw_data") or {}).get("label"),
         thesis=(row.get("raw_data") or {}).get("thesis"),
+        research_summary=research_summary,
         analysis=analysis_payload,
     )
     _cache_set(cache_key, result)
