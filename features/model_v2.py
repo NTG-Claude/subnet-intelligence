@@ -672,6 +672,55 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
     staking_apy_proxy = 0.0
     if c["tao_in_pool"] > 0:
         staking_apy_proxy = max(0.0, c["emission_per_block_tao"] * 7200 * 365 / c["tao_in_pool"] * 100)
+    burn_sink_intensity = log_scaled(max(c["min_burn"], c["max_burn"]), 5.0)
+    registration_friction = clamp01(
+        0.55 * burn_sink_intensity
+        + 0.25 * clamp01((c["difficulty"] or 0.0) / 1_000_000.0)
+        + 0.20 * clamp01(float(c["immunity_period"]) / 28.0)
+    )
+    token_sink_strength = clamp01(
+        0.40 * burn_sink_intensity
+        + 0.20 * (1.0 if c["min_burn"] > 0 or c["max_burn"] > 0 else 0.0)
+        + 0.15 * clamp01(float(c["immunity_period"]) / 28.0)
+        + 0.10 * clamp01((_persistence(flow_history) or 0.0))
+        + 0.15 * clamp01(0.60 * market_structure_floor + 0.40 * market_relevance)
+    )
+    emission_absorption = clamp01(
+        0.45 * max(reserve_change or 0.0, 0.0)
+        + 0.25 * max(active_change or 0.0, 0.0)
+        + 0.15 * max(breadth_change or 0.0, 0.0)
+        + 0.15 * max(structure_change or 0.0, 0.0)
+    )
+    emission_intensity = clamp01(
+        0.55 * (1.0 - log_scaled(safe_ratio(c["total_stake_tao"], max(c["emission_per_block_tao"], 1e-9)), 25_000.0))
+        + 0.45 * clamp01(staking_apy_proxy / 150.0)
+    )
+    net_emission_pressure = clamp01(
+        0.50 * max(emission_change or 0.0, 0.0)
+        + 0.25 * emission_intensity
+        + 0.15 * max(0.0, 1.0 - token_sink_strength)
+        - 0.30 * emission_absorption
+    )
+    emission_dependency_support = (
+        0.45 * max(active_change or 0.0, 0.0)
+        + 0.20 * max(breadth_change or 0.0, 0.0)
+        + 0.20 * max(structure_change or 0.0, 0.0)
+        + 0.15 * max(quality_change or 0.0, 0.0)
+    )
+    emission_dependency_ratio = clamp01(
+        0.65 * clamp01(safe_ratio(max(emission_change or 0.0, 0.0), emission_dependency_support + 0.03) / 2.0)
+        + 0.20 * max(0.0, 1.0 - clamp01(4.0 * emission_to_sticky_usage_conversion))
+        + 0.15 * max(0.0, 1.0 - clamp01(4.0 * post_incentive_retention))
+    )
+    value_capture_alignment = clamp01(
+        0.22 * max(reserve_change or 0.0, 0.0)
+        + 0.18 * max(quality_change or 0.0, 0.0)
+        + 0.18 * max(structure_change or 0.0, 0.0)
+        + 0.15 * clamp01(4.0 * emission_to_sticky_usage_conversion)
+        + 0.12 * clamp01(4.0 * post_incentive_retention)
+        + 0.15 * clamp01(0.55 * market_structure_floor + 0.45 * market_relevance)
+        - 0.20 * net_emission_pressure
+    )
     dereg_risk_proxy = clamp01(
         0.45 * max(0.0, 0.35 - active_ratio)
         + 0.25 * max(0.0, 0.20 - participation_breadth)
@@ -857,6 +906,10 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "emission_efficiency": safe_ratio(c["total_stake_tao"], max(c["emission_per_block_tao"], 1e-9)),
         "emission_concentration": incentive_concentration,
         "emission_persistence": _persistence(emission_history),
+        "net_emission_pressure": net_emission_pressure,
+        "token_sink_strength": token_sink_strength,
+        "emission_dependency_ratio": emission_dependency_ratio,
+        "value_capture_alignment": value_capture_alignment,
         "flow_stability": _persistence(flow_history),
         "flow_to_price_elasticity": clamp01(flow_to_price_elasticity),
         "price_move_without_quality_improvement": max(0.0, (price_change or 0.0) - max(quality_change or 0.0, 0.0)),
@@ -873,6 +926,7 @@ def compute_raw_features(snapshot: RawSubnetSnapshot) -> FeatureBundle:
         "registration_openness": 1.0 if c["registration_allowed"] else 0.0,
         "pow_registration_enabled": 1.0 if c["difficulty"] > 0 else 0.0,
         "burn_registration_enabled": 1.0 if c["min_burn"] > 0 or c["max_burn"] > 0 else 0.0,
+        "registration_friction": registration_friction,
         "immunity_period": float(c["immunity_period"]),
         "dereg_risk_proxy": dereg_risk_proxy,
         "repo_commits_30d": float(c["github"].commits_30d) if c["github"] else None,
@@ -958,7 +1012,11 @@ METRIC_MAP = {
     "slippage_50_tao": ("simulated", "fragility_risk", 0.10, True),
     "liquidity_thinness": ("simulated", "fragility_risk", 0.10, False),
     "emission_efficiency": ("derived_onchain", "fundamental_quality", 0.05, False),
+    "token_sink_strength": ("derived_onchain", "fundamental_quality", 0.04, False),
+    "value_capture_alignment": ("derived_onchain", "fundamental_quality", 0.04, False),
     "flow_to_price_elasticity": ("needs_history", "fragility_risk", 0.06, True),
+    "net_emission_pressure": ("needs_history", "fragility_risk", 0.05, False),
+    "emission_dependency_ratio": ("needs_history", "fragility_risk", 0.05, False),
     "price_move_without_quality_improvement": ("needs_history", "fragility_risk", 0.08, False),
     "emission_spike_without_participation_improvement": ("needs_history", "fragility_risk", 0.05, False),
     "crowding_proxy": ("derived_onchain", "fragility_risk", 0.07, False),
@@ -976,6 +1034,7 @@ METRIC_MAP = {
     "price_response_lag_to_quality_shift": ("needs_history", "mispricing_signal", 0.14, False),
     "emission_to_sticky_usage_conversion": ("needs_history", "mispricing_signal", 0.10, False),
     "post_incentive_retention": ("needs_history", "mispricing_signal", 0.10, False),
+    "value_capture_alignment": ("derived_onchain", "mispricing_signal", 0.05, False),
     "reserve_growth_without_price": ("needs_history", "mispricing_signal", 0.08, False),
     "participation_without_crowding": ("needs_history", "mispricing_signal", 0.08, False),
     "data_coverage": ("derived_onchain", "signal_confidence", 0.12, False),

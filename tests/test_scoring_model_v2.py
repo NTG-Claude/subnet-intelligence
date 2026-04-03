@@ -399,6 +399,141 @@ def test_fair_value_gap_can_lift_opportunity_when_direct_lag_is_only_modest():
     assert stronger["opportunity_underreaction"] > weaker["opportunity_underreaction"]
 
 
+def test_token_sink_strength_improves_when_burn_and_locking_friction_exist():
+    weak_sink, strong_sink = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    min_burn=0.0,
+                    max_burn=0.0,
+                    difficulty=0.0,
+                    immunity_period=7,
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    min_burn=1.2,
+                    max_burn=3.0,
+                    difficulty=800_000.0,
+                    immunity_period=28,
+                )
+            ),
+        ]
+    )
+
+    assert strong_sink.raw["token_sink_strength"] > weak_sink.raw["token_sink_strength"]
+    assert strong_sink.primary_signals.fundamental_quality >= weak_sink.primary_signals.fundamental_quality
+
+
+def test_emission_dependent_growth_raises_tokenomics_fragility_and_weakens_value_capture():
+    fragile_history = [
+        HistoricalFeaturePoint(
+            timestamp="2026-03-28T00:00:00+00:00",
+            alpha_price_tao=9.8,
+            tao_in_pool=20_000.0,
+            emission_per_block_tao=0.02,
+            active_ratio=0.40,
+            participation_breadth=0.35,
+            validator_participation=0.68,
+            incentive_distribution_quality=0.66,
+            market_structure_floor=0.66,
+            fundamental_quality=0.60,
+        ),
+        HistoricalFeaturePoint(
+            timestamp="2026-03-29T00:00:00+00:00",
+            alpha_price_tao=9.82,
+            tao_in_pool=20_100.0,
+            emission_per_block_tao=0.03,
+            active_ratio=0.405,
+            participation_breadth=0.352,
+            validator_participation=0.68,
+            incentive_distribution_quality=0.66,
+            market_structure_floor=0.662,
+            fundamental_quality=0.602,
+        ),
+        HistoricalFeaturePoint(
+            timestamp="2026-03-30T00:00:00+00:00",
+            alpha_price_tao=9.83,
+            tao_in_pool=20_120.0,
+            emission_per_block_tao=0.045,
+            active_ratio=0.41,
+            participation_breadth=0.354,
+            validator_participation=0.681,
+            incentive_distribution_quality=0.661,
+            market_structure_floor=0.663,
+            fundamental_quality=0.604,
+        ),
+    ]
+    supported_history = [
+        HistoricalFeaturePoint(
+            timestamp="2026-03-28T00:00:00+00:00",
+            alpha_price_tao=9.8,
+            tao_in_pool=20_000.0,
+            emission_per_block_tao=0.02,
+            active_ratio=0.40,
+            participation_breadth=0.35,
+            validator_participation=0.68,
+            incentive_distribution_quality=0.66,
+            market_structure_floor=0.66,
+            fundamental_quality=0.60,
+        ),
+        HistoricalFeaturePoint(
+            timestamp="2026-03-29T00:00:00+00:00",
+            alpha_price_tao=9.9,
+            tao_in_pool=21_500.0,
+            emission_per_block_tao=0.022,
+            active_ratio=0.45,
+            participation_breadth=0.39,
+            validator_participation=0.71,
+            incentive_distribution_quality=0.68,
+            market_structure_floor=0.70,
+            fundamental_quality=0.64,
+        ),
+        HistoricalFeaturePoint(
+            timestamp="2026-03-30T00:00:00+00:00",
+            alpha_price_tao=10.0,
+            tao_in_pool=23_000.0,
+            emission_per_block_tao=0.024,
+            active_ratio=0.50,
+            participation_breadth=0.43,
+            validator_participation=0.74,
+            incentive_distribution_quality=0.70,
+            market_structure_floor=0.74,
+            fundamental_quality=0.68,
+        ),
+    ]
+    emission_led, absorbed = normalize_features(
+        [
+            compute_raw_features(
+                _snapshot(
+                    emission_per_block_tao=0.07,
+                    tao_in_pool=20_150.0,
+                    alpha_in_pool=2_000.0,
+                    alpha_price_tao=9.84,
+                    history=fragile_history,
+                )
+            ),
+            compute_raw_features(
+                _snapshot(
+                    emission_per_block_tao=0.026,
+                    tao_in_pool=24_500.0,
+                    alpha_in_pool=2_600.0,
+                    alpha_price_tao=10.1,
+                    min_burn=1.0,
+                    max_burn=2.5,
+                    immunity_period=21,
+                    history=supported_history,
+                )
+            ),
+        ]
+    )
+
+    assert emission_led.raw["net_emission_pressure"] > absorbed.raw["net_emission_pressure"]
+    assert emission_led.raw["emission_dependency_ratio"] > absorbed.raw["emission_dependency_ratio"]
+    assert emission_led.raw["value_capture_alignment"] < absorbed.raw["value_capture_alignment"]
+    assert emission_led.primary_signals.fragility_risk >= absorbed.primary_signals.fragility_risk
+
+
 def test_external_proxies_remain_secondary_inside_thesis_confidence():
     base_components = {
         "market_relevance": 0.66,

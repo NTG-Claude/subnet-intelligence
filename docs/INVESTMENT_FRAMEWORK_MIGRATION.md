@@ -174,3 +174,14 @@ The current scoring framework still keeps the main score as the primary ranking 
 - investability is treated as a lightweight overlay, so thin liquidity, narrow participation, concentration, and weak market structure can cap or discount otherwise attractive-looking setups
 
 This is an incremental refinement rather than a replacement of the score system. The main page remains score-led, while deeper interpretation can still expand on the underlying setup quality later.
+
+# Tokenomics layer v1 note
+
+The score now also includes a small additive tokenomics layer built from existing on-chain and market-structure inputs.
+
+- `net_emission_pressure`: flags cases where new token supply rises faster than the subnet absorbs it
+- `token_sink_strength`: rewards burn, locking friction, and structural features that counter dilution
+- `emission_dependency_ratio`: penalizes growth that appears too dependent on incentives
+- `value_capture_alignment`: rewards cases where usage, reserve growth, and structure improvement translate into cleaner token value capture
+
+This layer is intentionally lightweight. It does not replace the current score system or add a separate tokenomics score page. It only makes the main screening score less forgiving toward fragile, emission-led setups.
