@@ -251,6 +251,89 @@ def test_list_subnets_ignores_history_only_visibility_gaps():
     assert "reconstructed_inputs" not in row["warning_flags"]
 
 
+def test_concentration_alone_does_not_force_speculative_when_structure_is_strong():
+    row = {
+        **SCORES[0],
+        "raw_data": {
+            **SCORES[0]["raw_data"],
+            "analysis": {
+                **SCORES[0]["raw_data"]["analysis"],
+                "block_scores": {
+                    "market_legitimacy": 72.0,
+                    "structural_validity": 82.0,
+                    "investability_gate": 75.0,
+                },
+            },
+            "raw_metrics": {
+                "slippage_10_tao": 0.03,
+                "performance_driven_by_few_actors": 0.61,
+            },
+        },
+    }
+    row["raw_data"]["analysis"]["primary_outputs"] = {
+        "fundamental_quality": 76.0,
+        "mispricing_signal": 46.0,
+        "fragility_risk": 22.0,
+        "signal_confidence": 54.0,
+    }
+
+    with patch("api.main.get_latest_scores", return_value=[row]), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=[row]), \
+         patch("api.main._get_metadata", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets")
+
+    assert resp.status_code == 200
+    summary = resp.json()["subnets"][0]
+    assert summary["investability_status"] == "investable"
+
+
+def test_strong_quality_case_with_just_below_old_threshold_can_be_investable():
+    row = {
+        **SCORES[0],
+        "raw_data": {
+            **SCORES[0]["raw_data"],
+            "analysis": {
+                **SCORES[0]["raw_data"]["analysis"],
+                "block_scores": {
+                    "market_legitimacy": 70.0,
+                    "structural_validity": 78.0,
+                    "investability_gate": 74.5,
+                },
+            },
+            "raw_metrics": {
+                "slippage_10_tao": 0.03,
+                "performance_driven_by_few_actors": 0.40,
+            },
+        },
+    }
+    row["raw_data"]["analysis"]["primary_outputs"] = {
+        "fundamental_quality": 67.0,
+        "mispricing_signal": 44.2,
+        "fragility_risk": 24.0,
+        "signal_confidence": 53.2,
+    }
+
+    with patch("api.main.get_latest_scores", return_value=[row]), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=[row]), \
+         patch("api.main._get_metadata", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets")
+
+    assert resp.status_code == 200
+    summary = resp.json()["subnets"][0]
+    assert summary["warning_flags"] == []
+    assert summary["investability_status"] == "investable"
+
+
 def test_list_subnets_excludes_root_subnet():
     rows = [ROOT_ROW, *SCORES]
     with patch("api.main.get_latest_scores", return_value=rows), \

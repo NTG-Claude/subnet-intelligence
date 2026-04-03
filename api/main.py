@@ -266,17 +266,31 @@ def _investability_status(row: dict, analysis: dict | None, primary_outputs: dic
         return "constrained"
 
     flags = _warning_flags(raw_data, analysis, primary_outputs)
+    block_scores = (analysis or {}).get("block_scores") or {}
     quality = primary_outputs.get("fundamental_quality") or 0.0
     opportunity = primary_outputs.get("mispricing_signal") or 0.0
     risk = primary_outputs.get("fragility_risk") or 100.0
     confidence = primary_outputs.get("signal_confidence") or 0.0
     severe_structure_break = "thin_liquidity" in flags and "concentration" in flags
+    concentration_watch = "concentration" in flags
+    structure_is_strong = (
+        (block_scores.get("structural_validity") or 0.0) >= 80.0
+        and (block_scores.get("investability_gate") or 0.0) >= 74.0
+    )
+    investable_candidate = (
+        quality >= 55
+        and opportunity >= 44
+        and risk <= 50
+        and confidence >= 53
+    )
 
     if severe_structure_break or risk >= 75 or confidence < 35:
         return "constrained"
-    if risk >= 58 or confidence < 50 or "thin_liquidity" in flags or "concentration" in flags:
+    if risk >= 58 or confidence < 48 or "thin_liquidity" in flags:
         return "speculative"
-    if quality >= 55 and opportunity >= 45 and risk <= 50 and confidence >= 55:
+    if concentration_watch and not (structure_is_strong and investable_candidate):
+        return "speculative"
+    if investable_candidate:
         return "investable"
     return "speculative"
 
