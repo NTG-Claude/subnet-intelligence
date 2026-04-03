@@ -20,6 +20,21 @@ function toHeaderTone(tone: string | undefined): 'default' | 'warning' | 'succes
   return 'default'
 }
 
+function toMetricAccent(
+  tone: string | undefined,
+): 'default' | 'quality' | 'mispricing' | 'fragility' | 'confidence' | 'warning' {
+  if (
+    tone === 'quality' ||
+    tone === 'mispricing' ||
+    tone === 'fragility' ||
+    tone === 'confidence' ||
+    tone === 'warning'
+  ) {
+    return tone
+  }
+  return 'default'
+}
+
 function normalizeKey(value: string | undefined): string {
   return (value ?? '')
     .trim()
@@ -304,19 +319,19 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
               label="Setup Status"
               value={memo.researchSummary.setupStatus.label}
               meta={memo.researchSummary.setupRead}
-              accent={memo.researchSummary.setupStatus.tone}
+              accent={toMetricAccent(memo.researchSummary.setupStatus.tone)}
             />
             <MetricCard
               label="Market Capacity"
               value={memo.researchSummary.marketCapacity.label}
               meta="Current market depth and size read"
-              accent={memo.researchSummary.marketCapacity.tone}
+              accent={toMetricAccent(memo.researchSummary.marketCapacity.tone)}
             />
             <MetricCard
               label="Evidence Strength"
               value={memo.researchSummary.evidenceStrength.label}
               meta="How sturdy the current evidence stack looks"
-              accent={memo.researchSummary.evidenceStrength.tone}
+              accent={toMetricAccent(memo.researchSummary.evidenceStrength.tone)}
             />
             <MetricCard
               label="Peer Context"
