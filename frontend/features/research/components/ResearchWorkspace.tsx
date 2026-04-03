@@ -108,7 +108,17 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{memo.headerSubtitle}</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
+                  <div className="eyebrow">Why This Score</div>
+                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{memo.researchSummary.setupRead}</p>
+                </div>
+                <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
+                  <div className="eyebrow">How Much To Trust This Read</div>
+                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{memo.evidenceItems[0]?.body ?? 'Trust details are not available yet.'}</p>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {memo.anchorInsights.map((item) => (
                   <div key={item.label} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
                     <div className="eyebrow">{item.label}</div>
@@ -119,7 +129,7 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
             </div>
           </div>
 
-          <div className="grid min-w-full gap-3 sm:grid-cols-3 xl:min-w-[380px] xl:max-w-[420px]">
+          <div className="grid min-w-full gap-3 sm:grid-cols-2 xl:min-w-[380px] xl:max-w-[420px]">
             <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
               <div className="eyebrow">Score</div>
               <div className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.scoreLabel}</div>
@@ -127,6 +137,10 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
             <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
               <div className="eyebrow">Rank</div>
               <div className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.rankLabel}</div>
+            </div>
+            <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
+              <div className="eyebrow">Read Trust</div>
+              <div className="mt-2 text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.researchSummary.evidenceStrength.label}</div>
             </div>
             <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
               <div className="eyebrow">Profile</div>
@@ -137,7 +151,7 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
       </section>
 
       <section className="surface-panel p-5 sm:p-6">
-        <div className="section-title">Executive Summary</div>
+        <div className="section-title">Decision Summary</div>
         <div className="mt-4 grid gap-x-8 gap-y-5 md:grid-cols-2">
           {memo.executiveSummary.map((item) => (
             <div key={item.label} className="border-b border-[color:var(--border-subtle)] pb-4 last:border-b-0 md:last:border-b md:[&:nth-last-child(-n+2)]:border-b-0 md:[&:nth-last-child(-n+2)]:pb-0">
@@ -145,6 +159,22 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
               <p className="mt-2 text-base leading-7 text-[color:var(--text-primary)]">{item.body}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <InsightGrid title="Evidence & Trust" items={memo.evidenceItems} />
+        <InsightGrid title="Market Structure" items={memo.marketStructure} />
+      </div>
+
+      <section className="surface-panel p-5 sm:p-6">
+        <div className="section-title">Why The Score Lands Here</div>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">
+          These are the clearest reasons the score holds up where it does, and the clearest reasons it is not higher.
+        </p>
+        <div className="mt-5 grid gap-6 xl:grid-cols-2">
+          <ScoreList title="What Is Supporting The Score" items={memo.topSupports} />
+          <ScoreList title="What Is Capping The Score" items={memo.topDrags} />
         </div>
       </section>
 
@@ -168,22 +198,6 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
               <div className="mt-2 text-base font-medium text-[color:var(--text-primary)]">{item.value}</div>
             </div>
           ))}
-        </div>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <InsightGrid title="Market Structure" items={memo.marketStructure} />
-        <InsightGrid title="Evidence & Trust" items={memo.evidenceItems} />
-      </div>
-
-      <section className="surface-panel p-5 sm:p-6">
-        <div className="section-title">Score Explanation</div>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">
-          These are the clearest reasons the score holds up or gets capped.
-        </p>
-        <div className="mt-5 grid gap-6 xl:grid-cols-2">
-          <ScoreList title="Main Supports" items={memo.topSupports} />
-          <ScoreList title="Main Constraints" items={memo.topDrags} />
         </div>
       </section>
 

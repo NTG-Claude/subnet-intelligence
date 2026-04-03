@@ -113,7 +113,7 @@ export interface MemoSummaryItem {
 }
 
 export interface MemoContextItem {
-  label: 'Capacity' | 'Trust' | 'Peer Rank' | 'Last Updated'
+  label: 'Market Size' | 'Read Trust' | 'Peer Rank' | 'Last Updated'
   value: string
   tone?: SignalTone
 }
@@ -133,7 +133,7 @@ export interface ScoreExplanationItem {
 }
 
 export interface MemoAnchorItem {
-  label: 'Best Signal' | 'Main Weakness'
+  label: 'Strongest support' | 'Main thing capping the score'
   value: string
   tone: SignalTone
 }
@@ -287,52 +287,52 @@ function contributorTitle(item: ExplanationContributor): string {
 function contributorDisplayTitle(name: string | undefined | null, mode: 'positive' | 'negative' | 'neutral' = 'neutral'): string {
   switch (name) {
     case 'fundamental_health':
-      return 'Durable quality'
+      return 'The subnet is doing real work'
     case 'structural_validity':
-      return 'Investable structure'
+      return 'The market structure still looks tradable'
     case 'market_legitimacy':
-      return 'Market support'
+      return 'The market is already taking it seriously'
     case 'confidence_factor':
-      return 'Aligned evidence'
+      return 'The main signals are pointing the same way'
     case 'thesis_confidence':
-      return 'Thesis coherence'
+      return 'The investment case does not rely on one fragile assumption'
     case 'market_confidence':
-      return 'Market confirmation'
+      return 'Price action is not fighting the thesis'
     case 'data_confidence':
-      return 'Input quality'
+      return 'The data behind this read is reasonably clean'
     case 'base_opportunity':
     case 'opportunity_underreaction':
-      return 'Valuation gap'
+      return 'The market may still be underpricing the subnet'
     case 'fragility':
-      return mode === 'positive' ? 'Controlled downside' : 'Stress risk'
+      return mode === 'positive' ? 'It is holding up under stress' : 'The case can still break under stress'
     case 'reserve_change':
-      return 'Reserve follow-through'
+      return 'More capital is not yet changing the market response'
     case 'liquidity_improvement_rate':
-      return 'Liquidity trend'
+      return 'Liquidity is not improving fast enough'
     case 'reserve_growth_without_price':
-      return 'Unrewarded growth'
+      return 'Operational improvement is not showing up in price'
     case 'quality_acceleration':
-      return mode === 'negative' ? 'Slowing momentum' : 'Quality momentum'
+      return mode === 'negative' ? 'Improvement has slowed' : 'Execution is still improving'
     case 'price_response_lag_to_quality_shift':
-      return 'Price catch-up'
+      return 'Price may already be catching up'
     case 'expected_price_response_gap':
-      return 'Limited rerating gap'
+      return 'The upside gap is not very wide anymore'
     case 'emission_to_sticky_usage_conversion':
-      return 'Usage conversion'
+      return 'Incentives are not yet turning into lasting usage'
     case 'post_incentive_retention':
-      return 'Retention risk'
+      return 'Users still need to stay after incentives fade'
     case 'emission_efficiency':
-      return 'Emission efficiency'
+      return 'New emissions are not producing enough real usage'
     case 'cohort_quality_edge':
-      return 'Peer edge'
+      return 'It does not clearly outclass comparable subnets'
     case 'discarded_inputs':
-      return 'Incomplete evidence'
+      return 'Parts of the evidence had to be dropped'
     case 'external_data_reliability':
-      return 'External confirmation'
+      return 'Outside confirmation is still thin'
     case 'validator_data_reliability':
-      return 'Validator coverage'
+      return 'Validator-side coverage is thinner than ideal'
     case 'history_data_reliability':
-      return 'History depth'
+      return 'The visible history is still shallow'
     default:
       return sentenceCase((name || 'Contributor').replace(/_/g, ' '))
   }
@@ -423,18 +423,18 @@ function modelLabelTone(label: string): SignalTone {
 function decisionLineFromOutputs(outputs: PrimaryOutputs | null | undefined): string {
   if (!outputs) return 'Fresh scored outputs are still missing, so this read is provisional.'
   if (outputs.mispricing_signal >= 70 && outputs.signal_confidence >= 60 && outputs.fragility_risk <= 45) {
-    return 'The valuation gap is real, the evidence is usable, and downside is still contained.'
+    return 'The score is high because there still appears to be real upside, the evidence is strong enough to lean on, and the downside does not look out of control.'
   }
   if (outputs.fundamental_quality >= 70 && outputs.fragility_risk <= 45) {
-    return 'Quality is doing the heavy lifting, but the entry still depends on a live rerating gap.'
+    return 'The score is being earned mostly through operating quality and decent resilience, even if the upside gap is not extreme.'
   }
   if (outputs.fragility_risk >= 65) {
-    return 'The upside case is fragile enough that stress and execution now dominate the trade.'
+    return 'The score stays capped because the setup can weaken quickly if market conditions or participation deteriorate.'
   }
   if (outputs.signal_confidence < 50) {
-    return 'The setup is interesting, but the evidence is not clean enough for a full-strength call.'
+    return 'The read remains cautious because the data foundation is not clean enough for a higher-conviction score.'
   }
-  return 'The setup has enough going for it, but it still needs cleaner confirmation.'
+  return 'The subnet has enough going for it to stay relevant, but not enough clean confirmation to score like a clear winner.'
 }
 
 function cleanSentence(value: string | undefined | null): string {
@@ -444,43 +444,43 @@ function cleanSentence(value: string | undefined | null): string {
 function metricPhrase(name: string | undefined | null): string {
   switch (name) {
     case 'fragility':
-      return 'downside and liquidity stress are still contained'
+      return 'it is still holding up reasonably well when the model applies stress'
     case 'fundamental_health':
-      return 'core operating quality is holding up'
+      return 'activity and operating quality still look solid enough to support the case'
     case 'thesis_confidence':
-      return 'the broader thesis still hangs together'
+      return 'the broader case still fits the evidence that is visible'
     case 'market_confidence':
-      return 'market structure is good enough to underwrite the setup'
+      return 'price and market structure are not obviously contradicting the thesis'
     case 'confidence_factor':
-      return 'the evidence stack is coherent enough for a first-pass read'
+      return 'the major signals broadly agree instead of cancelling each other out'
     case 'base_opportunity':
-      return 'the market is still leaving some valuation upside on the table'
+      return 'the market may still be leaving part of the improvement unpriced'
     case 'data_confidence':
-      return 'data coverage is good enough to support the case'
+      return 'enough of the data is visible to form a usable read'
     case 'reserve_change':
-      return 'reserve growth has not yet translated into a stronger market response'
+      return 'more capital in the system is not yet producing a stronger market response'
     case 'liquidity_improvement_rate':
-      return 'liquidity is not improving fast enough to widen the upside case'
+      return 'trading depth is not improving fast enough to make the setup easier to own'
     case 'reserve_growth_without_price':
-      return 'fundamental improvement is not yet being rewarded in price'
+      return 'operational improvement is still not clearly being rewarded in price'
     case 'quality_acceleration':
-      return 'quality is solid, but the rate of improvement is not accelerating'
+      return 'execution is okay, but the rate of improvement is no longer accelerating'
     case 'price_response_lag_to_quality_shift':
-      return 'the rerating window may be narrower than the quality trend suggests'
+      return 'part of the rerating may already have happened'
     case 'expected_price_response_gap':
-      return 'the price-response gap is not as wide as in the strongest rerating setups'
+      return 'the remaining upside gap is smaller than in the strongest rerating cases'
     case 'emission_to_sticky_usage_conversion':
-      return 'emissions are not yet converting cleanly into sticky usage'
+      return 'incentives are not yet turning into durable usage'
     case 'post_incentive_retention':
-      return 'retention still needs to hold once incentives are less supportive'
+      return 'the subnet still needs to prove users stay once incentives weaken'
     case 'emission_efficiency':
-      return 'capital is not converting into usage efficiently enough'
+      return 'new emissions are not translating into enough real usage'
     case 'cohort_quality_edge':
-      return 'quality leadership versus peers is not overwhelming'
+      return 'it does not have a large quality lead over nearby peers'
     case 'discarded_inputs':
-      return 'part of the history had to be discarded, so visibility is incomplete'
+      return 'parts of the input history had to be discarded, so the read has blind spots'
     case 'external_data_reliability':
-      return 'external corroboration is still thin'
+      return 'outside confirmation is still thin'
     default:
       return ''
   }
@@ -511,30 +511,30 @@ function joinClauses(items: string[]): string {
 function driverSupportClause(name: string): string {
   switch (name) {
     case 'fundamental_health':
-      return 'the underlying business looks durable and operationally healthy'
+      return 'the subnet looks operationally healthier than most peers'
     case 'structural_validity':
-      return 'the market structure still looks investable instead of distorted'
+      return 'the market structure still looks tradable instead of badly distorted'
     case 'market_legitimacy':
-      return 'the subnet already looks credible enough to attract sustained attention'
+      return 'the market is already treating the network like a real, credible participant'
     case 'confidence_factor':
-      return 'the evidence stack is coherent enough for a usable first-pass read'
+      return 'the main signals are lining up instead of sending conflicting messages'
     case 'thesis_confidence':
-      return 'the broader investment case hangs together better than most peers'
+      return 'the thesis does not depend on one shaky assumption'
     case 'market_confidence':
-      return 'market behavior is supportive enough to back the thesis'
+      return 'price and market behavior are not undermining the thesis'
     case 'data_confidence':
-      return 'data coverage is strong enough to support the read'
+      return 'the visible data is clean enough to support a real opinion'
     case 'base_opportunity':
     case 'opportunity_underreaction':
-      return 'the market still seems to underrate part of the setup'
+      return 'the market still may not be fully reflecting what has improved'
     case 'quality_acceleration':
-      return 'quality is still improving rather than merely holding steady'
+      return 'execution is still improving instead of merely holding flat'
     case 'fragility':
-      return 'downside and liquidity stress are staying contained'
+      return 'the setup is holding together reasonably well under stress'
     default: {
       const phrase = metricPhrase(name)
       if (phrase) return phrase
-      return `${name.replace(/_/g, ' ')} is helping the case`
+      return `${name.replace(/_/g, ' ')} is helping the case in a visible way`
     }
   }
 }
@@ -542,35 +542,35 @@ function driverSupportClause(name: string): string {
 function driverDragClause(name: string): string {
   switch (name) {
     case 'reserve_change':
-      return 'reserve growth is not yet translating into a stronger market response'
+      return 'more reserves are not yet leading to stronger market follow-through'
     case 'liquidity_improvement_rate':
-      return 'liquidity is not improving fast enough to widen the upside case'
+      return 'liquidity is not improving fast enough to make the setup easier to own'
     case 'reserve_growth_without_price':
-      return 'fundamental improvement is still not being fully rewarded in price'
+      return 'better fundamentals are still not showing up clearly enough in price'
     case 'quality_acceleration':
-      return 'quality looks solid, but the rate of improvement has cooled'
+      return 'execution still looks okay, but the rate of improvement has cooled'
     case 'price_response_lag_to_quality_shift':
-      return 'the market may already be catching up to the quality trend'
+      return 'the market may already have priced in part of the improvement'
     case 'expected_price_response_gap':
-      return 'the rerating gap is smaller than in the strongest upside setups'
+      return 'the remaining upside gap is smaller than in the best rerating setups'
     case 'emission_to_sticky_usage_conversion':
-      return 'emissions are not yet converting cleanly into sticky, lasting usage'
+      return 'emissions are not yet converting into sticky, lasting usage'
     case 'post_incentive_retention':
-      return 'the case still needs to prove users remain after incentives fade'
+      return 'the subnet still needs to prove users remain after incentives fade'
     case 'emission_efficiency':
-      return 'capital is not converting into usage efficiently enough'
+      return 'new emissions are not turning into enough real usage'
     case 'cohort_quality_edge':
-      return 'its quality lead over peers is not overwhelming'
+      return 'its edge over similar subnets is not large enough to be decisive'
     case 'fragility':
-      return 'stress behavior can still dominate the case under pressure'
+      return 'even moderate stress could still damage the thesis quickly'
     case 'discarded_inputs':
-      return 'part of the history had to be discarded, so visibility is incomplete'
+      return 'parts of the evidence had to be discarded, so the read is less reliable'
     case 'external_data_reliability':
-      return 'third-party corroboration is still thin'
+      return 'outside confirmation is still thin'
     default: {
       const phrase = metricPhrase(name)
       if (phrase) return phrase
-      return `${name.replace(/_/g, ' ')} is still acting as a headwind`
+      return `${name.replace(/_/g, ' ')} is still holding the score back`
     }
   }
 }
@@ -578,13 +578,13 @@ function driverDragClause(name: string): string {
 function uncertaintyClause(name: string): string {
   switch (name) {
     case 'discarded_inputs':
-      return 'some unusable inputs were removed during conditioning, so the read still has blind spots'
+      return 'some inputs had to be thrown out during conditioning, so part of the picture is missing'
     case 'external_data_reliability':
-      return 'external corroboration remains limited, so the memo leans heavily on internal market evidence'
+      return 'there is still not much outside evidence confirming the read, so this relies heavily on internal signals'
     case 'validator_data_reliability':
-      return 'validator-side evidence is thinner than ideal'
+      return 'validator-side evidence is thinner than ideal, so participation quality is harder to verify'
     case 'history_data_reliability':
-      return 'the historical record is not as deep or clean as you would want'
+      return 'the historical record is not deep or clean enough for a high-trust read'
     default:
       return driverDragClause(name)
   }
@@ -594,76 +594,76 @@ function plainEnglishReason(name: string, mode: 'positive' | 'negative' | 'uncer
   switch (name) {
     case 'fundamental_health':
       return mode === 'positive'
-        ? 'the subnet looks more durable and useful than most peers'
-        : 'the business quality is not as durable as the best names'
+        ? 'the subnet looks more operationally durable and useful than most peers, which gives the score a stronger base'
+        : 'the underlying operating quality is not strong enough to carry the rating on its own'
     case 'market_legitimacy':
       return mode === 'positive'
-        ? 'the market already treats it like a credible network'
-        : 'the market still does not fully treat it like a proven network'
+        ? 'the market already treats it like a credible network, which helps the score hold up'
+        : 'the market still does not treat it like a fully proven network, which limits conviction'
     case 'structural_validity':
       return mode === 'positive'
-        ? 'the setup still looks investable rather than distorted'
-        : 'the setup still has structural weak points'
+        ? 'the setup still looks tradable rather than badly distorted, which helps contain downside risk'
+        : 'the market structure still has weak points, so the setup can get worse quickly under pressure'
     case 'confidence_factor':
       return mode === 'positive'
-        ? 'the main signals broadly point in the same direction'
-        : 'the evidence does not line up cleanly yet'
+        ? 'the main signals broadly point in the same direction, which makes the score easier to trust'
+        : 'the evidence does not line up cleanly yet, so the score has to stay more cautious'
     case 'thesis_confidence':
       return mode === 'positive'
-        ? 'the overall story hangs together without too many leaps'
-        : 'the overall story still relies on assumptions that need proving'
+        ? 'the overall story hangs together without too many leaps, so the thesis is easier to defend'
+        : 'the overall story still relies on assumptions that need proving, which weakens conviction'
     case 'market_confidence':
       return mode === 'positive'
-        ? 'price and market behavior are not fighting the thesis'
-        : 'market behavior is not giving much confirmation yet'
+        ? 'price and market behavior are not fighting the thesis, which helps the score stick'
+        : 'market behavior is not giving much confirmation yet, so the thesis still needs more proof'
     case 'data_confidence':
       return mode === 'positive'
-        ? 'there is enough clean data to form a usable view'
-        : 'the data picture is still too patchy'
+        ? 'there is enough clean data to form a usable view, so the read is more trustworthy'
+        : 'the data picture is still too patchy, which makes the current read less reliable'
     case 'opportunity_underreaction':
     case 'base_opportunity':
       return mode === 'positive'
-        ? 'the market still seems to be underestimating part of the story'
-        : 'the market is not giving much of a discount right now'
+        ? 'the market still seems to be underestimating part of the story, leaving room for the score to improve'
+        : 'the market is not giving much of a discount right now, so upside is harder to justify'
     case 'fragility':
       return mode === 'positive'
-        ? 'the subnet is holding up reasonably well under pressure'
-        : 'the setup can still break under stress'
+        ? 'the subnet is holding up reasonably well under pressure, which helps keep downside contained for now'
+        : 'the setup can still break under stress, so the score cannot assume a smooth path'
     case 'reserve_change':
-      return 'more capital is not yet leading to a clearly better market response'
+      return 'more capital is not yet leading to a clearly better market response, so the bullish case is still waiting for proof'
     case 'liquidity_improvement_rate':
-      return 'trading conditions are not improving fast enough yet'
+      return 'trading conditions are not improving fast enough yet, which caps how much size this market can absorb'
     case 'reserve_growth_without_price':
-      return 'better fundamentals are not yet clearly showing up in price'
+      return 'better fundamentals are not yet clearly showing up in price, so the rerating case remains incomplete'
     case 'quality_acceleration':
       return mode === 'positive'
-        ? 'quality is still moving in the right direction'
-        : 'improvement has slowed and is no longer accelerating'
+        ? 'quality is still moving in the right direction, which supports the current rating'
+        : 'improvement has slowed and is no longer accelerating, which makes a higher score harder to justify'
     case 'price_response_lag_to_quality_shift':
-      return 'the market may already be catching up to the improvement'
+      return 'the market may already be catching up to the improvement, so less upside may remain than before'
     case 'expected_price_response_gap':
-      return 'the rerating gap is smaller than in the best upside names'
+      return 'the rerating gap is smaller than in the best upside names, so the ceiling is lower'
     case 'emission_to_sticky_usage_conversion':
-      return 'token emissions are not yet turning into lasting usage'
+      return 'token emissions are not yet turning into lasting usage, so the current support may fade if incentives cool'
     case 'post_incentive_retention':
-      return 'it is still unclear whether users stay once incentives fade'
+      return 'it is still unclear whether users stay once incentives fade, which is a real break risk for the thesis'
     case 'emission_efficiency':
-      return 'new emissions are not producing enough real usage'
+      return 'new emissions are not producing enough real usage, so growth quality is weaker than the headline spend'
     case 'cohort_quality_edge':
-      return 'it does not have a big lead over comparable subnets'
+      return 'it does not have a big lead over comparable subnets, so peer competition still caps the score'
     case 'discarded_inputs':
       return mode === 'uncertainty'
-        ? 'some messy inputs had to be thrown out, so the picture is incomplete'
-        : 'some messy inputs had to be thrown out'
+        ? 'some messy inputs had to be thrown out, so the picture is incomplete and the read is less trustworthy'
+        : 'some messy inputs had to be thrown out, which reduces trust in the current read'
     case 'external_data_reliability':
-      return 'there is still not much outside evidence to confirm the story'
+      return 'there is still not much outside evidence to confirm the story, so this read depends heavily on internal signals'
     case 'validator_data_reliability':
-      return 'validator-side evidence is thinner than ideal'
+      return 'validator-side evidence is thinner than ideal, so participation quality is harder to confirm'
     case 'history_data_reliability':
-      return 'the historical record is still shallower than you would want'
+      return 'the historical record is still shallower than you would want, so trend-based conclusions are less reliable'
     default: {
       const fallback = metricPhrase(name)
-      return fallback || `${name.replace(/_/g, ' ')} still needs checking`
+      return fallback || `${name.replace(/_/g, ' ')} is still an open part of the story`
     }
   }
 }
@@ -688,7 +688,7 @@ function shortMetricReason(subnet: SubnetSummary, metric: 'strength' | 'upside' 
     const parts = []
     if (support) parts.push(sentenceCase(plainEnglishReason(contributorName(support), 'positive')))
     if (outputs.fundamental_quality < 55 && drag) parts.push(`Held back because ${plainEnglishReason(contributorName(drag), 'negative')}.`)
-    return parts.join('. ') || 'Business quality looks middle-of-the-pack right now.'
+    return parts.join('. ') || 'Business quality looks acceptable, but not strong enough to carry the score by itself.'
   }
 
   if (metric === 'upside') {
@@ -705,7 +705,7 @@ function shortMetricReason(subnet: SubnetSummary, metric: 'strength' | 'upside' 
     const parts = []
     if (support) parts.push(sentenceCase(plainEnglishReason(contributorName(support), 'positive')))
     if (drag) parts.push(`The gap is smaller because ${plainEnglishReason(contributorName(drag), 'negative')}.`)
-    return parts.join('. ') || 'There is some upside, but not a big disconnect.'
+    return parts.join('. ') || 'There may still be upside, but it does not look like a major disconnect right now.'
   }
 
   if (metric === 'risk') {
@@ -724,7 +724,7 @@ function shortMetricReason(subnet: SubnetSummary, metric: 'strength' | 'upside' 
     if (drag) {
       return `${sentenceCase(plainEnglishReason(contributorName(drag), 'negative'))}.`
     }
-    return 'Risk looks manageable, but not especially low.'
+    return 'Risk looks manageable, but not low enough to ignore.'
   }
 
   const support =
@@ -742,7 +742,7 @@ function shortMetricReason(subnet: SubnetSummary, metric: 'strength' | 'upside' 
   if (uncertainty) {
     return `${sentenceCase(plainEnglishReason(uncertainty.name, 'uncertainty'))}.`
   }
-  return 'The read is usable, but not fully clean.'
+  return 'The read is directionally useful, but not clean enough for a high-trust call.'
 }
 
 function metricProfile(outputs: PrimaryOutputs): string {
@@ -752,21 +752,21 @@ function metricProfile(outputs: PrimaryOutputs): string {
   const confidence = outputs.signal_confidence
 
   if (quality >= 70 && mispricing >= 55 && fragility <= 30) {
-    return 'This is one of the cleaner combinations of business quality, upside, and controlled downside in the list.'
+    return 'This is one of the cleaner mixes of quality, upside, and resilience in the current universe.'
   }
   if (quality >= 70 && fragility <= 30) {
-    return 'This reads primarily as a strong operator with controlled downside, not as a pure deep-value rerating trade.'
+    return 'This reads more like a solid operator with decent resilience than a pure deep-discount rerating trade.'
   }
   if (mispricing >= 60 && confidence >= 55) {
-    return 'This ranks well because there is still a real rerating case and the evidence is good enough to act on.'
+    return 'This ranks well because there still appears to be a real rerating case and the evidence is strong enough to matter.'
   }
   if (confidence < 50) {
-    return 'The model sees enough here to keep it relevant, but the score is still being discounted by a softer evidence base.'
+    return 'The score stays tempered because the evidence base is softer than you would want for a stronger call.'
   }
   if (fragility >= 60) {
-    return 'The upside case is being held back because the downside profile is still too easy to break under stress.'
+    return 'The upside case is being held back because the downside profile still looks too easy to break under stress.'
   }
-  return 'The name stays near the top because it is balanced across the main dimensions without a fatal weak spot.'
+  return 'The name stays competitive because none of the main dimensions is failing badly, even if none is perfect.'
 }
 
 function strongestBlock(blockScores: Record<string, number> | undefined, keys: string[]): string | null {
@@ -805,15 +805,15 @@ function supportSentence(subnet: SubnetSummary): string {
 
   switch (primarySupport) {
     case 'fundamental_health':
-      return 'The rank is being earned by strong underlying quality rather than by a speculative rerating.'
+      return 'The score is being earned by real operating quality, not just by hope for a rerating.'
     case 'structural_validity':
-      return 'It ranks well because the market structure still looks investable instead of fragile or crowded.'
+      return 'The score holds up because the market structure still looks tradable instead of fragile or overcrowded.'
     case 'market_legitimacy':
-      return 'It is screening well because the network already looks credible enough to carry institutional attention.'
+      return 'The network already looks credible enough to draw sustained attention, which helps support the score.'
     case 'confidence_factor':
-      return 'It holds a high rank because the evidence stack is coherent enough to support the thesis.'
+      return 'The score benefits because the main signals tell a broadly consistent story.'
     default:
-      return 'It ranks well because the model sees a credible quality base with manageable downside.'
+      return 'The score is being supported by a credible operating base and a downside profile that is not yet breaking the case.'
   }
 }
 
@@ -830,7 +830,7 @@ function headwindSentence(subnet: SubnetSummary): string {
     return `The main caveat is that ${dragText}.`
   }
 
-  return `The current limiter is that ${dragText}.`
+  return `The current cap on the score is that ${dragText}.`
 }
 
 function rankingHeadline(subnet: SubnetSummary): string {
@@ -859,8 +859,8 @@ function rankingHeadline(subnet: SubnetSummary): string {
     : ''
 
   return [
-    `${subnet.name?.trim() || `Subnet ${subnet.netuid}`} ranks ${subnet.rank ? `#${subnet.rank}` : 'near the top'} because ${supportLead || 'the model sees a credible mix of strength and manageable downside'}.`,
-    `Strength is ${quality}, Risk is ${risk}, Upside Gap is ${upside}, and Evidence Quality is ${evidence}. ${metricProfile(outputs)}`,
+    `${subnet.name?.trim() || `Subnet ${subnet.netuid}`} ranks ${subnet.rank ? `#${subnet.rank}` : 'near the top'} because ${supportLead || 'it combines enough quality, upside, and resilience to stay competitive'}.`,
+    `The current read is Quality ${quality}, Upside ${upside}, Downside ${risk}, and Trust ${evidence}. ${metricProfile(outputs)}`,
     supportFollowSentence || supportSentenceText,
   ]
     .filter(Boolean)
@@ -890,28 +890,28 @@ function rankingCatalystLine(subnet: SubnetSummary): string {
 
   const upsideSentence =
     outputs.mispricing_signal >= 60
-      ? 'The market still appears to be leaving enough upside on the table for a rerating case.'
+      ? 'The score still gets help from a meaningful upside gap between current pricing and the operating picture.'
       : outputs.mispricing_signal >= 45
-        ? 'There is still some upside, but it is no longer a clean deep-discount setup.'
-        : 'The current limitation is that the valuation gap is modest, so the case needs continued execution to work.'
+        ? 'There may still be upside, but this no longer looks like a major disconnect.'
+        : 'The score is capped because the remaining upside gap looks modest, so the case depends more on continued execution.'
 
   const riskSentence =
     outputs.fragility_risk <= 30
-      ? 'On the downside, stress is currently well contained.'
+      ? 'On the downside, stress looks reasonably contained right now.'
       : outputs.fragility_risk <= 50
-        ? 'On the downside, risk is manageable but not trivial.'
-        : 'On the downside, the stress profile is strong enough to matter in position sizing.'
+        ? 'On the downside, risk is manageable but still real.'
+        : 'On the downside, the stress profile is severe enough to matter for sizing and conviction.'
 
   const supportSentenceText = supportClauses.length
-    ? `The score is being supported by ${joinClauses(supportClauses)}.`
+    ? `The score is being supported because ${joinClauses(supportClauses)}.`
     : ''
   const dragSentenceText = dragClauses.length
-    ? `What is holding it back is that ${joinClauses(dragClauses)}.`
+    ? `What is capping the score is that ${joinClauses(dragClauses)}.`
     : headwindSentence(subnet)
   const uncertaintySentence = leadUncertainty
-    ? `The main caveat is that ${leadUncertainty}.`
+    ? `Trust remains limited because ${leadUncertainty}.`
     : outputs.signal_confidence < 50
-      ? 'The main caveat is that the evidence base is still softer than you would want for a full-conviction memo.'
+      ? 'Trust remains limited because the evidence base is still softer than you would want for a high-conviction read.'
       : ''
 
   return [supportSentenceText, upsideSentence, riskSentence, dragSentenceText, uncertaintySentence]
@@ -921,31 +921,31 @@ function rankingCatalystLine(subnet: SubnetSummary): string {
 
 function opportunityRead(subnet: SubnetSummary): string {
   if (!subnet.primary_outputs) return 'No active opportunity read until the subnet is rescored.'
-  if (mispricingValue(subnet) >= 70) return 'The model still sees a large expectation gap worth active research.'
-  if (mispricingValue(subnet) >= 55) return 'There is still some upside gap, but it is no longer a clean dislocation.'
-  return 'Opportunity is muted unless new evidence changes the read.'
+  if (mispricingValue(subnet) >= 70) return 'There still appears to be a meaningful gap between what the subnet is doing and what the market is pricing.'
+  if (mispricingValue(subnet) >= 55) return 'There may still be upside, but part of the improvement already looks reflected in price.'
+  return 'The upside case looks modest unless new evidence materially improves the story.'
 }
 
 function qualityRead(subnet: SubnetSummary): string {
   if (!subnet.primary_outputs) return 'Quality cannot be underwritten until the V2 outputs land.'
-  if (qualityValue(subnet) >= 70) return 'Quality support is robust enough to anchor the thesis.'
-  if (qualityValue(subnet) >= 55) return 'Quality is acceptable, but not dominant enough to carry the full case.'
-  return 'Quality evidence is thin, so upside depends on weaker footing.'
+  if (qualityValue(subnet) >= 70) return 'The subnet looks operationally solid enough to anchor the thesis even if the upside case changes.'
+  if (qualityValue(subnet) >= 55) return 'The quality base is real, but not strong enough to carry the score without help from valuation or market structure.'
+  return 'The quality base looks too weak or too thin to support a strong score on its own.'
 }
 
 function fragilityRead(subnet: SubnetSummary): string {
   if (!subnet.primary_outputs) return 'Fragility is unknown until the latest run completes.'
-  if (fragilityValue(subnet) <= 40) return 'Stress behavior looks manageable relative to the current upside case.'
-  if (fragilityValue(subnet) <= 60) return 'Fragility is acceptable, but it can still narrow the range of valid entries.'
-  return 'Fragility is high enough that the thesis can break quickly under stress or poor execution.'
+  if (fragilityValue(subnet) <= 40) return 'The setup still looks able to absorb ordinary stress without breaking the thesis.'
+  if (fragilityValue(subnet) <= 60) return 'The downside is manageable, but it is still strong enough to limit how aggressive the score should be.'
+  return 'The rating is being held back because the thesis can break quickly under stress or weaker execution.'
 }
 
 function confidenceRead(subnet: SubnetSummary): string {
   const warnings = summaryWarnings(subnet)
   if (!subnet.primary_outputs) return 'No trust read yet because the subnet is still awaiting a full V2 output.'
-  if (!warnings.length && confidenceValue(subnet) >= 65) return 'Data trust is relatively clean for a first-pass investment memo.'
-  if (confidenceValue(subnet) >= 50) return 'Confidence is usable, but the conditioning layer deserves a quick check.'
-  return 'Confidence is weak enough that repaired telemetry or missing evidence can change the memo materially.'
+  if (!warnings.length && confidenceValue(subnet) >= 65) return 'This read looks fairly trustworthy because the inputs appear clean and the major signals agree.'
+  if (confidenceValue(subnet) >= 50) return 'This read is directionally useful, but repaired inputs, thin history, or noisy telemetry still deserve a check.'
+  return 'This read is not fully reliable yet because missing, repaired, or noisy inputs could still change the conclusion materially.'
 }
 
 function buildStatusFlags(subnet: SubnetSummary): RowFlag[] {
@@ -1302,24 +1302,24 @@ function compactSentence(value: string | null | undefined, fallback: string): st
 function marketCapacityNarrative(label: string): string {
   switch (label.toLowerCase()) {
     case 'high':
-      return 'Capital can move through this market without much friction.'
+      return 'This market looks deep enough that meaningful capital can move through it without immediately distorting price.'
     case 'medium':
-      return 'Medium-sized flows can get through, but larger size will move the market.'
+      return 'Medium-sized flows can get through, but larger orders will still push the market around.'
     case 'low':
-      return 'Liquidity is usable for small size, but larger flows will be awkward.'
+      return 'Liquidity is workable for small size, but it still becomes awkward quickly as position size grows.'
     default:
-      return 'Liquidity is too thin for anything but very small size.'
+      return 'Liquidity is thin enough that this only really works for very small size.'
   }
 }
 
 function evidenceNarrative(label: string): string {
   switch (label.toLowerCase()) {
     case 'high':
-      return 'The read is backed by clean enough inputs to trust.'
+      return 'The read looks trustworthy because the underlying inputs appear mostly clean and observed.'
     case 'medium':
-      return 'The read is usable, but missing or noisy inputs still matter.'
+      return 'The read is directionally useful, but gaps or noisy inputs still matter enough to cap conviction.'
     default:
-      return 'Trust is capped by missing, repaired, or noisy inputs.'
+      return 'Trust is capped because important parts of the history or telemetry are missing, repaired, or noisy.'
   }
 }
 
@@ -1346,7 +1346,7 @@ function buildHeaderSubtitle(
 
   const setup = compactSentence(researchSummary.setupRead, summary.decisionLine).replace(/\.$/, '')
   const drag = topDrag ? plainEnglishReason(contributorName(topDrag), 'negative') : ''
-  if (drag) return `${sentenceCase(setup)}, but ${drag}.`
+  if (drag) return `${sentenceCase(setup)} The score is not higher because ${drag}.`
   return `${sentenceCase(setup)}.`
 }
 
@@ -1376,31 +1376,49 @@ function reliabilityLabel(value: number | null | undefined): string {
 
 function reliabilityNarrative(key: string, value: number): string {
   if (key === 'history_data_reliability') {
-    return value >= 0.7 ? 'History is deep enough to support the read.' : 'Missing history limits conviction.'
+    return value >= 0.7
+      ? 'Enough history is visible to judge whether this trend is persistent instead of just recent noise.'
+      : 'History is missing or thin enough that trend-based conclusions are less trustworthy.'
   }
   if (key === 'market_data_reliability') {
-    return value >= 0.7 ? 'Market inputs look clean enough to use.' : 'Market inputs are noisy enough to matter.'
+    return value >= 0.7
+      ? 'Market inputs look clean enough that price and liquidity signals can be trusted.'
+      : 'Market inputs are noisy enough that price and liquidity conclusions need caution.'
   }
   if (key === 'validator_data_reliability') {
-    return value >= 0.7 ? 'Validator-side coverage is solid.' : 'Validator-side coverage is thinner than ideal.'
+    return value >= 0.7
+      ? 'Validator-side coverage is solid enough to support the participation read.'
+      : 'Validator-side coverage is thin enough that participation quality is harder to confirm.'
   }
-  return value >= 0.7 ? 'Outside evidence broadly confirms the read.' : 'Outside confirmation is still thin.'
+  return value >= 0.7
+    ? 'Outside sources broadly point in the same direction as the internal read.'
+    : 'There is still not much outside confirmation, so the read leans heavily on internal signals.'
 }
 
 function blockScoreNarrative(key: string, value: number): string {
   if (key === 'intrinsic_quality') {
-    return value >= 65 ? 'The underlying business quality is a real support.' : 'Business quality is not strong enough to carry the case.'
+    return value >= 65
+      ? 'The operating base is strong enough to support the score even if the upside case cools.'
+      : 'The operating base is not strong enough to carry the score without help from valuation or momentum.'
   }
   if (key === 'economic_sustainability') {
-    return value >= 65 ? 'Economics look durable enough to matter.' : 'The economics still need to prove durability.'
+    return value >= 65
+      ? 'The economics look durable enough that the current activity base matters.'
+      : 'The economics still need to prove they can hold up without unusually favorable conditions.'
   }
   if (key === 'reflexivity') {
-    return value >= 65 ? 'Market behavior is helping the setup.' : 'Market behavior is not giving much help.'
+    return value >= 65
+      ? 'Market behavior is reinforcing the setup instead of working against it.'
+      : 'Market behavior is not giving the thesis much extra help right now.'
   }
   if (key === 'stress_robustness') {
-    return value >= 65 ? 'Modeled downside is still controlled.' : 'Stress losses are larger than ideal.'
+    return value >= 65
+      ? 'The setup still holds together reasonably well in modeled stress cases.'
+      : 'Modeled stress losses are large enough to cap the score.'
   }
-  return value >= 65 ? 'There is still a real valuation gap here.' : 'The valuation gap is smaller than it needs to be.'
+  return value >= 65
+    ? 'There still appears to be a meaningful valuation gap for the market to close.'
+    : 'The valuation gap looks too small to justify a much higher score by itself.'
 }
 
 function insightBodyFromContributor(
@@ -1418,11 +1436,11 @@ function insightBodyFromContributor(
 function confidenceMetricLabel(name: string): string {
   switch (name) {
     case 'data_confidence':
-      return 'Input quality'
+      return 'Data cleanliness'
     case 'market_confidence':
-      return 'Market support'
+      return 'Market confirmation'
     case 'thesis_confidence':
-      return 'Thesis coherence'
+      return 'Thesis stability'
     default:
       return sentenceCase(name.replace(/_/g, ' '))
   }
@@ -1432,22 +1450,22 @@ function buildExecutiveSummary(researchSummary: ResearchSummaryViewModel): MemoS
   return [
     {
       label: 'Setup Read',
-      body: compactSentence(researchSummary.setupRead, 'The setup still lacks a clean read.'),
+      body: compactSentence(researchSummary.setupRead, 'The current case is still too incomplete to summarize cleanly.'),
       tone: researchSummary.setupStatus.tone,
     },
     {
       label: 'Why Now',
-      body: compactSentence(researchSummary.whyNow, 'There is no active timing signal yet.'),
+      body: compactSentence(researchSummary.whyNow, 'There is no concrete near-term reason to get more interested yet.'),
       tone: 'mispricing',
     },
     {
       label: 'Main Constraint',
-      body: compactSentence(researchSummary.mainConstraint, 'No single execution constraint stands out yet.'),
+      body: compactSentence(researchSummary.mainConstraint, 'No single limiting factor stands out yet.'),
       tone: 'warning',
     },
     {
       label: 'Break Condition',
-      body: cleanBreakCondition(researchSummary.breakCondition, 'The current support stops holding.'),
+      body: cleanBreakCondition(researchSummary.breakCondition, 'The current support stops holding up.'),
       tone: 'fragility',
     },
   ]
@@ -1461,12 +1479,12 @@ function buildContextRow(
 ): MemoContextItem[] {
   return [
     {
-      label: 'Capacity',
+      label: 'Market Size',
       value: researchSummary.marketCapacity.label,
       tone: researchSummary.marketCapacity.tone,
     },
     {
-      label: 'Trust',
+      label: 'Read Trust',
       value: researchSummary.evidenceStrength.label,
       tone: researchSummary.evidenceStrength.tone,
     },
@@ -1497,33 +1515,33 @@ function buildMarketStructureItems(
 
   return [
     {
-      label: 'Liquidity',
+      label: 'How much size the market can take',
       value: formatCompactNumber(subnet.tao_in_pool, 0),
       body: compactSentence(
         insightBodyFromContributor(
           marketDrag,
-          'Liquidity is adequate for small flows, but not deep enough for size.',
+          'Liquidity is enough for smaller positioning, but not deep enough for large size without moving the market.',
           'negative',
         ),
-        'Liquidity is adequate for small flows, but not deep enough for size.',
+        'Liquidity is enough for smaller positioning, but not deep enough for large size without moving the market.',
       ),
       tone: researchSummary.marketCapacity.tone,
     },
     {
-      label: 'Concentration',
+      label: 'Whether too few actors dominate the setup',
       value: concentrationSignal ? 'Watch' : 'Contained',
       body: compactSentence(
         insightBodyFromContributor(
           concentrationSignal,
-          'Concentration is visible, but it is not the main structural risk.',
+          'Concentration is visible, but it does not look like the main structural weakness right now.',
           concentrationSignal ? 'negative' : 'uncertainty',
         ),
-        'Concentration is visible, but it is not the main structural risk.',
+        'Concentration is visible, but it does not look like the main structural weakness right now.',
       ),
       tone: concentrationSignal ? 'warning' : 'neutral',
     },
     {
-      label: 'Capacity',
+      label: 'What happens if bigger money shows up',
       value: researchSummary.marketCapacity.label,
       body: compactSentence(
         marketCapacityNarrative(researchSummary.marketCapacity.label),
@@ -1532,15 +1550,15 @@ function buildMarketStructureItems(
       tone: researchSummary.marketCapacity.tone,
     },
     {
-      label: 'Stress Risk',
+      label: 'How well it holds up under stress',
       value: analysis?.fragility_class ? sentenceCase(analysis.fragility_class.toLowerCase()) : 'Unknown',
       body: compactSentence(
         insightBodyFromContributor(
           fragilityContributor,
-          'Modeled downside is still part of the trade plan.',
+          'Modeled downside is still a meaningful part of the trade plan.',
           'negative',
         ),
-        'Modeled downside is still part of the trade plan.',
+        'Modeled downside is still a meaningful part of the trade plan.',
       ),
       tone: analysis?.stress_drawdown != null && analysis.stress_drawdown >= 30 ? 'fragility' : 'warning',
     },
@@ -1552,41 +1570,57 @@ function buildEvidenceItems(
   reliabilityEntries: MemoSectionItem[],
   uncertainties: MemoSectionItem[],
   confidence: ConfidenceRationale | undefined,
+  conditioning: ConditioningInfo | undefined,
 ): MemoInsightItem[] {
-  const historyDepth = reliabilityEntries.find((item) => item.title === 'Historical depth')
-  const dataReliability = reliabilityEntries.find((item) => item.title === 'Market data reliability')
+  const historyDepth = reliabilityEntries.find((item) => item.title === 'History coverage')
+  const dataReliability = reliabilityEntries.find((item) => item.title === 'Market inputs')
+  const validatorCoverage = reliabilityEntries.find((item) => item.title === 'Validator coverage')
   const uncertainty = uncertainties[0]
+  const reconstructed = visibilityCount(conditioning, 'reconstructed')
+  const discarded = visibilityCount(conditioning, 'discarded')
+  const visibilityNotes = [
+    reconstructed > 0 ? `${reconstructed} input${reconstructed === 1 ? '' : 's'} were reconstructed` : '',
+    discarded > 0 ? `${discarded} input${discarded === 1 ? '' : 's'} were dropped` : '',
+  ].filter(Boolean)
+  const trustBody = [
+    compactSentence(
+      evidenceNarrative(researchSummary.evidenceStrength.label),
+      'Trust is capped by limited evidence.',
+    ).replace(/\.$/, ''),
+    visibilityNotes.length ? `${sentenceCase(joinClauses(visibilityNotes))}, which makes the read less reliable than a fully observed subnet.` : '',
+  ]
+    .filter(Boolean)
+    .join(' ') + '.'
 
   return [
     {
-      label: 'Trust Level',
+      label: 'How trustworthy this read is',
       value: researchSummary.evidenceStrength.label,
-      body: compactSentence(
-        evidenceNarrative(researchSummary.evidenceStrength.label),
-        'Trust is capped by limited evidence.',
-      ),
+      body: trustBody,
       tone: researchSummary.evidenceStrength.tone,
     },
     {
-      label: 'History Depth',
+      label: 'Whether enough history is visible',
       value: historyDepth?.score != null ? formatAbsoluteScore(historyDepth.score) ?? historyDepth.body : confidenceLabel(confidence?.thesis_confidence),
       body: compactSentence(historyDepth?.meta || 'Missing or repaired history limits conviction.', 'History is too thin for a strong read.'),
       tone: historyDepth?.tone ?? 'warning',
     },
     {
-      label: 'Input Quality',
+      label: 'How clean the current inputs really are',
       value:
         dataReliability?.score != null
           ? formatAbsoluteScore(dataReliability.score) ?? dataReliability.body
           : reliabilityLabel(confidence?.data_confidence != null ? confidence.data_confidence / 100 : null),
       body: compactSentence(
-        dataReliability?.meta || 'The telemetry is usable, but not fully clean.',
-        'The telemetry is usable, but not fully clean.',
+        dataReliability?.meta ||
+          validatorCoverage?.meta ||
+          'The read is directionally useful, but parts of the telemetry are noisy enough to matter.',
+        'The read is directionally useful, but parts of the telemetry are noisy enough to matter.',
       ),
       tone: dataReliability?.tone ?? 'warning',
     },
     {
-      label: 'Key Uncertainty',
+      label: 'What still needs to prove itself',
       value: uncertainty ? sentenceCase(uncertainty.title) : 'None flagged',
       body: compactSentence(uncertainty?.body, 'No single open question stands above the rest.'),
       tone: uncertainty?.tone ?? 'neutral',
@@ -1616,13 +1650,13 @@ function buildAnchorInsights(
 ): MemoAnchorItem[] {
   return [
     {
-      label: 'Best Signal',
-      value: supports[0]?.title ? `${supports[0].title}: ${supports[0].body}` : 'No clear advantage stands out yet.',
+      label: 'Strongest support',
+      value: supports[0]?.title ? `${supports[0].title}. ${supports[0].body}` : 'No clear supporting factor stands out yet.',
       tone: supports[0]?.tone ?? 'quality',
     },
     {
-      label: 'Main Weakness',
-      value: drags[0]?.title ? `${drags[0].title}: ${drags[0].body}` : 'No single weakness stands out yet.',
+      label: 'Main thing capping the score',
+      value: drags[0]?.title ? `${drags[0].title}. ${drags[0].body}` : 'No single limiting factor stands out yet.',
       tone: drags[0]?.tone ?? 'warning',
     },
   ]
@@ -1700,7 +1734,13 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
   const executiveSummary = buildExecutiveSummary(researchSummary)
   const contextRow = buildContextRow(researchSummary, summary, updatedLabel, stale)
   const marketStructure = buildMarketStructureItems(subnet, researchSummary, analysis)
-  const evidenceItems = buildEvidenceItems(researchSummary, reliabilityEntries, toUncertaintyItems(analysis?.key_uncertainties), confidence)
+  const evidenceItems = buildEvidenceItems(
+    researchSummary,
+    reliabilityEntries,
+    toUncertaintyItems(analysis?.key_uncertainties),
+    confidence,
+    conditioning,
+  )
   const topSupports = buildScoreExplanationItems(
     analysis?.top_positive_drivers,
     'quality',
