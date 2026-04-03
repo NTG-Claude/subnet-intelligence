@@ -44,6 +44,11 @@ export interface RowFlag {
   tone: SignalTone
 }
 
+export interface InvestabilityBadge {
+  label: string
+  tone: SignalTone
+}
+
 export interface UniverseRowViewModel {
   id: number
   href: string
@@ -64,6 +69,9 @@ export interface UniverseRowViewModel {
     risk: string
     evidence: string
   }
+  scoreLabel: string
+  investability: InvestabilityBadge
+  warningFlags: RowFlag[]
   opportunityRead: string
   qualityRead: string
   fragilityRead: string
@@ -169,18 +177,18 @@ export const UNIVERSE_LENSES: UniverseLens[] = [
 
 export const UNIVERSE_SORTS: UniverseSortOption[] = [
   { id: 'rank', label: 'Rank' },
-  { id: 'mispricing', label: 'Upside Gap' },
-  { id: 'quality', label: 'Strength' },
-  { id: 'confidence', label: 'Evidence Quality' },
+  { id: 'mispricing', label: 'Opportunity' },
+  { id: 'quality', label: 'Quality' },
+  { id: 'confidence', label: 'Confidence' },
   { id: 'fragility', label: 'Lowest risk' },
   { id: 'updated', label: 'Updated' },
 ]
 
 const SIGNAL_META: Record<keyof PrimaryOutputs, Omit<SignalStat, 'value'>> = {
-  fundamental_quality: { key: 'fundamental_quality', label: 'Strength', shortLabel: 'STR', tone: 'quality' },
-  mispricing_signal: { key: 'mispricing_signal', label: 'Upside Gap', shortLabel: 'UPS', tone: 'mispricing' },
+  fundamental_quality: { key: 'fundamental_quality', label: 'Quality', shortLabel: 'QLTY', tone: 'quality' },
+  mispricing_signal: { key: 'mispricing_signal', label: 'Opportunity', shortLabel: 'OPP', tone: 'mispricing' },
   fragility_risk: { key: 'fragility_risk', label: 'Risk', shortLabel: 'RISK', tone: 'fragility', invert: true },
-  signal_confidence: { key: 'signal_confidence', label: 'Evidence Quality', shortLabel: 'EVID', tone: 'confidence' },
+  signal_confidence: { key: 'signal_confidence', label: 'Confidence', shortLabel: 'CONF', tone: 'confidence' },
 }
 
 const BLOCK_LABELS: Record<string, string> = {
@@ -855,6 +863,42 @@ function buildStatusFlags(subnet: SubnetSummary): RowFlag[] {
   return flags.slice(0, 3)
 }
 
+function warningFlagLabel(flag: string): RowFlag | null {
+  switch (flag) {
+    case 'low_confidence':
+      return { label: 'Low confidence', tone: 'confidence' }
+    case 'thin_liquidity':
+      return { label: 'Thin liquidity', tone: 'fragility' }
+    case 'concentration':
+      return { label: 'Concentration', tone: 'fragility' }
+    case 'fragility':
+      return { label: 'High fragility', tone: 'fragility' }
+    case 'telemetry_gap':
+      return { label: 'Telemetry gap', tone: 'warning' }
+    case 'reconstructed_inputs':
+      return { label: 'Reconstructed inputs', tone: 'warning' }
+    case 'weak_market_structure':
+      return { label: 'Weak structure', tone: 'warning' }
+    default:
+      return null
+  }
+}
+
+function investabilityBadge(status: string | null | undefined): InvestabilityBadge {
+  switch (status) {
+    case 'investable':
+      return { label: 'Investable', tone: 'quality' }
+    case 'speculative':
+      return { label: 'Speculative', tone: 'mispricing' }
+    case 'constrained':
+      return { label: 'Constrained', tone: 'warning' }
+    case 'uninvestable':
+      return { label: 'Uninvestable', tone: 'fragility' }
+    default:
+      return { label: 'Under review', tone: 'warning' }
+  }
+}
+
 function compareLabel(subnet: SubnetSummary): string {
   if (!subnet.primary_outputs) return 'Track for compare'
   return 'Add to compare'
@@ -864,6 +908,7 @@ export function toUniverseRow(subnet: SubnetSummary): UniverseRowViewModel {
   const positives = clipHints(summaryHints(subnet.analysis_preview, 'quality', 'positive'), 2)
   const negatives = clipHints(summaryHints(subnet.analysis_preview, 'fragility', 'negative'), 2)
   const warnings = clipHints(summaryWarnings(subnet), 2)
+  const warningFlags = subnet.warning_flags.map(warningFlagLabel).filter((item): item is RowFlag => Boolean(item))
   return {
     id: subnet.netuid,
     href: `/subnets/${subnet.netuid}`,
@@ -884,6 +929,9 @@ export function toUniverseRow(subnet: SubnetSummary): UniverseRowViewModel {
       risk: shortMetricReason(subnet, 'risk'),
       evidence: shortMetricReason(subnet, 'evidence'),
     },
+    scoreLabel: subnet.score.toFixed(1),
+    investability: investabilityBadge(subnet.investability_status),
+    warningFlags,
     opportunityRead: opportunityRead(subnet),
     qualityRead: qualityRead(subnet),
     fragilityRead: fragilityRead(subnet),
@@ -1022,6 +1070,8 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     tao_in_pool: subnet.tao_in_pool,
     market_cap_tao: subnet.market_cap_tao,
     staking_apy: subnet.staking_apy,
+    investability_status: subnet.investability_status,
+    warning_flags: subnet.warning_flags,
     label: subnet.label ?? analysis?.label ?? null,
     thesis: subnet.thesis ?? analysis?.thesis ?? null,
     analysis_preview: {

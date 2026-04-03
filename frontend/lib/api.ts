@@ -13,6 +13,8 @@ export interface SubnetSummary {
   tao_in_pool: number | null
   market_cap_tao: number | null
   staking_apy: number | null
+  investability_status: string | null
+  warning_flags: string[]
   /** Deprecated compatibility field. Prefer thesis and V2 explanation data in product UI. */
   label: string | null
   thesis: string | null
@@ -140,6 +142,8 @@ export interface SubnetDetail {
   market_cap_tao: number | null
   staking_apy: number | null
   score_delta_7d: number | null
+  investability_status: string | null
+  warning_flags: string[]
   /** Deprecated compatibility field. Prefer thesis and V2 explanation data in product UI. */
   label: string | null
   thesis: string | null

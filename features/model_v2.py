@@ -912,7 +912,7 @@ METRIC_MAP = {
     "validator_participation": ("direct_onchain", "fundamental_quality", 0.08, False),
     "incentive_distribution_quality": ("derived_onchain", "fundamental_quality", 0.08, False),
     "reserve_depth": ("direct_onchain", "fundamental_quality", 0.08, False),
-    "market_relevance_proxy": ("derived_onchain", "fundamental_quality", 0.06, False),
+    "market_relevance_proxy": ("derived_onchain", "fundamental_quality", 0.05, False),
     "market_structure_floor": ("derived_onchain", "fundamental_quality", 0.08, False),
     "concentration": ("derived_onchain", "fragility_risk", 0.10, True),
     "validator_weight_entropy": ("derived_onchain", "fundamental_quality", 0.0, False),
@@ -926,7 +926,7 @@ METRIC_MAP = {
     "flow_to_price_elasticity": ("needs_history", "fragility_risk", 0.06, True),
     "price_move_without_quality_improvement": ("needs_history", "fragility_risk", 0.08, False),
     "emission_spike_without_participation_improvement": ("needs_history", "fragility_risk", 0.05, False),
-    "crowding_proxy": ("derived_onchain", "fragility_risk", 0.08, False),
+    "crowding_proxy": ("derived_onchain", "fragility_risk", 0.07, False),
     "sharp_short_term_reversal_risk": ("needs_history", "fragility_risk", 0.08, False),
     "quality_change": ("needs_history", "mispricing_signal", 0.10, False),
     "reserve_change": ("needs_history", "mispricing_signal", 0.08, False),
@@ -935,7 +935,7 @@ METRIC_MAP = {
     "validator_diversity_trend": ("needs_history", "mispricing_signal", 0.06, False),
     "expected_price_response_gap": ("needs_history", "mispricing_signal", 0.12, False),
     "expected_reserve_response_gap": ("needs_history", "mispricing_signal", 0.08, False),
-    "cohort_implied_fair_value_gap": ("cohort_relative", "mispricing_signal", 0.10, False),
+    "cohort_implied_fair_value_gap": ("cohort_relative", "mispricing_signal", 0.06, False),
     "underreaction_score": ("needs_history", "mispricing_signal", 0.12, False),
     "overreaction_score": ("needs_history", "mispricing_signal", 0.08, True),
     "price_response_lag_to_quality_shift": ("needs_history", "mispricing_signal", 0.14, False),
@@ -954,11 +954,11 @@ METRIC_MAP = {
     "market_data_reliability": ("conditioning", "signal_confidence", 0.08, False),
     "validator_data_reliability": ("conditioning", "signal_confidence", 0.08, False),
     "history_data_reliability": ("conditioning", "signal_confidence", 0.08, False),
-    "external_data_reliability": ("conditioning", "signal_confidence", 0.03, False),
-    "external_source_legitimacy": ("external_proxy", "signal_confidence", 0.03, False),
-    "external_dev_recency": ("external_proxy", "signal_confidence", 0.025, False),
-    "external_dev_continuity": ("external_proxy", "signal_confidence", 0.025, False),
-    "external_dev_breadth": ("external_proxy", "signal_confidence", 0.015, False),
+    "external_data_reliability": ("conditioning", "signal_confidence", 0.02, False),
+    "external_source_legitimacy": ("external_proxy", "signal_confidence", 0.015, False),
+    "external_dev_recency": ("external_proxy", "signal_confidence", 0.012, False),
+    "external_dev_continuity": ("external_proxy", "signal_confidence", 0.012, False),
+    "external_dev_breadth": ("external_proxy", "signal_confidence", 0.006, False),
 }
 
 
@@ -982,12 +982,12 @@ def _build_cohort_edges(raw_bundles: list[FeatureBundle]) -> None:
 
 def _inject_cohort_metrics(bundle: FeatureBundle) -> None:
     for name, category, output, weight in [
-        ("cohort_quality_edge", "cohort_relative", "fundamental_quality", 0.02),
-        ("cohort_liquidity_edge", "cohort_relative", "fundamental_quality", 0.02),
-        ("cohort_relevance_edge", "cohort_relative", "fundamental_quality", 0.03),
-        ("cohort_mispricing_edge", "cohort_relative", "mispricing_signal", 0.05),
-        ("cohort_fair_value_edge", "cohort_relative", "mispricing_signal", 0.05),
-        ("cohort_relevance_edge", "cohort_relative", "signal_confidence", 0.03),
+        ("cohort_quality_edge", "cohort_relative", "fundamental_quality", 0.015),
+        ("cohort_liquidity_edge", "cohort_relative", "fundamental_quality", 0.015),
+        ("cohort_relevance_edge", "cohort_relative", "fundamental_quality", 0.02),
+        ("cohort_mispricing_edge", "cohort_relative", "mispricing_signal", 0.03),
+        ("cohort_fair_value_edge", "cohort_relative", "mispricing_signal", 0.025),
+        ("cohort_relevance_edge", "cohort_relative", "signal_confidence", 0.015),
     ]:
         value = bundle.raw.get(name)
         bundle.metrics[name] = FeatureMetric(

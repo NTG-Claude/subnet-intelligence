@@ -176,6 +176,42 @@ def test_list_subnets():
     assert scores == sorted(scores, reverse=True)
 
 
+def test_list_subnets_includes_investability_status_and_warning_flags():
+    rows = [
+        {
+            **SCORES[0],
+            "raw_data": {
+                **SCORES[0]["raw_data"],
+                "analysis": {
+                    **SCORES[0]["raw_data"]["analysis"],
+                    "block_scores": {"market_legitimacy": 40.0},
+                    "conditioning": {"visibility": {"discarded": ["alpha_price_tao"]}},
+                },
+                "raw_metrics": {
+                    "slippage_10_tao": 0.12,
+                    "performance_driven_by_few_actors": 0.72,
+                },
+            },
+        }
+    ]
+    with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_all_metadata", return_value={}), \
+         patch("api.main.get_score_history", return_value=HISTORY), \
+         patch("api.main.get_score_distribution", return_value=[]), \
+         patch("api.main.get_scores_since", return_value=rows), \
+         patch("api.main._get_metadata", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets")
+
+    assert resp.status_code == 200
+    row = resp.json()["subnets"][0]
+    assert row["investability_status"] == "constrained"
+    assert "thin_liquidity" in row["warning_flags"]
+    assert "concentration" in row["warning_flags"]
+    assert "telemetry_gap" in row["warning_flags"]
+
+
 def test_list_subnets_excludes_root_subnet():
     rows = [ROOT_ROW, *SCORES]
     with patch("api.main.get_latest_scores", return_value=rows), \
@@ -268,6 +304,8 @@ def test_get_subnet_detail():
     assert "breakdown" in data
     assert "history" in data
     assert data["metadata"]["name"] == "subnet-1"
+    assert data["investability_status"] is not None
+    assert isinstance(data["warning_flags"], list)
 
 
 def test_list_subnets_uses_override_name_fallback():

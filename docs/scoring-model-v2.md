@@ -220,6 +220,26 @@ New machine-readable fields are additive:
 
 ## Current Status Summary
 
+## Incremental Screening Refactor
+
+This step keeps the existing score-based product structure intact, but makes the
+inputs and the main ranking table more investor-readable.
+
+- Strengthened:
+  - direct participation and breadth
+  - executable liquidity and market structure
+  - concentration awareness
+  - confidence from evidence depth, consistency, and telemetry quality
+- Downweighted:
+  - cohort-relative fair-value proxies
+  - external development / GitHub style corroboration
+  - recursive proxy influence inside opportunity and confidence paths
+- UI intent:
+  - the main table should answer score, quality, opportunity, risk, confidence,
+    and investability at a glance
+  - compact warning flags should surface thin liquidity, concentration, low
+    confidence, and telemetry weakness without forcing the detail page first
+
 ### Done
 
 - explicit conditioning now sits ahead of raw feature construction

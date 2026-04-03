@@ -35,6 +35,8 @@ class SubnetSummaryResponse(BaseModel):
     tao_in_pool: Optional[float] = None
     market_cap_tao: Optional[float] = None
     staking_apy: Optional[float] = None
+    investability_status: Optional[str] = None
+    warning_flags: list[str] = Field(default_factory=list)
     label: Optional[str] = Field(
         default=None,
         description="Deprecated compatibility field. Product surfaces should prefer thesis and V2 explanation data.",
@@ -124,6 +126,8 @@ class SubnetDetailResponse(BaseModel):
     market_cap_tao: Optional[float] = None
     staking_apy: Optional[float] = None
     score_delta_7d: Optional[float] = None
+    investability_status: Optional[str] = None
+    warning_flags: list[str] = Field(default_factory=list)
     label: Optional[str] = Field(
         default=None,
         description="Deprecated compatibility field. Product surfaces should prefer thesis and V2 explanation data.",
