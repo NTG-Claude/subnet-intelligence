@@ -3,24 +3,26 @@ import Link from 'next/link'
 import StatusChip from '@/components/ui/StatusChip'
 import { UniverseRowViewModel } from '@/lib/view-models/research'
 
-type MetricRankMap = {
-  strength: number
-  upside: number
-  risk: number
-  evidence: number
-  total: number
+type MetricDeltaWindow = '1d' | '7d' | '30d'
+
+type MetricDelta = {
+  value: number | null
+  hasHistory: boolean
+}
+
+type MetricDeltaMap = {
+  strength: Record<MetricDeltaWindow, MetricDelta>
+  upside: Record<MetricDeltaWindow, MetricDelta>
+  risk: Record<MetricDeltaWindow, MetricDelta>
+  evidence: Record<MetricDeltaWindow, MetricDelta>
 }
 
 export default function SidePreviewPanel({
   row,
-  metricRanks,
-  selected,
-  onToggleCompare,
+  metricDeltas,
 }: {
   row: UniverseRowViewModel | null
-  metricRanks: MetricRankMap | null
-  selected: boolean
-  onToggleCompare: (id: number) => void
+  metricDeltas: MetricDeltaMap | null
 }) {
   return (
     <aside className="surface-panel sticky top-24 hidden h-fit p-5 xl:block">
@@ -36,57 +38,50 @@ export default function SidePreviewPanel({
             </div>
           </div>
 
-          {metricRanks ? (
+          {metricDeltas ? (
             <div className="space-y-3">
-              <div className="eyebrow">How It Stacks Up</div>
+              <div className="eyebrow">Metric Change</div>
               <div className="grid gap-3">
                 <div className="surface-subtle p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="eyebrow">Strength</div>
-                    <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">
-                      #{metricRanks.strength} of {metricRanks.total}
-                    </div>
+                  <div className="eyebrow">Strength</div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <DeltaPill label="1d" delta={metricDeltas.strength['1d']} tone="quality" />
+                    <DeltaPill label="7d" delta={metricDeltas.strength['7d']} tone="quality" />
+                    <DeltaPill label="30d" delta={metricDeltas.strength['30d']} tone="quality" />
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{row.metricReasons.strength}</p>
                 </div>
 
                 <div className="surface-subtle p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="eyebrow">Upside Gap</div>
-                    <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">
-                      #{metricRanks.upside} of {metricRanks.total}
-                    </div>
+                  <div className="eyebrow">Upside Gap</div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <DeltaPill label="1d" delta={metricDeltas.upside['1d']} tone="mispricing" />
+                    <DeltaPill label="7d" delta={metricDeltas.upside['7d']} tone="mispricing" />
+                    <DeltaPill label="30d" delta={metricDeltas.upside['30d']} tone="mispricing" />
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{row.metricReasons.upside}</p>
                 </div>
 
                 <div className="surface-subtle p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="eyebrow">Risk</div>
-                    <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">
-                      #{metricRanks.risk} of {metricRanks.total} by lowest risk
-                    </div>
+                  <div className="eyebrow">Risk</div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <DeltaPill label="1d" delta={metricDeltas.risk['1d']} tone="fragility" invert />
+                    <DeltaPill label="7d" delta={metricDeltas.risk['7d']} tone="fragility" invert />
+                    <DeltaPill label="30d" delta={metricDeltas.risk['30d']} tone="fragility" invert />
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{row.metricReasons.risk}</p>
                 </div>
 
                 <div className="surface-subtle p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="eyebrow">Evidence Quality</div>
-                    <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">
-                      #{metricRanks.evidence} of {metricRanks.total}
-                    </div>
+                  <div className="eyebrow">Evidence Quality</div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <DeltaPill label="1d" delta={metricDeltas.evidence['1d']} tone="confidence" />
+                    <DeltaPill label="7d" delta={metricDeltas.evidence['7d']} tone="confidence" />
+                    <DeltaPill label="30d" delta={metricDeltas.evidence['30d']} tone="confidence" />
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{row.metricReasons.evidence}</p>
                 </div>
               </div>
             </div>
           ) : null}
 
           <div className="flex flex-col gap-3">
-            <button type="button" onClick={() => onToggleCompare(row.id)} className="button-secondary">
-              {selected ? 'Remove from compare' : 'Add to compare'}
-            </button>
             <Link href={row.href} className="button-primary">
               Open research
             </Link>
@@ -99,4 +94,58 @@ export default function SidePreviewPanel({
       )}
     </aside>
   )
+}
+
+function DeltaPill({
+  label,
+  delta,
+  tone,
+  invert = false,
+}: {
+  label: MetricDeltaWindow
+  delta: MetricDelta
+  tone: 'quality' | 'mispricing' | 'fragility' | 'confidence'
+  invert?: boolean
+}) {
+  const display = formatDelta(delta.value)
+  const stateClass =
+    delta.value == null
+      ? 'text-[color:var(--text-tertiary)]'
+      : delta.value === 0
+        ? 'text-[color:var(--text-primary)]'
+        : isPositive(delta.value, invert)
+          ? toneClass(tone)
+          : 'text-[color:var(--fragility-strong)]'
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.55)] px-3 py-2">
+      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-tertiary)]">{label}</div>
+      <div className={`mt-2 font-mono text-sm font-semibold ${stateClass}`}>{display}</div>
+      <div className="mt-1 text-[11px] text-[color:var(--text-tertiary)]">{delta.hasHistory ? 'vs then' : 'no data'}</div>
+    </div>
+  )
+}
+
+function formatDelta(value: number | null): string {
+  if (value == null) return 'n/a'
+  if (Object.is(value, -0)) return '0.0'
+  const prefix = value > 0 ? '+' : ''
+  return `${prefix}${value.toFixed(1)}`
+}
+
+function isPositive(value: number, invert: boolean): boolean {
+  return invert ? value < 0 : value > 0
+}
+
+function toneClass(tone: 'quality' | 'mispricing' | 'fragility' | 'confidence'): string {
+  switch (tone) {
+    case 'quality':
+      return 'text-[color:var(--quality-strong)]'
+    case 'mispricing':
+      return 'text-[color:var(--mispricing-strong)]'
+    case 'fragility':
+      return 'text-[color:var(--fragility-strong)]'
+    case 'confidence':
+      return 'text-[color:var(--confidence-strong)]'
+  }
 }
