@@ -56,7 +56,7 @@ function ScoreList({
             </div>
           ))
         ) : (
-          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">No items available.</p>
+          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">No clear items are available.</p>
         )}
       </div>
     </div>
@@ -129,7 +129,7 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
               <div className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.rankLabel}</div>
             </div>
             <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
-              <div className="eyebrow">Model</div>
+              <div className="eyebrow">Profile</div>
               <div className="mt-2 text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.modelLabel}</div>
             </div>
           </div>
@@ -151,7 +151,7 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
       <section className="surface-panel p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
           <div className="section-title">Primary Signals</div>
-          <div className="eyebrow">Quality, upside, downside, trust</div>
+          <div className="eyebrow">Higher is better, except downside</div>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {memo.signals.map((signal) => (
@@ -179,29 +179,29 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
       <section className="surface-panel p-5 sm:p-6">
         <div className="section-title">Score Explanation</div>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">
-          These are the clearest reasons the score is strong or capped.
+          These are the clearest reasons the score holds up or gets capped.
         </p>
         <div className="mt-5 grid gap-6 xl:grid-cols-2">
-          <ScoreList title="Top 3 Supports" items={memo.topSupports} />
-          <ScoreList title="Top 3 Drags" items={memo.topDrags} />
+          <ScoreList title="Main Supports" items={memo.topSupports} />
+          <ScoreList title="Main Constraints" items={memo.topDrags} />
         </div>
       </section>
 
       <CollapsibleSection
         title="Deep Diagnostics"
-        subtitle="Inspection detail for stress, inputs, and scoring. Useful for checking the read, not for leading it."
+        subtitle="Reference checks for stress, inputs, and scoring."
         defaultOpen={false}
       >
         <div className="space-y-6">
           <div>
-            <div className="section-title">Stress Snapshot</div>
+            <div className="section-title">Stress View</div>
             <div className="mt-3">
               <DiagnosticGrid items={memo.stressItems} empty="No stress outputs are available." />
             </div>
           </div>
 
           <div>
-            <div className="section-title">Stress Scenarios</div>
+            <div className="section-title">Scenario Losses</div>
             <div className="mt-3">
               <DiagnosticGrid items={memo.scenarioItems} empty="No stress scenarios were emitted for this subnet." />
             </div>
@@ -225,16 +225,16 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
           </div>
 
           <div>
-            <div className="section-title">Block Scores</div>
+            <div className="section-title">Score Pillars</div>
             <div className="mt-3">
-              <DiagnosticGrid items={memo.blockScores} empty="No block scores are available." />
+              <DiagnosticGrid items={memo.blockScores} empty="No score pillar data is available." />
             </div>
           </div>
 
           <div>
-            <div className="section-title">Input Conditioning</div>
+            <div className="section-title">Input Checks</div>
             <div className="mt-3">
-              <DiagnosticGrid items={memo.visibilityItems} empty="No input conditioning diagnostics are available." />
+              <DiagnosticGrid items={memo.visibilityItems} empty="No input-check diagnostics are available." />
             </div>
           </div>
 
