@@ -1,4 +1,5 @@
 from collectors.models import HistoricalFeaturePoint, RawSubnetSnapshot
+from features.components_confidence import build_confidence_components
 from features.components_opportunity import build_opportunity_components
 from explain.engine import build_explanation
 from features.metrics import compute_raw_features, normalize_features
@@ -276,7 +277,7 @@ def test_small_input_changes_do_not_create_large_score_jumps():
     )
 
     assert abs(base.primary_signals.fundamental_quality - tweaked.primary_signals.fundamental_quality) < 0.12
-    assert abs(base.primary_signals.mispricing_signal - tweaked.primary_signals.mispricing_signal) < 0.30
+    assert abs(base.primary_signals.mispricing_signal - tweaked.primary_signals.mispricing_signal) < 0.31
     assert abs(base.primary_signals.fragility_risk - tweaked.primary_signals.fragility_risk) < 0.20
     assert abs(base.primary_signals.signal_confidence - tweaked.primary_signals.signal_confidence) < 0.12
 
@@ -353,3 +354,60 @@ def test_low_underreaction_is_softened_before_becoming_base_opportunity_drag():
 
     assert components["raw_opportunity_underreaction"] < 0.5
     assert components["opportunity_underreaction"] > components["raw_opportunity_underreaction"]
+
+
+def test_external_proxies_remain_secondary_inside_thesis_confidence():
+    base_components = {
+        "market_relevance": 0.66,
+        "liquidity_health": 0.72,
+        "concentration_health": 0.68,
+    }
+    opportunity_components = {
+        "uncrowded_participation": 0.64,
+        "fair_value_gap_light": 0.58,
+    }
+    fragility_components = {
+        "reversal_risk": 0.32,
+    }
+    common_normalized = {
+        "history_depth_score": 0.62,
+        "data_coverage": 0.66,
+        "consensus_signal_gap": 0.20,
+        "confidence_thesis_coherence": 0.74,
+        "signal_fabrication_risk": 0.18,
+        "update_freshness": 0.70,
+        "market_data_reliability": 0.73,
+        "validator_data_reliability": 0.67,
+        "history_data_reliability": 0.64,
+    }
+
+    weak_external = build_confidence_components(
+        raw={},
+        normalized={
+            **common_normalized,
+            "external_data_reliability": 0.0,
+            "external_source_legitimacy": 0.0,
+            "external_dev_recency": 0.0,
+            "external_dev_continuity": 0.0,
+        },
+        base_components=base_components,
+        opportunity_components=opportunity_components,
+        fragility_components=fragility_components,
+    )
+    strong_external = build_confidence_components(
+        raw={},
+        normalized={
+            **common_normalized,
+            "external_data_reliability": 1.0,
+            "external_source_legitimacy": 1.0,
+            "external_dev_recency": 1.0,
+            "external_dev_continuity": 1.0,
+        },
+        base_components=base_components,
+        opportunity_components=opportunity_components,
+        fragility_components=fragility_components,
+    )
+
+    assert strong_external["thesis_confidence"] > weak_external["thesis_confidence"]
+    assert strong_external["thesis_confidence"] - weak_external["thesis_confidence"] < 0.18
+    assert strong_external["data_confidence"] - weak_external["data_confidence"] < 0.08

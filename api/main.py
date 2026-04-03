@@ -221,11 +221,67 @@ def _normalize_analysis_payload(analysis: Optional[dict]) -> Optional[dict]:
     return normalized
 
 
+def _warning_flags(raw_data: dict, analysis: dict | None, primary_outputs: dict | None) -> list[str]:
+    flags: list[str] = []
+    conditioning = (analysis or {}).get("conditioning") or {}
+    visibility = conditioning.get("visibility") or {}
+    block_scores = (analysis or {}).get("block_scores") or {}
+    raw_metrics = raw_data.get("raw_metrics") or {}
+    fragility = (primary_outputs or {}).get("fragility_risk")
+    confidence = (primary_outputs or {}).get("signal_confidence")
+
+    if confidence is not None and confidence < 50:
+        flags.append("low_confidence")
+    if fragility is not None and fragility >= 65:
+        flags.append("fragility")
+    if (raw_metrics.get("slippage_10_tao") or 0.0) >= 0.08:
+        flags.append("thin_liquidity")
+    if (raw_metrics.get("performance_driven_by_few_actors") or 0.0) >= 0.6:
+        flags.append("concentration")
+    if len(visibility.get("discarded") or []) > 0:
+        flags.append("telemetry_gap")
+    elif len(visibility.get("reconstructed") or []) > 0:
+        flags.append("reconstructed_inputs")
+    if (block_scores.get("market_legitimacy") or 100.0) < 45:
+        flags.append("weak_market_structure")
+
+    deduped: list[str] = []
+    for flag in flags:
+        if flag not in deduped:
+            deduped.append(flag)
+    return deduped[:4]
+
+
+def _investability_status(row: dict, analysis: dict | None, primary_outputs: dict | None) -> str:
+    raw_data = row.get("raw_data") or {}
+    if not raw_data.get("investable", True):
+        return "uninvestable"
+    if not primary_outputs:
+        return "constrained"
+
+    flags = _warning_flags(raw_data, analysis, primary_outputs)
+    quality = primary_outputs.get("fundamental_quality") or 0.0
+    opportunity = primary_outputs.get("mispricing_signal") or 0.0
+    risk = primary_outputs.get("fragility_risk") or 100.0
+    confidence = primary_outputs.get("signal_confidence") or 0.0
+    severe_structure_break = "thin_liquidity" in flags and "concentration" in flags
+
+    if severe_structure_break or risk >= 75 or confidence < 35:
+        return "constrained"
+    if risk >= 58 or confidence < 50 or "thin_liquidity" in flags or "concentration" in flags:
+        return "speculative"
+    if quality >= 55 and opportunity >= 45 and risk <= 50 and confidence >= 55:
+        return "investable"
+    return "speculative"
+
+
 def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
     analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
     fallback_name = _override_name_map().get(row["netuid"])
     primary_outputs = analysis.get("primary_outputs") or raw_data.get("primary_outputs")
+    warning_flags = _warning_flags(raw_data, analysis, primary_outputs)
+    investability_status = _investability_status(row, analysis, primary_outputs)
     return SubnetSummaryResponse(
         netuid=row["netuid"],
         name=(meta.name if meta else None) or fallback_name,
@@ -239,6 +295,8 @@ def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse
         tao_in_pool=row.get("tao_in_pool"),
         market_cap_tao=row.get("market_cap_tao"),
         staking_apy=row.get("staking_apy"),
+        investability_status=investability_status,
+        warning_flags=warning_flags,
         label=raw_data.get("label"),
         thesis=raw_data.get("thesis"),
         analysis_preview={
@@ -431,6 +489,8 @@ async def get_subnet(
 
     analysis_payload = _normalize_analysis_payload((row.get("raw_data") or {}).get("analysis"))
     detail_primary_outputs = ((analysis_payload or {}).get("primary_outputs"))
+    warning_flags = _warning_flags(row.get("raw_data") or {}, analysis_payload, detail_primary_outputs)
+    investability_status = _investability_status(row, analysis_payload, detail_primary_outputs)
 
     result = SubnetDetailResponse(
         netuid=netuid,
@@ -455,6 +515,8 @@ async def get_subnet(
         market_cap_tao=row.get("market_cap_tao"),
         staking_apy=row.get("staking_apy"),
         score_delta_7d=score_delta_7d,
+        investability_status=investability_status,
+        warning_flags=warning_flags,
         label=(row.get("raw_data") or {}).get("label"),
         thesis=(row.get("raw_data") or {}).get("thesis"),
         analysis=analysis_payload,

@@ -246,15 +246,15 @@ export default function DiscoverWorkspace({
             <div className="eyebrow">How To Read The Table</div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
-                label="Strength"
+                label="Quality"
                 value="How strong is the subnet?"
-                meta="Higher means the network looks fundamentally healthier and more durable."
+                meta="Higher means participation, liquidity, and structure look healthier and more durable."
                 accent="quality"
               />
               <MetricCard
-                label="Upside Gap"
+                label="Opportunity"
                 value="How much upside is left?"
-                meta="Higher means the model still sees a larger gap between current pricing and fairer value."
+                meta="Higher means the model still sees a cleaner, less-crowded gap between current pricing and fairer value."
                 accent="mispricing"
               />
               <MetricCard
@@ -264,7 +264,7 @@ export default function DiscoverWorkspace({
                 accent="fragility"
               />
               <MetricCard
-                label="Evidence Quality"
+                label="Confidence"
                 value="How much should I trust the read?"
                 meta="Higher means the evidence base is cleaner, more complete, and easier to underwrite."
                 accent="confidence"
@@ -280,7 +280,7 @@ export default function DiscoverWorkspace({
             <div>
               <div className="section-title">Ranked subnets</div>
               <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
-                Click any column to sort. Hover a row to inspect why it ranks there and what the trust caveats are.
+                Score stays central, while quality, opportunity, risk, confidence, and investability make weak structures easier to spot fast.
               </p>
             </div>
             <div className="text-sm text-[color:var(--text-secondary)]">{rows.length} results</div>
@@ -289,13 +289,16 @@ export default function DiscoverWorkspace({
           {rows.length ? (
             <>
               <div className="hidden md:block">
-                <div className="grid grid-cols-[64px_minmax(0,1.35fr)_92px_110px_72px_126px] gap-4 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
+                <div className="grid grid-cols-[64px_minmax(0,1.3fr)_84px_78px_92px_72px_92px_116px_minmax(0,0.9fr)] gap-4 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.24em] text-[color:var(--text-tertiary)] sm:px-5">
                   <SortHeader label="Rank" active={sort === 'rank'} direction={direction} onClick={() => toggleSort('rank')} />
                   <div>Subnet</div>
-                  <SortHeader label="Strength" active={sort === 'quality'} direction={direction} align="right" onClick={() => toggleSort('quality')} />
-                  <SortHeader label="Upside Gap" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => toggleSort('mispricing')} />
+                  <div className="text-right">Score</div>
+                  <SortHeader label="Quality" active={sort === 'quality'} direction={direction} align="right" onClick={() => toggleSort('quality')} />
+                  <SortHeader label="Opportunity" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => toggleSort('mispricing')} />
                   <SortHeader label="Risk" active={sort === 'fragility'} direction={direction} align="right" onClick={() => toggleSort('fragility')} />
-                  <SortHeader label="Evidence Quality" active={sort === 'confidence'} direction={direction} align="right" onClick={() => toggleSort('confidence')} />
+                  <SortHeader label="Confidence" active={sort === 'confidence'} direction={direction} align="right" onClick={() => toggleSort('confidence')} />
+                  <div>Status</div>
+                  <div>Flags</div>
                 </div>
 
                 <div>
