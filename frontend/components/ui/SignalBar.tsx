@@ -28,7 +28,7 @@ export default function SignalBar({
           <div className={cn('text-[11px] font-medium uppercase text-[color:var(--text-tertiary)]', compact ? 'tracking-[0.22em]' : 'tracking-[0.28em]')}>
             {signal.label}
           </div>
-          {signal.invert ? <div className="mt-1 text-xs text-[color:var(--text-tertiary)]">Lower is better</div> : null}
+          {signal.invert ? <div className="mt-1 text-xs text-[color:var(--text-tertiary)]">Lower is safer</div> : null}
         </div>
         <div className="shrink-0 text-right text-base font-semibold text-[color:var(--text-primary)]">{label}</div>
       </div>

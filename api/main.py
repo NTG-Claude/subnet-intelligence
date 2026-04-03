@@ -348,17 +348,17 @@ def _setup_status(investability_status: str, primary_outputs: dict | None) -> st
 
 def _driver_phrase(name: str, *, negative: bool = False, uncertainty: bool = False) -> str:
     mapping = {
-        "fundamental_health": "operating quality is holding up",
-        "market_legitimacy": "market structure already treats the subnet as credible",
-        "structural_validity": "the current structure still looks investable",
-        "confidence_factor": "the evidence stack is internally coherent",
-        "thesis_confidence": "the broader setup hangs together without too many leaps",
-        "market_confidence": "market behavior is not fighting the setup",
-        "data_confidence": "data coverage is good enough for a usable read",
-        "base_opportunity": "part of the setup still looks under-recognized",
-        "opportunity_underreaction": "the market still appears to underreact to the setup",
-        "quality_acceleration": "quality is still improving rather than merely holding flat",
-        "fragility": "stress behavior remains manageable",
+        "fundamental_health": "operating quality is improving and holding up",
+        "market_legitimacy": "the market already treats the subnet as credible",
+        "structural_validity": "the structure still looks investable",
+        "confidence_factor": "the main inputs point in the same direction",
+        "thesis_confidence": "the broader case hangs together without too many assumptions",
+        "market_confidence": "price action is not fighting the case",
+        "data_confidence": "inputs are clean enough for a usable read",
+        "base_opportunity": "part of the setup still looks underpriced",
+        "opportunity_underreaction": "price still looks slow to reflect the setup",
+        "quality_acceleration": "quality is still improving",
+        "fragility": "modeled downside is still controlled",
         "reserve_change": "reserve growth is not yet producing a stronger market response",
         "liquidity_improvement_rate": "liquidity is not improving quickly enough",
         "reserve_growth_without_price": "fundamental progress is not showing up clearly in price",
@@ -375,7 +375,7 @@ def _driver_phrase(name: str, *, negative: bool = False, uncertainty: bool = Fal
     }
     phrase = mapping.get(name)
     if not phrase:
-        phrase = name.replace("_", " ").strip() if name else "the current setup is still incomplete"
+        phrase = name.replace("_", " ").strip() if name else "the setup is still incomplete"
     if uncertainty:
         return phrase
     if negative:
@@ -437,51 +437,49 @@ def _build_research_summary(
     fragility_class = (analysis or {}).get("fragility_class")
 
     if not primary_outputs:
-        setup_read = "The current setup is still provisional because the latest primary outputs are missing."
-        why_now = "Research attention is driven more by incomplete visibility than by a confirmed live setup."
+        setup_read = "Fresh scored outputs are missing, so the setup is still provisional."
+        why_now = "This page is on watch because the latest run is incomplete, not because the case is confirmed."
     else:
         quality = primary_outputs.get("fundamental_quality") or 0.0
         opportunity = primary_outputs.get("mispricing_signal") or 0.0
         risk = primary_outputs.get("fragility_risk") or 100.0
         confidence = primary_outputs.get("signal_confidence") or 0.0
         if setup_status == "strong_setup":
-            setup_read = "The current setup is strong: quality, opportunity, and evidence all clear a usable threshold without fragility dominating."
+            setup_read = "Quality, upside, and trust all clear the bar, and downside is still controlled."
         elif setup_status == "improving_setup":
-            setup_read = "The current setup is improving: the case is taking shape, but one or two signals still need follow-through."
+            setup_read = "Quality is improving, but the case still needs cleaner confirmation."
         elif setup_status == "fragile_setup":
-            setup_read = "The current setup is fragile: some attractive signals are present, but the downside or evidence profile can still overturn the read."
+            setup_read = "There is something to work with, but weak trust or high stress can still break the case."
         else:
-            setup_read = "The current setup is not investable on present evidence because fragility, weak confidence, or missing outputs still dominate."
+            setup_read = "On current evidence, the case is not investable."
 
         why_now = (
-            f"Why now: {primary_positive}."
+            f"{primary_positive.capitalize()}."
             if primary_positive
-            else "Why now: the setup remains on watch because its current score still reflects a live but incomplete signal mix."
+            else "The latest run still shows something worth tracking, but not enough for a firm call."
         )
         if opportunity >= 60 and confidence >= 50:
-            why_now += " The current rerating gap still looks wider than average."
+            why_now += " Price still looks slow to reflect the setup."
         elif quality >= 65 and risk <= 45:
-            why_now += " Quality is doing enough work to keep the setup relevant even without a deep discount."
+            why_now += " Operating quality is stronger than price and stress imply."
 
     if primary_negative:
-        main_constraint = f"The main constraint is that {primary_negative}."
+        main_constraint = f"{primary_negative.capitalize()}."
     elif "thin_liquidity" in warning_flags:
-        main_constraint = "The main constraint is that liquidity is still too thin for the rest of the setup to carry the case cleanly."
+        main_constraint = "Liquidity is still too thin for larger flows."
     elif lead_uncertainty:
-        main_constraint = f"The main constraint is that {lead_uncertainty}."
+        main_constraint = f"{lead_uncertainty.capitalize()}."
     else:
-        main_constraint = "The main constraint is that the current setup still needs cleaner confirmation."
+        main_constraint = "The current evidence is not strong enough for a firmer call."
 
     if thesis_breakers:
         break_condition = thesis_breakers[0]
     elif stress_drawdown is not None:
-        break_condition = (
-            f"The setup breaks if stress behavior reasserts itself; the current modeled drawdown is about {stress_drawdown:.1f}%"
-        )
+        break_condition = f"The setup breaks if modeled drawdown pushes materially beyond {stress_drawdown:.1f}%."
     elif fragility_class:
-        break_condition = f"The setup breaks if the current {fragility_class} profile worsens or broadens."
+        break_condition = f"The setup breaks if the current {fragility_class} risk profile worsens."
     else:
-        break_condition = "The setup breaks if the current positive drivers stop improving or the evidence layer weakens further."
+        break_condition = "The setup breaks if current support in price, usage, or evidence fades."
 
     return ResearchSummaryResponse(
         setup_status=setup_status,
