@@ -56,6 +56,7 @@ from scorer.database import (
     get_score_history,
     get_top_subnets,
 )
+from scorer.coingecko_client import get_tao_price_usd
 from backtests.engine import build_backtest_summary
 
 logger = logging.getLogger(__name__)
@@ -1053,6 +1054,8 @@ async def market_overview(
     current_market_cap = points[-1].total_market_cap_tao if points else 0.0
     current_count = points[-1].subnet_count if points else 0
     previous_market_cap = points[-2].total_market_cap_tao if len(points) > 1 else None
+    tao_price_usd = await get_tao_price_usd()
+    current_market_cap_usd = current_market_cap * tao_price_usd if tao_price_usd is not None else None
     change_pct = (
         round(((current_market_cap - previous_market_cap) / previous_market_cap) * 100, 2)
         if previous_market_cap and previous_market_cap > 0
@@ -1061,6 +1064,8 @@ async def market_overview(
 
     result = MarketOverviewResponse(
         current_market_cap_tao=current_market_cap,
+        current_market_cap_usd=current_market_cap_usd,
+        tao_price_usd=tao_price_usd,
         change_pct_vs_previous_run=change_pct,
         current_subnet_count=current_count,
         points=points,
