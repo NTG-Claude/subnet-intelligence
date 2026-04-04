@@ -158,6 +158,7 @@ export interface IndicatorRowViewModel {
 export interface IndicatorCategoryViewModel {
   key: 'quality' | 'opportunity' | 'risk' | 'confidence'
   title: 'Quality' | 'Opportunity' | 'Risk' | 'Confidence'
+  displayScore: number | null
   desirabilityScore: number | null
   sentiment: IndicatorSentiment
   helperText?: string
@@ -1986,7 +1987,8 @@ function buildIndicatorStack(
   const qualitySignal = normalizeCompositeScore(outputs?.fundamental_quality)
   const opportunitySignal = normalizeCompositeScore(outputs?.mispricing_signal)
   const confidenceSignal = normalizeCompositeScore(outputs?.signal_confidence)
-  const safetySignal = outputs?.fragility_risk != null ? 100 - normalizeCompositeScore(outputs.fragility_risk)! : null
+  const rawRiskSignal = normalizeCompositeScore(outputs?.fragility_risk)
+  const safetySignal = rawRiskSignal != null ? 100 - rawRiskSignal : null
   const drawdownSafety =
     analysis?.stress_drawdown != null ? Math.max(0, Math.min(100, 100 - analysis.stress_drawdown * 2.2)) : null
   const scoreMomentum = scaledDeltaScore(subnet.score_delta_7d)
@@ -2092,6 +2094,7 @@ function buildIndicatorStack(
   const quality: IndicatorCategoryViewModel = {
     key: 'quality',
     title: 'Quality',
+    displayScore: qualitySignal,
     desirabilityScore: averageDefined([participationHealth, validatorHealth, liquidityHealth, marketRelevance, marketLegitimacy]),
     sentiment: sentimentFromDesirability(averageDefined([participationHealth, validatorHealth, liquidityHealth, marketRelevance, marketLegitimacy])),
     helperText: 'Core operating quality and market legitimacy.',
@@ -2137,6 +2140,7 @@ function buildIndicatorStack(
   const opportunity: IndicatorCategoryViewModel = {
     key: 'opportunity',
     title: 'Opportunity',
+    displayScore: opportunitySignal,
     desirabilityScore: averageDefined([qualityMomentum, reserveMomentum, priceLag, fairValueGapLight, uncrowdedParticipation]),
     sentiment: sentimentFromDesirability(averageDefined([qualityMomentum, reserveMomentum, priceLag, fairValueGapLight, uncrowdedParticipation])),
     helperText: 'Where upside remains after quality, participation, and current pricing are considered.',
@@ -2182,6 +2186,7 @@ function buildIndicatorStack(
   const risk: IndicatorCategoryViewModel = {
     key: 'risk',
     title: 'Risk',
+    displayScore: rawRiskSignal,
     desirabilityScore: averageDefined([crowdingLevel, concentrationRisk, thinLiquidityRisk, reversalRisk, weakMarketStructure]),
     sentiment: sentimentFromDesirability(averageDefined([crowdingLevel, concentrationRisk, thinLiquidityRisk, reversalRisk, weakMarketStructure])),
     helperText: 'All risk rows are inverted into desirability, so higher still means better for the investment thesis.',
@@ -2227,6 +2232,7 @@ function buildIndicatorStack(
   const confidenceBucket: IndicatorCategoryViewModel = {
     key: 'confidence',
     title: 'Confidence',
+    displayScore: confidenceSignal,
     desirabilityScore: averageDefined([dataConfidenceScore, marketConfidenceScore, thesisConfidenceScore, evidenceDepth, evidenceFloor]),
     sentiment: sentimentFromDesirability(averageDefined([dataConfidenceScore, marketConfidenceScore, thesisConfidenceScore, evidenceDepth, evidenceFloor])),
     helperText: 'Confidence measures how much of the thesis can actually be trusted today.',
