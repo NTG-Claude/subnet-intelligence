@@ -236,25 +236,6 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
             </div>
           </div>
 
-          <div>
-            <div className="section-title">Reference Data</div>
-            <div className="mt-3">
-              <DiagnosticGrid items={memo.rawContext} empty="No reference data is available." />
-            </div>
-          </div>
-
-          {memo.links.length ? (
-            <div>
-              <div className="section-title">External Links</div>
-              <div className="mt-3 flex flex-wrap gap-3">
-                {memo.links.map((link) => (
-                  <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="button-secondary">
-                    {link.label}
-                  </a>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       </CollapsibleSection>
     </div>
