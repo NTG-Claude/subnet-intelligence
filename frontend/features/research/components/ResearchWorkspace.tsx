@@ -84,9 +84,11 @@ function ExplanationList({
 function DiagnosticGrid({
   items,
   empty,
+  showMeta = true,
 }: {
   items: MemoSectionItem[]
   empty: string
+  showMeta?: boolean
 }) {
   if (!items.length) {
     return <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{empty}</p>
@@ -98,7 +100,7 @@ function DiagnosticGrid({
         <div key={`${item.title}-${index}`} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
           <div className="eyebrow">{item.title}</div>
           <p className="mt-1.5 text-sm leading-5 text-[color:var(--text-secondary)]">{item.body}</p>
-          {item.meta ? <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">{item.meta}</p> : null}
+          {showMeta && item.meta ? <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">{item.meta}</p> : null}
         </div>
       ))}
     </div>
@@ -121,17 +123,31 @@ function DetailList({
       <div className="section-title">{title}</div>
       {intro ? <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{intro}</p> : null}
       <div className="mt-4">
-        <DiagnosticGrid items={items} empty={empty} />
+        <DiagnosticGrid items={items} empty={empty} showMeta={false} />
       </div>
     </section>
   )
+}
+
+function cleanVisibleText(text: string | undefined | null): string {
+  const value = (text ?? '').trim()
+  if (!value) return ''
+
+  return value
+    .replace(/\bEvidence penalty\.\s*/gi, '')
+    .replace(/\bConfidence drag\.\s*/gi, '')
+    .replace(/\bValuation gap\.\s*/gi, '')
+    .replace(/\bInput quality\.\s*/gi, '')
+    .replace(/\bThesis coherence\.\s*/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function uniqueSectionItems(items: MemoSectionItem[]): MemoSectionItem[] {
   const seen = new Set<string>()
 
   return items.filter((item) => {
-    const key = `${item.title}::${item.body}`
+    const key = `${cleanVisibleText(item.title).toLowerCase()}::${cleanVisibleText(item.body).toLowerCase()}`
     if (seen.has(key)) return false
     seen.add(key)
     return true
@@ -145,7 +161,7 @@ export default function ResearchWorkspace({
   memo: DetailMemoViewModel
   netuid: number
 }) {
-  const verdict = memo.headerSubtitle || memo.researchSummary.setupRead
+  const verdict = cleanVisibleText(memo.headerSubtitle || memo.researchSummary.setupRead)
   const strongestSupport = memo.anchorInsights.find((item) => item.label === 'Strongest support')?.value ?? 'No clear support stands out yet.'
   const mainLimiter = memo.anchorInsights.find((item) => item.label === 'Main thing capping the score')?.value ?? 'No single limitation dominates yet.'
   const trustSummary = memo.evidenceItems[0]?.body ?? 'Trust details are not available yet.'
@@ -156,9 +172,14 @@ export default function ResearchWorkspace({
 
   const riskItems = uniqueSectionItems([
     ...memo.topDrags.map((item) => ({ title: item.title, body: item.body, tone: item.tone })),
-    ...memo.breaks,
+    ...memo.breaks.filter((item) => item.title === 'Thesis breaker'),
     ...memo.uncertainties,
-  ])
+  ]).map((item) => ({
+    ...item,
+    title: cleanVisibleText(item.title),
+    body: cleanVisibleText(item.body),
+    meta: undefined,
+  }))
   const primarySupports = memo.topSupports.slice(0, 2)
   const extraSupports = memo.topSupports.slice(2)
   const primaryRisks = riskItems.slice(0, 4)
@@ -239,7 +260,7 @@ export default function ResearchWorkspace({
 
       <DetailList
         title="What could break the case"
-        intro={`${memo.researchSummary.mainConstraint} ${memo.researchSummary.breakCondition}`}
+        intro={cleanVisibleText(`${memo.researchSummary.mainConstraint} ${memo.researchSummary.breakCondition}`)}
         items={primaryRisks}
         empty="No single risk dominates yet."
       />
