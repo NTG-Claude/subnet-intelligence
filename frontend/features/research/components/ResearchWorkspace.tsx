@@ -20,12 +20,7 @@ function InsightGrid({
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {items.map((item) => (
           <div key={item.label} className="border-b border-[color:var(--border-subtle)] pb-4 last:border-b-0 last:pb-0">
-            <div className="flex items-start justify-between gap-3">
-              <div className="eyebrow">{item.label}</div>
-              <span className={cn('text-sm font-medium', item.tone ? toneClass(item.tone) : 'text-[color:var(--text-secondary)]', 'rounded-full border px-2.5 py-1')}>
-                {item.value}
-              </span>
-            </div>
+            <div className="eyebrow">{item.label}</div>
             <p className="mt-2 max-w-[54ch] text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
           </div>
         ))}
@@ -48,10 +43,7 @@ function ScoreList({
         {items.length ? (
           items.map((item) => (
             <div key={`${title}-${item.title}`} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
-                {item.value ? <StatusChip tone={item.tone}>{item.value}</StatusChip> : null}
-              </div>
+              <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
               <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
             </div>
           ))
