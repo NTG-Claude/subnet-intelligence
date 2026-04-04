@@ -193,7 +193,9 @@ export default function PrimarySignalsTrend({
     if (cached?.length) return cached
     return initialPoints ? toTrendPoints(initialPoints) : []
   })
-  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>(points.length ? 'ready' : 'loading')
+  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>(
+    initialPoints !== null ? 'ready' : points.length ? 'ready' : 'loading',
+  )
   const [activeSeries, setActiveSeries] = useState<Record<SeriesKey, boolean>>({
     score: true,
     quality: true,
@@ -204,9 +206,11 @@ export default function PrimarySignalsTrend({
   const [timeframe, setTimeframe] = useState<TimeframeId>('30d')
 
   useEffect(() => {
-    if (initialPoints?.length) {
+    if (initialPoints !== null) {
       const next = toTrendPoints(initialPoints)
-      rememberSignalHistory(netuid, next)
+      if (next.length) {
+        rememberSignalHistory(netuid, next)
+      }
       setPoints(next)
       setStatus('ready')
       return
