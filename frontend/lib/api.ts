@@ -252,6 +252,8 @@ export interface MarketOverviewPoint {
 
 export interface MarketOverviewData {
   current_market_cap_tao: number
+  current_market_cap_usd: number | null
+  tao_price_usd: number | null
   change_pct_vs_previous_run: number | null
   current_subnet_count: number
   points: MarketOverviewPoint[]

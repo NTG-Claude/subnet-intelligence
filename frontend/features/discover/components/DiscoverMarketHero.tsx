@@ -1,14 +1,33 @@
 'use client'
 
+import { ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { MarketOverviewData } from '@/lib/api'
 import { cn, formatCompactNumber } from '@/lib/formatting'
 
 function formatMarketCap(value: number): string {
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B tao`
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M tao`
-  return `${formatCompactNumber(value, 0)} tao`
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B TAO`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M TAO`
+  return `${formatCompactNumber(value, 0)} TAO`
+}
+
+function formatUsdMarketCap(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    notation: value >= 1_000_000 ? 'compact' : 'standard',
+    maximumFractionDigits: value >= 1_000_000 ? 2 : 0,
+  }).format(value)
+}
+
+function formatUsdPrice(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: value >= 100 ? 0 : 2,
+    maximumFractionDigits: value >= 100 ? 2 : 4,
+  }).format(value)
 }
 
 function formatAxisDate(value: string): string {
@@ -44,14 +63,31 @@ function MarketTooltip({
   )
 }
 
+function BittensorMonogram() {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className="h-7 w-7">
+      <circle cx="24" cy="24" r="24" fill="#F5F7FA" />
+      <path
+        d="M16 12h10.5c5.25 0 8.5 2.76 8.5 7.1 0 2.81-1.52 4.92-4.14 5.86 3.14.75 4.89 3.01 4.89 6.24 0 4.71-3.56 7.8-9.15 7.8H16V12Zm9.72 10.14c2.49 0 4.02-1.19 4.02-3.15 0-1.93-1.53-3.08-4.02-3.08h-4.44v6.23h4.44Zm.53 12.01c2.85 0 4.53-1.28 4.53-3.49 0-2.21-1.68-3.45-4.53-3.45h-4.97v6.94h4.97Z"
+        fill="#101820"
+      />
+    </svg>
+  )
+}
+
 export default function DiscoverMarketHero({
   market,
   lastRun,
+  timeframe,
+  timeframeControl,
 }: {
   market: MarketOverviewData
   lastRun: string | null
+  timeframe: string
+  timeframeControl?: ReactNode
 }) {
   const latestValue = market.current_market_cap_tao
+  const latestValueUsd = market.current_market_cap_usd
   const change = market.change_pct_vs_previous_run
   const positive = (change ?? 0) >= 0
   const hasHistory = market.points.length > 1
@@ -63,8 +99,8 @@ export default function DiscoverMarketHero({
           <div>
             <p className="eyebrow">Subnet Intelligence</p>
             <div className="mt-5 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[color:rgba(245,247,250,0.96)] text-lg font-semibold text-[#101820]">
-                S
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[color:rgba(245,247,250,0.96)]">
+                <BittensorMonogram />
               </div>
               <div>
                 <div className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)]">Subnet Market</div>
@@ -74,7 +110,7 @@ export default function DiscoverMarketHero({
 
             <div className="mt-8 flex flex-wrap items-end gap-4">
               <div className="text-5xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-6xl">
-                {formatMarketCap(latestValue)}
+                {latestValueUsd != null ? formatUsdMarketCap(latestValueUsd) : formatMarketCap(latestValue)}
               </div>
               {change != null ? (
                 <div
@@ -89,6 +125,10 @@ export default function DiscoverMarketHero({
                   {change.toFixed(2)}%
                 </div>
               ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[color:var(--text-secondary)]">
+              <span>{formatMarketCap(latestValue)}</span>
+              {market.tao_price_usd != null ? <span>{formatUsdPrice(market.tao_price_usd)} / TAO</span> : null}
             </div>
           </div>
 
@@ -108,42 +148,51 @@ export default function DiscoverMarketHero({
 
         <div className="relative min-h-[340px] border-t border-[color:var(--border-subtle)] xl:min-h-[460px] xl:border-l xl:border-t-0">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(0,236,214,0.14),_transparent_42%),linear-gradient(180deg,rgba(10,16,20,0.3),rgba(10,16,20,0))]" />
-          <div className="relative h-full p-4 sm:p-6">
+          <div className="relative flex h-full flex-col p-4 sm:p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="eyebrow">Market cap history</div>
+                <div className="mt-1 text-sm text-[color:var(--text-secondary)]">Timeframe: {timeframe === 'max' ? 'Max' : timeframe.toUpperCase()}</div>
+              </div>
+              {timeframeControl}
+            </div>
             {hasHistory ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={market.points} margin={{ top: 12, right: 8, left: 0, bottom: 4 }}>
-                  <defs>
-                    <linearGradient id="marketHeroFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#00e6d6" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#00e6d6" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(138, 163, 184, 0.12)" vertical={false} />
-                  <XAxis
-                    dataKey="computed_at"
-                    tickFormatter={formatAxisDate}
-                    minTickGap={28}
-                    stroke="rgba(138, 163, 184, 0.45)"
-                    tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
-                  />
-                  <YAxis
-                    tickFormatter={formatMarketCap}
-                    width={78}
-                    stroke="rgba(138, 163, 184, 0.45)"
-                    tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
-                  />
-                  <Tooltip content={<MarketTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="total_market_cap_tao"
-                    stroke="#00e6d6"
-                    strokeWidth={2}
-                    fill="url(#marketHeroFill)"
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="min-h-0 flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={market.points} margin={{ top: 12, right: 8, left: 0, bottom: 4 }}>
+                    <defs>
+                      <linearGradient id="marketHeroFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#00e6d6" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="#00e6d6" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="rgba(138, 163, 184, 0.12)" vertical={false} />
+                    <XAxis
+                      dataKey="computed_at"
+                      tickFormatter={formatAxisDate}
+                      minTickGap={28}
+                      stroke="rgba(138, 163, 184, 0.45)"
+                      tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+                    />
+                    <YAxis
+                      tickFormatter={formatMarketCap}
+                      width={78}
+                      stroke="rgba(138, 163, 184, 0.45)"
+                      tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+                    />
+                    <Tooltip content={<MarketTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="total_market_cap_tao"
+                      stroke="#00e6d6"
+                      strokeWidth={2}
+                      fill="url(#marketHeroFill)"
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
               <div className="flex h-full items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.42)] px-6 text-center">
                 <div>

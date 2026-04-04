@@ -123,6 +123,8 @@ class MarketOverviewPoint(BaseModel):
 
 class MarketOverviewResponse(BaseModel):
     current_market_cap_tao: float
+    current_market_cap_usd: Optional[float] = None
+    tao_price_usd: Optional[float] = None
     change_pct_vs_previous_run: Optional[float] = None
     current_subnet_count: int
     points: list[MarketOverviewPoint]

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 
 import MetricCard from '@/components/ui/MetricCard'
+import SegmentedControl from '@/components/ui/SegmentedControl'
 import { CompareSeriesData, fetchCompareTimeseries, MarketOverviewData, SubnetSummary } from '@/lib/api'
 import { UniverseRowViewModel, UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
 
@@ -13,6 +14,7 @@ import DiscoverMarketHero from './DiscoverMarketHero'
 import SidePreviewPanel from './SidePreviewPanel'
 
 type SortDirection = 'asc' | 'desc'
+type MarketTimeframeId = '7d' | '30d' | '90d' | '180d' | 'max'
 type MetricDeltaWindow = '1d' | '7d' | '30d'
 type MetricDelta = { value: number | null; hasHistory: boolean }
 type PreviewMetricDeltas = {
@@ -29,6 +31,14 @@ const TIMESERIES_CACHE_TTL_MS = 5 * 60 * 1000
 let cachedTimeseries: CompareSeriesData | null = null
 let cachedTimeseriesFetchedAt = 0
 let cachedTimeseriesPromise: Promise<CompareSeriesData> | null = null
+
+const MARKET_TIMEFRAME_ITEMS = [
+  { id: '7d', label: '7D' },
+  { id: '30d', label: '30D' },
+  { id: '90d', label: '90D' },
+  { id: '180d', label: '180D' },
+  { id: 'max', label: 'MAX' },
+] as const
 
 function hasFreshCachedTimeseries(now = Date.now()): boolean {
   return Boolean(cachedTimeseries && now - cachedTimeseriesFetchedAt < TIMESERIES_CACHE_TTL_MS)
@@ -247,6 +257,7 @@ export default function DiscoverWorkspace({
   lastRun,
   market,
   initialTimeseries,
+  initialMarketTimeframe,
   initialSearch,
   initialSort,
   initialDirection,
@@ -256,6 +267,7 @@ export default function DiscoverWorkspace({
   lastRun: string | null
   market: MarketOverviewData
   initialTimeseries: CompareSeriesData | null
+  initialMarketTimeframe: MarketTimeframeId
   initialSearch: string
   initialSort: string
   initialDirection: string
@@ -268,6 +280,7 @@ export default function DiscoverWorkspace({
   const [search, setSearch] = useState(initialSearch)
   const [sort, setSort] = useState<UniverseSortId>((initialSort as UniverseSortId) ?? 'rank')
   const [direction, setDirection] = useState<SortDirection>((initialDirection as SortDirection) ?? 'asc')
+  const [marketTimeframe, setMarketTimeframe] = useState<MarketTimeframeId>(initialMarketTimeframe)
   const [compareIds, setCompareIds] = useState<number[]>(parseIds(initialCompareIds))
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const [pinnedId, setPinnedId] = useState<number | null>(null)
@@ -281,10 +294,11 @@ export default function DiscoverWorkspace({
     if (search.trim()) params.set('q', search.trim())
     if (sort !== 'rank') params.set('sort', sort)
     if (direction !== 'asc') params.set('dir', direction)
+    if (marketTimeframe !== 'max') params.set('tf', marketTimeframe)
     if (compareIds.length) params.set('ids', compareIds.join(','))
     const next = params.toString()
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
-  }, [compareIds, direction, pathname, router, search, sort])
+  }, [compareIds, direction, marketTimeframe, pathname, router, search, sort])
 
   useEffect(() => {
     const previewId = pinnedId ?? focusedId
@@ -433,7 +447,18 @@ export default function DiscoverWorkspace({
 
   return (
     <div className="space-y-6 pb-28">
-      <DiscoverMarketHero market={market} lastRun={lastRun} />
+      <DiscoverMarketHero
+        market={market}
+        lastRun={lastRun}
+        timeframe={marketTimeframe}
+        timeframeControl={
+          <SegmentedControl
+            items={[...MARKET_TIMEFRAME_ITEMS]}
+            value={marketTimeframe}
+            onChange={(value) => setMarketTimeframe(value as MarketTimeframeId)}
+          />
+        }
+      />
 
       <section className="surface-panel p-4 sm:p-5">
         <div className="space-y-5">
