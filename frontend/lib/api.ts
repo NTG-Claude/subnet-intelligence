@@ -2,7 +2,6 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 type ApiFetchOptions = {
   revalidate?: number
-  cache?: RequestCache
 }
 
 const DEFAULT_REVALIDATE_SECONDS = 600
@@ -276,19 +275,11 @@ export interface MarketOverviewData {
 }
 
 async function get<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const { revalidate = DEFAULT_REVALIDATE_SECONDS, cache } = options
+  const { revalidate = DEFAULT_REVALIDATE_SECONDS } = options
   const init: RequestInit & { next?: { revalidate: number } } = {}
 
-  if (cache) {
-    init.cache = cache
-  }
-
   if (typeof window === 'undefined') {
-    if (cache === 'no-store') {
-      init.cache = 'no-store'
-    } else {
-      init.next = { revalidate }
-    }
+    init.next = { revalidate }
   }
 
   const res = await fetch(`${API}${path}`, init)
@@ -330,5 +321,5 @@ export const fetchSubnetSignalHistory = (netuid: number, days = 120) =>
 
 export const fetchMarketOverview = (days = 90) =>
   get<MarketOverviewData>(`/api/v1/market/overview?days=${days}`, {
-    cache: 'no-store',
+    revalidate: DEFAULT_REVALIDATE_SECONDS,
   })
