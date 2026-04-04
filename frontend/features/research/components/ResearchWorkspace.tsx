@@ -4,6 +4,7 @@ import CollapsibleSection from '@/components/ui/CollapsibleSection'
 import SignalBar from '@/components/ui/SignalBar'
 import StatusChip from '@/components/ui/StatusChip'
 import { DetailMemoViewModel, MemoInsightItem, MemoSectionItem, ScoreExplanationItem } from '@/lib/view-models/research'
+import PrimarySignalsTrend from './PrimarySignalsTrend'
 
 function InsightGrid({
   title,
@@ -77,7 +78,20 @@ function DiagnosticGrid({
   )
 }
 
-export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel }) {
+export default function ResearchWorkspace({
+  memo,
+  signalTrend,
+}: {
+  memo: DetailMemoViewModel
+  signalTrend: {
+    computed_at: string
+    score: number
+    quality: number | null
+    opportunity: number | null
+    risk: number | null
+    confidence: number | null
+  }[]
+}) {
   return (
     <div className="space-y-6 pb-12">
       <Link href="/" className="button-secondary">
@@ -158,13 +172,14 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
       <section className="surface-panel p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
           <div className="section-title">Primary Signals</div>
-          <div className="eyebrow">Higher is better, except downside</div>
+          <div className="eyebrow">Higher is better, except risk</div>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {memo.signals.map((signal) => (
             <SignalBar key={signal.key} signal={signal} />
           ))}
         </div>
+        <PrimarySignalsTrend points={signalTrend} />
       </section>
 
       <section className="surface-panel p-5 sm:p-6">

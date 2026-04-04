@@ -1,0 +1,125 @@
+'use client'
+
+import { Line, LineChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+
+type TrendPoint = {
+  computed_at: string
+  score: number
+  quality: number | null
+  opportunity: number | null
+  risk: number | null
+  confidence: number | null
+}
+
+const SERIES = [
+  { key: 'score', label: 'Score', color: '#7db8ff', strokeWidth: 2.6 },
+  { key: 'quality', label: 'Quality', color: '#58d68d', strokeWidth: 2.2 },
+  { key: 'opportunity', label: 'Opportunity', color: '#ffb347', strokeWidth: 2.2 },
+  { key: 'risk', label: 'Risk', color: '#ff5ca8', strokeWidth: 2.2 },
+  { key: 'confidence', label: 'Confidence', color: '#bd93ff', strokeWidth: 2.2 },
+] as const
+
+function formatAxisDate(value: string): string {
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value))
+}
+
+function formatTooltipDate(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function TrendTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: Array<{ dataKey?: string; value?: number; color?: string; name?: string }>
+  label?: string
+}) {
+  if (!active || !payload?.length || !label) return null
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(7,14,20,0.96)] p-3 shadow-2xl">
+      <div className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{formatTooltipDate(label)}</div>
+      <div className="mt-2 space-y-1.5">
+        {payload.map((entry) =>
+          typeof entry.value === 'number' ? (
+            <div key={entry.dataKey} className="flex items-center justify-between gap-4 text-sm">
+              <div className="flex items-center gap-2 text-[color:var(--text-secondary)]">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                <span>{entry.name}</span>
+              </div>
+              <span className="font-medium text-[color:var(--text-primary)]">{entry.value.toFixed(1)}</span>
+            </div>
+          ) : null,
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function PrimarySignalsTrend({ points }: { points: TrendPoint[] }) {
+  if (points.length < 2) {
+    return (
+      <div className="mt-5 rounded-[var(--radius-lg)] border border-dashed border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.42)] px-6 py-8 text-center">
+        <div className="text-sm font-medium text-[color:var(--text-primary)]">Signal history is not available yet</div>
+        <div className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">
+          This chart appears once there are enough completed runs to show how score, quality, opportunity, risk, and confidence are changing over time.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-5 rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.52)] p-4 sm:p-5">
+      <div className="flex flex-wrap gap-4 text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">
+        {SERIES.map((series) => (
+          <div key={series.key} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
+            <span>{series.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 h-[280px] sm:h-[340px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={points} margin={{ top: 10, right: 8, left: 0, bottom: 6 }}>
+            <CartesianGrid stroke="rgba(138, 163, 184, 0.14)" vertical={false} />
+            <XAxis
+              dataKey="computed_at"
+              tickFormatter={formatAxisDate}
+              minTickGap={28}
+              stroke="rgba(138, 163, 184, 0.45)"
+              tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+            />
+            <YAxis
+              domain={[0, 100]}
+              width={40}
+              stroke="rgba(138, 163, 184, 0.45)"
+              tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+            />
+            <Tooltip content={<TrendTooltip />} />
+            {SERIES.map((series) => (
+              <Line
+                key={series.key}
+                type="monotone"
+                dataKey={series.key}
+                name={series.label}
+                stroke={series.color}
+                strokeWidth={series.strokeWidth}
+                dot={false}
+                connectNulls
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
