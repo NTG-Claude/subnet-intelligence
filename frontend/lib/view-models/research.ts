@@ -171,6 +171,16 @@ export interface DetailMemoViewModel {
   rawContext: MemoSectionItem[]
   links: { label: string; href: string }[]
   awaitingRun: boolean
+  scoreBreakdown?: {
+    capital: number | null
+    activity: number | null
+    efficiency: number | null
+    health: number | null
+    dev: number | null
+  }
+  stressDrawdown?: number | null
+  droppedInputs?: number
+  rebuiltInputs?: number
 }
 
 function numericValues(subnets: SubnetSummary[], pick: (subnet: SubnetSummary) => number): number[] {
@@ -2006,5 +2016,17 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
       ...(subnet.metadata?.website ? [{ label: 'Website', href: subnet.metadata.website }] : []),
     ],
     awaitingRun: !outputs,
+    scoreBreakdown: subnet.breakdown
+      ? {
+          capital: subnet.breakdown.capital_score,
+          activity: subnet.breakdown.activity_score,
+          efficiency: subnet.breakdown.efficiency_score,
+          health: subnet.breakdown.health_score,
+          dev: subnet.breakdown.dev_score,
+        }
+      : undefined,
+    stressDrawdown: analysis?.stress_drawdown ?? null,
+    droppedInputs: visibilityCount(conditioning, 'discarded'),
+    rebuiltInputs: visibilityCount(conditioning, 'reconstructed'),
   }
 }

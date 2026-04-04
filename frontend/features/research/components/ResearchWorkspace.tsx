@@ -3,7 +3,7 @@ import Link from 'next/link'
 import CollapsibleSection from '@/components/ui/CollapsibleSection'
 import SignalBar from '@/components/ui/SignalBar'
 import StatusChip from '@/components/ui/StatusChip'
-import { DetailMemoViewModel, MemoInsightItem, MemoSectionItem, ScoreExplanationItem } from '@/lib/view-models/research'
+import { DetailMemoViewModel, MemoInsightItem, MemoSectionItem, ScoreExplanationItem, SignalStat } from '@/lib/view-models/research'
 import PrimarySignalsTrend from './PrimarySignalsTrend'
 
 function CompactStat({
@@ -154,6 +154,141 @@ function uniqueSectionItems(items: MemoSectionItem[]): MemoSectionItem[] {
   })
 }
 
+function signalValue(signals: SignalStat[], label: string): number | null {
+  return signals.find((signal) => signal.label === label)?.value ?? null
+}
+
+function formatSignalValue(value: number | null): string {
+  return value == null ? 'n/a' : value.toFixed(1)
+}
+
+function formatWhole(value: number | null | undefined): string {
+  return value == null ? 'n/a' : value.toFixed(0)
+}
+
+function countFromItem(items: MemoSectionItem[], title: string): number {
+  const raw = items.find((item) => item.title === title)?.body
+  const parsed = raw ? Number(raw) : NaN
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function buildHeroVerdict(memo: DetailMemoViewModel): string {
+  const quality = signalValue(memo.signals, 'Quality')
+  const opportunity = signalValue(memo.signals, 'Opportunity')
+  const risk = signalValue(memo.signals, 'Risk')
+  const confidence = signalValue(memo.signals, 'Confidence')
+  const breakdown = memo.scoreBreakdown
+
+  if ([quality, opportunity, risk, confidence].every((value) => value == null)) {
+    return 'This subnet is still waiting on a clean run, so the rank is provisional.'
+  }
+
+  const positives: string[] = []
+  const limits: string[] = []
+
+  if (quality != null) {
+    if (quality >= 65 && breakdown) {
+      const reasons = [
+        breakdown.activity != null && breakdown.activity >= 60 ? `activity (${formatWhole(breakdown.activity)})` : '',
+        breakdown.health != null && breakdown.health >= 60 ? `health (${formatWhole(breakdown.health)})` : '',
+        breakdown.dev != null && breakdown.dev >= 60 ? `dev activity (${formatWhole(breakdown.dev)})` : '',
+        breakdown.efficiency != null && breakdown.efficiency >= 60 ? `efficiency (${formatWhole(breakdown.efficiency)})` : '',
+      ].filter(Boolean)
+      if (reasons.length) positives.push(`The rank gets support from real operating quality: ${reasons.join(', ')} are all holding up.`)
+    } else if (quality < 55) {
+      limits.push(`Quality is weak enough that the subnet is not doing enough on fundamentals to earn a higher rank.`)
+    }
+  }
+
+  if (opportunity != null) {
+    if (quality != null && quality >= 60 && opportunity < 50) {
+      positives.push(`The subnet looks better operationally than its price read alone would suggest, which is why it still ranks well.`)
+      limits.push(`It is not ranked even higher because the market is no longer leaving a huge pricing gap.`)
+    } else if (opportunity >= 60) {
+      positives.push(`Price still looks behind the operating picture, so there is a real upside case on top of the current quality.`)
+    }
+  }
+
+  if (risk != null) {
+    if (risk <= 25 && memo.stressDrawdown != null) {
+      positives.push(`Modeled drawdown is only ${memo.stressDrawdown.toFixed(1)}%, so downside is relatively contained for now.`)
+    } else if (risk >= 60) {
+      limits.push(`Modeled downside is still severe enough that the case can break quickly if conditions worsen.`)
+    }
+  }
+
+  if (confidence != null && confidence < 60) {
+    const dataGaps = [
+      memo.droppedInputs ? `${memo.droppedInputs} dropped inputs` : '',
+      memo.rebuiltInputs ? `${memo.rebuiltInputs} rebuilt inputs` : '',
+    ].filter(Boolean)
+    limits.push(
+      dataGaps.length
+        ? `Confidence is still capped by data gaps: ${dataGaps.join(' and ')}.`
+        : `Confidence is still not clean enough to fully trust the rank.`,
+    )
+  }
+
+  return [...positives.slice(0, 2), ...limits.slice(0, 2)].join(' ')
+}
+
+function buildPositiveDriverText(memo: DetailMemoViewModel): string {
+  const breakdown = memo.scoreBreakdown
+  const quality = signalValue(memo.signals, 'Quality')
+  const opportunity = signalValue(memo.signals, 'Opportunity')
+
+  if (breakdown && quality != null && quality >= 60) {
+    const reasons = [
+      breakdown.activity != null && breakdown.activity >= 60 ? `activity is strong (${formatWhole(breakdown.activity)})` : '',
+      breakdown.health != null && breakdown.health >= 60 ? `health is solid (${formatWhole(breakdown.health)})` : '',
+      breakdown.dev != null && breakdown.dev >= 60 ? `dev activity is active (${formatWhole(breakdown.dev)})` : '',
+      breakdown.efficiency != null && breakdown.efficiency >= 60 ? `efficiency is good (${formatWhole(breakdown.efficiency)})` : '',
+    ].filter(Boolean)
+
+    if (reasons.length) {
+      return `The quality case is real because ${reasons.join(', ')}.`
+    }
+  }
+
+  if (opportunity != null && quality != null && quality > opportunity + 10) {
+    return `Quality is reading better than price, which suggests the market has not fully caught up to the operating picture.`
+  }
+
+  if (memo.stressDrawdown != null) {
+    return `Modeled drawdown is only ${memo.stressDrawdown.toFixed(1)}%, so downside is not the main thing hurting this subnet right now.`
+  }
+
+  return 'No single positive driver stands out yet.'
+}
+
+function buildLimitingFactorText(memo: DetailMemoViewModel): string {
+  const quality = signalValue(memo.signals, 'Quality')
+  const opportunity = signalValue(memo.signals, 'Opportunity')
+  const confidence = signalValue(memo.signals, 'Confidence')
+  const dropped = countFromItem(memo.visibilityItems, 'Dropped inputs')
+  const rebuilt = countFromItem(memo.visibilityItems, 'Rebuilt inputs')
+  const breakdown = memo.scoreBreakdown
+
+  if (confidence != null && (dropped > 0 || rebuilt > 0)) {
+    const parts = [rebuilt ? `${rebuilt} rebuilt inputs` : '', dropped ? `${dropped} dropped inputs` : ''].filter(Boolean)
+    return `The read is still hard to trust because it relies on ${parts.join(' and ')}. That keeps the score cautious even if some headline signals look good.`
+  }
+
+  if (opportunity != null && opportunity < 45 && quality != null && quality >= 60) {
+    return `The subnet may be solid, but it is not ranked higher because the market is not obviously underpricing it anymore.`
+  }
+
+  if (breakdown?.capital != null && breakdown.capital < 50) {
+    return `Capital support is weak (${formatWhole(breakdown.capital)}), so the market side of the case is not as strong as the operating side.`
+  }
+
+  if (quality != null && quality < 55) {
+    return `Quality is not high enough yet to justify a much better rank.`
+  }
+
+  return 'No single limiting factor stands out yet.'
+}
+
 export default function ResearchWorkspace({
   memo,
   netuid,
@@ -161,9 +296,9 @@ export default function ResearchWorkspace({
   memo: DetailMemoViewModel
   netuid: number
 }) {
-  const verdict = cleanVisibleText(memo.headerSubtitle || memo.researchSummary.setupRead)
-  const strongestSupport = memo.anchorInsights.find((item) => item.label === 'Strongest support')?.value ?? 'No clear support stands out yet.'
-  const mainLimiter = memo.anchorInsights.find((item) => item.label === 'Main thing capping the score')?.value ?? 'No single limitation dominates yet.'
+  const verdict = buildHeroVerdict(memo)
+  const strongestSupport = buildPositiveDriverText(memo)
+  const mainLimiter = buildLimitingFactorText(memo)
   const trustSummary = memo.evidenceItems[0]?.body ?? 'Trust details are not available yet.'
   const trustLabel =
     memo.secondaryTag?.label ??
