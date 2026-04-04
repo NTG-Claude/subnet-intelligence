@@ -54,7 +54,9 @@ from scorer.database import (
     SubnetMetadataRow,
     SubnetScoreRow,
     get_all_metadata,
+    get_latest_score_by_netuid,
     get_latest_scores,
+    get_latest_scores_preview,
     get_scores_since,
     get_score_distribution,
     get_score_history,
@@ -116,12 +118,29 @@ def _is_mocked_callable(value: Any) -> bool:
 def _get_cached_latest_scores() -> list[dict]:
     if _is_mocked_callable(get_latest_scores):
         return get_latest_scores()
-    cached = _cache_get("latest_scores")
+    if _is_mocked_callable(get_latest_scores_preview):
+        return get_latest_scores_preview()
+    cached = _cache_get("latest_scores_preview")
     if cached is not None:
         return cached
-    rows = get_latest_scores()
-    _cache_set("latest_scores", rows, ttl=_HOT_DATA_CACHE_TTL)
+    rows = get_latest_scores_preview()
+    _cache_set("latest_scores_preview", rows, ttl=_HOT_DATA_CACHE_TTL)
     return rows
+
+
+def _get_cached_latest_full_subnet(netuid: int) -> Optional[dict]:
+    if _is_mocked_callable(get_latest_score_by_netuid):
+        return get_latest_score_by_netuid(netuid)
+    if _is_mocked_callable(get_latest_scores):
+        return next((row for row in get_latest_scores() if row.get("netuid") == netuid), None)
+    key = f"latest_score_full:{netuid}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    row = get_latest_score_by_netuid(netuid)
+    if row is not None:
+        _cache_set(key, row, ttl=_HOT_DATA_CACHE_TTL)
+    return row
 
 
 def _get_cached_all_metadata() -> dict[int, dict]:
@@ -1161,17 +1180,17 @@ async def get_subnet(
     view: Literal["page", "full"] = Query("full"),
     _: None = Depends(_check_rate_limit),
 ) -> SubnetDetailResponse:
-    all_rows = _get_cached_latest_scores()
+    latest_rows = _get_cached_latest_scores()
     meta_by_netuid = _get_cached_all_metadata()
-    cache_key = _live_cache_key("subnet", netuid, view, rows=all_rows, metadata=meta_by_netuid)
+    cache_key = _live_cache_key("subnet", netuid, view, rows=latest_rows, metadata=meta_by_netuid)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    investable_rows = [r for r in all_rows if _is_investable_row(r)]
+    investable_rows = [r for r in latest_rows if _is_investable_row(r)]
     total = len(investable_rows)
 
-    row = next((r for r in all_rows if r["netuid"] == netuid), None)
+    row = _get_cached_latest_full_subnet(netuid)
     if row is None:
         raise HTTPException(status_code=404, detail=f"Subnet {netuid} not found")
 

@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from sqlalchemy import (
@@ -318,6 +318,91 @@ def get_latest_scores() -> list[dict]:
 
     return [_row_to_dict(r) for r in rows]
 
+
+def get_latest_score_by_netuid(netuid: int) -> Optional[dict]:
+    """Return the latest full score row for a single subnet."""
+    with SessionLocal() as session:
+        row = session.execute(
+            select(SubnetScoreRow)
+            .where(SubnetScoreRow.netuid == netuid)
+            .order_by(desc(SubnetScoreRow.computed_at))
+            .limit(1)
+        ).scalar_one_or_none()
+    return _row_to_dict(row) if row else None
+
+
+def get_latest_scores_preview() -> list[dict]:
+    """
+    Return the latest score rows in a summary-friendly shape without loading the
+    full raw_data analysis payload for every subnet into memory.
+    """
+    with SessionLocal() as session:
+        latest_sub = (
+            select(
+                SubnetScoreRow.netuid,
+                func.max(SubnetScoreRow.computed_at).label("max_ts"),
+            )
+            .group_by(SubnetScoreRow.netuid)
+            .subquery()
+        )
+
+        rows = session.execute(
+            select(
+                SubnetScoreRow.id.label("id"),
+                SubnetScoreRow.netuid.label("netuid"),
+                SubnetScoreRow.score.label("score"),
+                SubnetScoreRow.capital_score.label("capital_score"),
+                SubnetScoreRow.activity_score.label("activity_score"),
+                SubnetScoreRow.efficiency_score.label("efficiency_score"),
+                SubnetScoreRow.health_score.label("health_score"),
+                SubnetScoreRow.dev_score.label("dev_score"),
+                SubnetScoreRow.rank.label("rank"),
+                SubnetScoreRow.computed_at.label("computed_at"),
+                SubnetScoreRow.score_version.label("score_version"),
+                SubnetScoreRow.alpha_price_tao.label("alpha_price_tao"),
+                SubnetScoreRow.tao_in_pool.label("tao_in_pool"),
+                SubnetScoreRow.market_cap_tao.label("market_cap_tao"),
+                SubnetScoreRow.staking_apy.label("staking_apy"),
+                SubnetScoreRow.raw_data["label"].label("label"),
+                SubnetScoreRow.raw_data["thesis"].label("thesis"),
+                SubnetScoreRow.raw_data["investable"].label("investable"),
+                SubnetScoreRow.raw_data["special_case"].label("special_case"),
+                SubnetScoreRow.raw_data["market_cap_usd"].label("market_cap_usd"),
+                SubnetScoreRow.raw_data["price_usd"].label("price_usd"),
+                SubnetScoreRow.raw_data["raw_metrics"]["market_cap_usd"].label("metric_market_cap_usd"),
+                SubnetScoreRow.raw_data["raw_metrics"]["price_usd"].label("metric_price_usd"),
+                SubnetScoreRow.raw_data["raw_metrics"]["slippage_10_tao"].label("slippage_10_tao"),
+                SubnetScoreRow.raw_data["raw_metrics"]["performance_driven_by_few_actors"].label(
+                    "performance_driven_by_few_actors"
+                ),
+                SubnetScoreRow.raw_data["primary_outputs"]["fundamental_quality"].label("raw_quality"),
+                SubnetScoreRow.raw_data["primary_outputs"]["mispricing_signal"].label("raw_mispricing"),
+                SubnetScoreRow.raw_data["primary_outputs"]["fragility_risk"].label("raw_fragility"),
+                SubnetScoreRow.raw_data["primary_outputs"]["signal_confidence"].label("raw_confidence"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["fundamental_quality"].label("analysis_quality"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["mispricing_signal"].label("analysis_mispricing"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["fragility_risk"].label("analysis_fragility"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["signal_confidence"].label("analysis_confidence"),
+                SubnetScoreRow.raw_data["analysis"]["top_positive_drivers"].label("top_positive_drivers"),
+                SubnetScoreRow.raw_data["analysis"]["top_negative_drags"].label("top_negative_drags"),
+                SubnetScoreRow.raw_data["analysis"]["top_negative_drivers"].label("top_negative_drivers"),
+                SubnetScoreRow.raw_data["analysis"]["key_uncertainties"].label("key_uncertainties"),
+                SubnetScoreRow.raw_data["analysis"]["conditioning"]["visibility"]["reconstructed"].label(
+                    "visibility_reconstructed"
+                ),
+                SubnetScoreRow.raw_data["analysis"]["conditioning"]["visibility"]["discarded"].label("visibility_discarded"),
+                SubnetScoreRow.raw_data["analysis"]["block_scores"]["market_legitimacy"].label("market_legitimacy"),
+            )
+            .join(
+                latest_sub,
+                (SubnetScoreRow.netuid == latest_sub.c.netuid)
+                & (SubnetScoreRow.computed_at == latest_sub.c.max_ts),
+            )
+            .order_by(desc(SubnetScoreRow.score))
+        ).mappings().all()
+
+    return [_preview_row_to_dict(row) for row in rows]
+
 def get_score_history(netuid: int, days: int = 30) -> list[dict]:
     """Return all score rows for a subnet over the past `days` days."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
@@ -406,6 +491,138 @@ def _row_to_dict(row: SubnetScoreRow) -> dict:
         "market_cap_tao": row.market_cap_tao,
         "staking_apy": row.staking_apy,
         "raw_data": row.raw_data,
+    }
+
+
+def _decode_json_value(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
+def _to_float(value: Any) -> Optional[float]:
+    value = _decode_json_value(value)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_bool(value: Any, default: bool = True) -> bool:
+    value = _decode_json_value(value)
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1"}:
+            return True
+        if normalized in {"false", "0"}:
+            return False
+    return bool(value)
+
+
+def _preview_row_to_dict(row: Any) -> dict:
+    raw_quality = _to_float(row.get("raw_quality"))
+    raw_mispricing = _to_float(row.get("raw_mispricing"))
+    raw_fragility = _to_float(row.get("raw_fragility"))
+    raw_confidence = _to_float(row.get("raw_confidence"))
+    analysis_quality = _to_float(row.get("analysis_quality"))
+    analysis_mispricing = _to_float(row.get("analysis_mispricing"))
+    analysis_fragility = _to_float(row.get("analysis_fragility"))
+    analysis_confidence = _to_float(row.get("analysis_confidence"))
+
+    primary_outputs = {
+        "fundamental_quality": analysis_quality if analysis_quality is not None else raw_quality,
+        "mispricing_signal": analysis_mispricing if analysis_mispricing is not None else raw_mispricing,
+        "fragility_risk": analysis_fragility if analysis_fragility is not None else raw_fragility,
+        "signal_confidence": analysis_confidence if analysis_confidence is not None else raw_confidence,
+    }
+    primary_outputs = {key: value for key, value in primary_outputs.items() if value is not None}
+
+    reconstructed = _decode_json_value(row.get("visibility_reconstructed")) or []
+    discarded = _decode_json_value(row.get("visibility_discarded")) or []
+    top_positive_drivers = _decode_json_value(row.get("top_positive_drivers")) or []
+    top_negative_drags = _decode_json_value(row.get("top_negative_drags")) or []
+    top_negative_drivers = _decode_json_value(row.get("top_negative_drivers")) or []
+    key_uncertainties = _decode_json_value(row.get("key_uncertainties")) or []
+    market_legitimacy = _to_float(row.get("market_legitimacy"))
+
+    analysis: dict[str, Any] = {}
+    if primary_outputs:
+        analysis["primary_outputs"] = primary_outputs
+    if top_positive_drivers:
+        analysis["top_positive_drivers"] = top_positive_drivers
+    if top_negative_drags:
+        analysis["top_negative_drags"] = top_negative_drags
+    elif top_negative_drivers:
+        analysis["top_negative_drivers"] = top_negative_drivers
+    if key_uncertainties:
+        analysis["key_uncertainties"] = key_uncertainties
+    if reconstructed or discarded:
+        analysis["conditioning"] = {
+            "visibility": {
+                **({"reconstructed": reconstructed} if reconstructed else {}),
+                **({"discarded": discarded} if discarded else {}),
+            }
+        }
+    if market_legitimacy is not None:
+        analysis["block_scores"] = {"market_legitimacy": market_legitimacy}
+
+    raw_metrics = {
+        "market_cap_usd": _to_float(row.get("metric_market_cap_usd")),
+        "price_usd": _to_float(row.get("metric_price_usd")),
+        "slippage_10_tao": _to_float(row.get("slippage_10_tao")),
+        "performance_driven_by_few_actors": _to_float(row.get("performance_driven_by_few_actors")),
+    }
+    raw_metrics = {key: value for key, value in raw_metrics.items() if value is not None}
+
+    raw_data: dict[str, Any] = {
+        "investable": _to_bool(row.get("investable"), default=True),
+    }
+    if row.get("label") is not None:
+        raw_data["label"] = _decode_json_value(row.get("label"))
+    if row.get("thesis") is not None:
+        raw_data["thesis"] = _decode_json_value(row.get("thesis"))
+    special_case = _decode_json_value(row.get("special_case"))
+    if special_case is not None:
+        raw_data["special_case"] = special_case
+    market_cap_usd = _to_float(row.get("market_cap_usd"))
+    if market_cap_usd is not None:
+        raw_data["market_cap_usd"] = market_cap_usd
+    price_usd = _to_float(row.get("price_usd"))
+    if price_usd is not None:
+        raw_data["price_usd"] = price_usd
+    if raw_metrics:
+        raw_data["raw_metrics"] = raw_metrics
+    if primary_outputs:
+        raw_data["primary_outputs"] = primary_outputs
+    if analysis:
+        raw_data["analysis"] = analysis
+
+    return {
+        "id": row.get("id"),
+        "netuid": row.get("netuid"),
+        "score": row.get("score"),
+        "capital_score": row.get("capital_score"),
+        "activity_score": row.get("activity_score"),
+        "efficiency_score": row.get("efficiency_score"),
+        "health_score": row.get("health_score"),
+        "dev_score": row.get("dev_score"),
+        "rank": row.get("rank"),
+        "computed_at": row.get("computed_at").isoformat() if row.get("computed_at") else None,
+        "score_version": row.get("score_version"),
+        "alpha_price_tao": row.get("alpha_price_tao"),
+        "tao_in_pool": row.get("tao_in_pool"),
+        "market_cap_tao": row.get("market_cap_tao"),
+        "staking_apy": row.get("staking_apy"),
+        "raw_data": raw_data,
     }
 
 
