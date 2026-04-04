@@ -81,6 +81,69 @@ function ExplanationList({
   )
 }
 
+function CaseComparison({
+  supportIntro,
+  supports,
+  supportEmpty,
+  riskIntro,
+  risks,
+  riskEmpty,
+}: {
+  supportIntro?: string
+  supports: ScoreExplanationItem[]
+  supportEmpty: string
+  riskIntro?: string
+  risks: MemoSectionItem[]
+  riskEmpty: string
+}) {
+  return (
+    <section className="surface-panel p-5 sm:p-6">
+      <div className="section-title">Why it ranks here</div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <div className="rounded-[var(--radius-xl)] border border-[color:rgba(74,222,128,0.16)] bg-[color:rgba(18,32,24,0.42)] p-4 sm:p-5">
+          <div className="eyebrow text-[color:rgba(134,239,172,0.9)]">What is working</div>
+          {supportIntro ? <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{supportIntro}</p> : null}
+          <div className="mt-4 space-y-3">
+            {supports.length ? (
+              supports.map((item) => (
+                <div
+                  key={`support-${item.title}`}
+                  className="rounded-[var(--radius-lg)] border border-[color:rgba(74,222,128,0.14)] bg-[color:rgba(12,24,18,0.58)] px-4 py-3.5"
+                >
+                  <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
+                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{supportEmpty}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[var(--radius-xl)] border border-[color:rgba(244,114,182,0.16)] bg-[color:rgba(38,20,28,0.42)] p-4 sm:p-5">
+          <div className="eyebrow text-[color:rgba(251,182,206,0.9)]">What is holding it back</div>
+          {riskIntro ? <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{riskIntro}</p> : null}
+          <div className="mt-4 space-y-3">
+            {risks.length ? (
+              risks.map((item, index) => (
+                <div
+                  key={`risk-${item.title}-${index}`}
+                  className="rounded-[var(--radius-lg)] border border-[color:rgba(244,114,182,0.14)] bg-[color:rgba(28,15,22,0.58)] px-4 py-3.5"
+                >
+                  <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
+                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{riskEmpty}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function DiagnosticGrid({
   items,
   empty,
@@ -386,18 +449,13 @@ export default function ResearchWorkspace({
         <PrimarySignalsTrend netuid={netuid} />
       </section>
 
-      <ExplanationList
-        title="What supports the case"
-        intro={memo.researchSummary.whyNow}
-        items={primarySupports}
-        empty="No clear support stands out yet."
-      />
-
-      <DetailList
-        title="What could break the case"
-        intro={cleanVisibleText(`${memo.researchSummary.mainConstraint} ${memo.researchSummary.breakCondition}`)}
-        items={primaryRisks}
-        empty="No single risk dominates yet."
+      <CaseComparison
+        supportIntro={cleanVisibleText(memo.researchSummary.whyNow)}
+        supports={primarySupports}
+        supportEmpty="No clear support stands out yet."
+        riskIntro={cleanVisibleText(`${memo.researchSummary.mainConstraint} ${memo.researchSummary.breakCondition}`)}
+        risks={primaryRisks}
+        riskEmpty="No single risk dominates yet."
       />
 
       <CollapsibleSection
