@@ -247,6 +247,7 @@ export interface SubnetSignalHistoryPoint {
 export interface MarketOverviewPoint {
   computed_at: string
   total_market_cap_tao: number
+  total_market_cap_usd: number | null
   subnet_count: number
 }
 
