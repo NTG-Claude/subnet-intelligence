@@ -3,6 +3,7 @@ import Link from 'next/link'
 import CollapsibleSection from '@/components/ui/CollapsibleSection'
 import SignalBar from '@/components/ui/SignalBar'
 import StatusChip from '@/components/ui/StatusChip'
+import { SubnetSignalHistoryPoint } from '@/lib/api'
 import { DetailMemoViewModel, MemoInsightItem, MemoSectionItem, ScoreExplanationItem, SignalStat } from '@/lib/view-models/research'
 import PrimarySignalsTrend from './PrimarySignalsTrend'
 
@@ -396,18 +397,16 @@ function buildLimitingFactorText(memo: DetailMemoViewModel): string {
 export default function ResearchWorkspace({
   memo,
   netuid,
+  initialSignalHistory,
 }: {
   memo: DetailMemoViewModel
   netuid: number
+  initialSignalHistory?: SubnetSignalHistoryPoint[] | null
 }) {
   const verdict = buildHeroVerdict(memo)
   const strongestSupport = buildPositiveDriverText(memo)
   const mainLimiter = buildLimitingFactorText(memo)
   const trustSummary = memo.evidenceItems[0]?.body ?? 'Trust details are not available yet.'
-  const trustLabel =
-    memo.secondaryTag?.label ??
-    memo.contextRow.find((item) => item.label === 'Read Trust')?.value ??
-    'Trust not available'
 
   const riskItems = uniqueSectionItems([
     ...memo.topDrags.map((item) => ({ title: item.title, body: item.body, tone: item.tone })),
@@ -454,6 +453,7 @@ export default function ResearchWorkspace({
             </div>
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
+              <div className="mt-2 text-sm text-[color:var(--text-tertiary)]">Updated {memo.updatedLabel}</div>
               <p className="mt-2 max-w-3xl text-base leading-7 text-[color:var(--text-primary)]">{verdict}</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
@@ -471,8 +471,6 @@ export default function ResearchWorkspace({
           <div className="grid min-w-full gap-3 sm:grid-cols-2 xl:min-w-[420px] xl:max-w-[460px]">
             <CompactStat label="Score" value={memo.scoreLabel} />
             <CompactStat label="Rank" value={memo.rankLabel} />
-            <CompactStat label="Confidence" value={trustLabel} detail={trustSummary} />
-            <CompactStat label="Last updated" value={memo.updatedLabel} />
           </div>
         </div>
       </section>
@@ -487,7 +485,7 @@ export default function ResearchWorkspace({
             <SignalBar key={signal.key} signal={signal} />
           ))}
         </div>
-        <PrimarySignalsTrend netuid={netuid} />
+        <PrimarySignalsTrend netuid={netuid} initialPoints={initialSignalHistory} />
       </section>
 
       <CaseComparison
