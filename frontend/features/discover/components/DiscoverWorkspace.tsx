@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 
 import MetricCard from '@/components/ui/MetricCard'
 import { CompareSeriesData, fetchCompareTimeseries, MarketOverviewData, SubnetSummary } from '@/lib/api'
@@ -176,23 +176,27 @@ export default function DiscoverWorkspace({
   lastRun,
   market,
   initialTimeseries,
+  initialSearch,
+  initialSort,
+  initialDirection,
+  initialCompareIds,
 }: {
   subnets: SubnetSummary[]
   lastRun: string | null
   market: MarketOverviewData
-  trackedUniverse: number
-  awaitingRunCount: number
-  lowConfidenceCount: number
   initialTimeseries: CompareSeriesData | null
+  initialSearch: string
+  initialSort: string
+  initialDirection: string
+  initialCompareIds: string | null
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const searchParams = useSearchParams()
 
-  const [search, setSearch] = useState(searchParams.get('q') ?? '')
-  const [sort, setSort] = useState<UniverseSortId>((searchParams.get('sort') as UniverseSortId) ?? 'rank')
-  const [direction, setDirection] = useState<SortDirection>((searchParams.get('dir') as SortDirection) ?? 'asc')
-  const [compareIds, setCompareIds] = useState<number[]>(parseIds(searchParams.get('ids')))
+  const [search, setSearch] = useState(initialSearch)
+  const [sort, setSort] = useState<UniverseSortId>((initialSort as UniverseSortId) ?? 'rank')
+  const [direction, setDirection] = useState<SortDirection>((initialDirection as SortDirection) ?? 'asc')
+  const [compareIds, setCompareIds] = useState<number[]>(parseIds(initialCompareIds))
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const [pinnedId, setPinnedId] = useState<number | null>(null)
   const [timeseries, setTimeseries] = useState<CompareSeriesData | null>(initialTimeseries)
@@ -261,7 +265,15 @@ export default function DiscoverWorkspace({
   }, [focusedId, router, rows])
 
   useEffect(() => {
+    if (initialTimeseries) {
+      setTimeseries(initialTimeseries)
+      setTimeseriesStatus('ready')
+      return
+    }
+
     let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let idleId: number | null = null
 
     async function loadTimeseries() {
       try {
@@ -278,12 +290,24 @@ export default function DiscoverWorkspace({
       }
     }
 
-    if (!initialTimeseries) {
-      void loadTimeseries()
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(() => {
+        void loadTimeseries()
+      })
+    } else {
+      timeoutId = setTimeout(() => {
+        void loadTimeseries()
+      }, 250)
     }
 
     return () => {
       cancelled = true
+      if (idleId != null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId)
+      }
+      if (timeoutId != null) {
+        clearTimeout(timeoutId)
+      }
     }
   }, [initialTimeseries])
 

@@ -1,10 +1,18 @@
 import DiscoverWorkspace from '@/features/discover/components/DiscoverWorkspace'
-import { fetchCompareTimeseries, fetchLatestRun, fetchMarketOverview, fetchSubnets } from '@/lib/api'
+import { fetchLatestRun, fetchMarketOverview, fetchSubnets } from '@/lib/api'
 
-export const dynamic = 'force-dynamic'
+function firstValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null
+  return value ?? null
+}
 
-export default async function HomePage() {
-  const [{ subnets }, latest, market, initialTimeseries] = await Promise.all([
+interface HomePageProps {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}
+
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {}
+  const [{ subnets }, latest, market] = await Promise.all([
     fetchSubnets(200).catch(() => ({ subnets: [], total: 0 })),
     fetchLatestRun().catch(() => ({ last_score_run: null, subnet_count: 0 })),
     fetchMarketOverview(90).catch(() => ({
@@ -13,12 +21,8 @@ export default async function HomePage() {
       current_subnet_count: 0,
       points: [],
     })),
-    fetchCompareTimeseries(35).catch(() => null),
   ])
 
-  const scored = subnets.filter((subnet) => subnet.primary_outputs)
-  const lowConfidenceCount = scored.filter((subnet) => (subnet.primary_outputs?.signal_confidence ?? 0) < 50).length
-  const awaitingRunCount = subnets.length - scored.length
   const currentMarketCap = subnets.reduce((sum, subnet) => sum + (subnet.market_cap_tao ?? 0), 0)
   const marketWithFallback =
     market.current_market_cap_tao > 0 || market.points.length
@@ -43,10 +47,11 @@ export default async function HomePage() {
       subnets={subnets}
       lastRun={latest.last_score_run}
       market={marketWithFallback}
-      trackedUniverse={latest.subnet_count || subnets.length}
-      awaitingRunCount={awaitingRunCount}
-      lowConfidenceCount={lowConfidenceCount}
-      initialTimeseries={initialTimeseries}
+      initialTimeseries={null}
+      initialSearch={firstValue(resolvedSearchParams.q) ?? ''}
+      initialSort={firstValue(resolvedSearchParams.sort) ?? 'rank'}
+      initialDirection={firstValue(resolvedSearchParams.dir) ?? 'asc'}
+      initialCompareIds={firstValue(resolvedSearchParams.ids)}
     />
   )
 }

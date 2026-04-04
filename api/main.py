@@ -474,13 +474,83 @@ def _build_research_summary(
     )
 
 
-def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse] = None) -> SubnetSummaryResponse:
+def _compact_preview_contributor(item: dict | None) -> dict:
+    if not item:
+        return {}
+    compact = {
+        "metric": item.get("metric"),
+        "name": item.get("name"),
+        "short_explanation": item.get("short_explanation"),
+        "source_block": item.get("source_block"),
+    }
+    return {key: value for key, value in compact.items() if value not in (None, "")}
+
+
+def _compact_preview_uncertainty(item: dict | None) -> dict:
+    if not item:
+        return {}
+    compact = {
+        "name": item.get("name"),
+        "short_explanation": item.get("short_explanation"),
+        "source_block": item.get("source_block"),
+    }
+    return {key: value for key, value in compact.items() if value not in (None, "")}
+
+
+def _compact_conditioning(conditioning: dict | None) -> dict:
+    visibility = (conditioning or {}).get("visibility") or {}
+    compact_visibility: dict[str, list[str]] = {}
+
+    for key in ("reconstructed", "discarded"):
+        values = visibility.get(key) or []
+        if values:
+            compact_visibility[key] = values[:1]
+
+    return {"visibility": compact_visibility} if compact_visibility else {}
+
+
+def _analysis_preview_payload(analysis: dict, preview: Literal["compact", "full"]) -> dict | None:
+    if not analysis:
+        return None
+
+    if preview == "full":
+        return {
+            "top_positive_drivers": analysis.get("top_positive_drivers") or [],
+            "top_negative_drags": analysis.get("top_negative_drags") or analysis.get("top_negative_drivers") or [],
+            "key_uncertainties": analysis.get("key_uncertainties") or [],
+            "conditioning": analysis.get("conditioning") or {},
+            "block_scores": analysis.get("block_scores") or {},
+        }
+
+    return {
+        "top_positive_drivers": [
+            _compact_preview_contributor(item) for item in (analysis.get("top_positive_drivers") or [])[:2]
+        ],
+        "top_negative_drags": [
+            _compact_preview_contributor(item)
+            for item in (analysis.get("top_negative_drags") or analysis.get("top_negative_drivers") or [])[:2]
+        ],
+        "key_uncertainties": [
+            _compact_preview_uncertainty(item) for item in (analysis.get("key_uncertainties") or [])[:2]
+        ],
+        "conditioning": _compact_conditioning(analysis.get("conditioning") or {}),
+        "block_scores": {},
+    }
+
+
+def _row_to_summary(
+    row: dict,
+    total: int,
+    meta: Optional[SubnetMetadataResponse] = None,
+    preview: Literal["compact", "full"] = "full",
+) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
     analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
     fallback_name = _override_name_map().get(row["netuid"])
     primary_outputs = analysis.get("primary_outputs") or raw_data.get("primary_outputs")
     warning_flags = _warning_flags(raw_data, analysis, primary_outputs)
     investability_status = _investability_status(row, analysis, primary_outputs)
+    analysis_preview = _analysis_preview_payload(analysis, preview)
     return SubnetSummaryResponse(
         netuid=row["netuid"],
         name=(meta.name if meta else None) or fallback_name,
@@ -498,15 +568,7 @@ def _row_to_summary(row: dict, total: int, meta: Optional[SubnetMetadataResponse
         warning_flags=warning_flags,
         label=raw_data.get("label"),
         thesis=raw_data.get("thesis"),
-        analysis_preview={
-            "top_positive_drivers": analysis.get("top_positive_drivers") or [],
-            "top_negative_drags": analysis.get("top_negative_drags") or analysis.get("top_negative_drivers") or [],
-            "key_uncertainties": analysis.get("key_uncertainties") or [],
-            "conditioning": analysis.get("conditioning") or {},
-            "block_scores": analysis.get("block_scores") or {},
-        }
-        if analysis
-        else None,
+        analysis_preview=analysis_preview,
     )
 
 
@@ -613,10 +675,11 @@ async def list_subnets(
         "signal_confidence",
     ] = Query("score"),
     sort_order: Literal["asc", "desc"] = Query("desc"),
+    preview: Literal["compact", "full"] = Query("compact"),
     _: None = Depends(_check_rate_limit),
 ) -> SubnetListResponse:
     all_rows = get_latest_scores()
-    cache_key = _live_cache_key("list", limit, offset, min_score, max_score, sort_by, sort_order, rows=all_rows)
+    cache_key = _live_cache_key("list", limit, offset, min_score, max_score, sort_by, sort_order, preview, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -637,7 +700,7 @@ async def list_subnets(
     for r in page:
         meta_dict = meta_by_netuid.get(r["netuid"])
         meta = SubnetMetadataResponse(netuid=r["netuid"], **(meta_dict or {})) if meta_dict else None
-        subnets.append(_row_to_summary(r, total, meta))
+        subnets.append(_row_to_summary(r, total, meta, preview=preview))
 
     result = SubnetListResponse(total=total, subnets=subnets)
     _cache_set(cache_key, result)
