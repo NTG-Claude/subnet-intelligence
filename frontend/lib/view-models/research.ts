@@ -1704,19 +1704,106 @@ function buildScoreExplanationItems(
     }))
 }
 
+function describeAnchorSupport(
+  subnet: SubnetDetail,
+  supports: ScoreExplanationItem[],
+): string {
+  const analysis = subnet.analysis
+  const outputs = subnet.primary_outputs ?? analysis?.primary_outputs ?? null
+  const supportKey = contributorName(analysis?.top_positive_drivers?.[0])
+
+  switch (supportKey) {
+    case 'fragility':
+      if (analysis?.stress_drawdown != null) {
+        return `Modeled drawdown is only ${analysis.stress_drawdown.toFixed(1)}%, so downside is not the main thing holding this subnet back right now.`
+      }
+      return 'Downside does not look like the main problem right now, so the score gets room to hold up.'
+    case 'fundamental_health':
+      if (outputs?.fundamental_quality != null) {
+        return `Quality scores ${outputs.fundamental_quality.toFixed(1)}, which says the subnet is doing enough real work to support the current rank.`
+      }
+      return 'The score is being supported by real usage and operating quality, not just by price hope.'
+    case 'opportunity_underreaction':
+    case 'base_opportunity':
+      if (outputs?.mispricing_signal != null) {
+        return `Opportunity scores ${outputs.mispricing_signal.toFixed(1)}, which suggests price may still lag the subnet's actual progress.`
+      }
+      return 'Price may still be below what the subnet has actually earned.'
+    case 'data_confidence':
+    case 'confidence_factor':
+      if (outputs?.signal_confidence != null) {
+        return `Confidence scores ${outputs.signal_confidence.toFixed(1)}, which means the read is cleaner and easier to trust than a thin or noisy setup.`
+      }
+      return 'The main signals line up cleanly enough that the score is easier to trust.'
+    default:
+      return supports[0]?.body ?? 'No clear supporting factor stands out yet.'
+  }
+}
+
+function describeAnchorDrag(
+  subnet: SubnetDetail,
+  drags: ScoreExplanationItem[],
+): string {
+  const analysis = subnet.analysis
+  const outputs = subnet.primary_outputs ?? analysis?.primary_outputs ?? null
+  const conditioning = analysis?.conditioning
+  const dragKey = contributorName((analysis?.top_negative_drags ?? analysis?.top_negative_drivers ?? [])[0])
+  const rebuilt = visibilityCount(conditioning, 'reconstructed')
+  const dropped = visibilityCount(conditioning, 'discarded')
+
+  switch (dragKey) {
+    case 'evidence_penalty':
+    case 'confidence_drag':
+    case 'input_quality':
+    case 'data_confidence':
+      if (outputs?.signal_confidence != null) {
+        const repairs = [
+          rebuilt > 0 ? `${rebuilt} rebuilt` : '',
+          dropped > 0 ? `${dropped} dropped` : '',
+        ]
+          .filter(Boolean)
+          .join(' and ')
+        return repairs
+          ? `Confidence is only ${outputs.signal_confidence.toFixed(1)} because the input set still has gaps: ${repairs} inputs. That keeps the score cautious.`
+          : `Confidence is only ${outputs.signal_confidence.toFixed(1)}, so the score cannot lean as hard on this read as it would on cleaner data.`
+      }
+      return 'The score is being capped because the evidence is not clean enough yet.'
+    case 'expected_price_response_gap':
+    case 'valuation_gap':
+    case 'price_response_lag_to_quality_shift':
+      if (outputs?.mispricing_signal != null) {
+        return `Opportunity is only ${outputs.mispricing_signal.toFixed(1)}, so the market may already reflect much of the good news.`
+      }
+      return 'The score is capped because there may not be much upside left.'
+    case 'fragility':
+    case 'controlled_downside':
+      if (analysis?.stress_drawdown != null) {
+        return `Modeled drawdown reaches ${analysis.stress_drawdown.toFixed(1)}%, so this setup can still lose a lot if conditions worsen.`
+      }
+      return 'The setup can still break under stress, which keeps the score from going higher.'
+    case 'post_incentive_retention':
+    case 'emission_to_sticky_usage_conversion':
+    case 'emission_efficiency':
+      return 'The score is capped because it is still unclear whether current activity will hold once incentives cool off.'
+    default:
+      return drags[0]?.body ?? 'No single limiting factor stands out yet.'
+  }
+}
+
 function buildAnchorInsights(
+  subnet: SubnetDetail,
   supports: ScoreExplanationItem[],
   drags: ScoreExplanationItem[],
 ): MemoAnchorItem[] {
   return [
     {
       label: 'Strongest support',
-      value: supports[0]?.title ? `${supports[0].title}. ${supports[0].body}` : 'No clear supporting factor stands out yet.',
+      value: describeAnchorSupport(subnet, supports),
       tone: supports[0]?.tone ?? 'quality',
     },
     {
       label: 'Main thing capping the score',
-      value: drags[0]?.title ? `${drags[0].title}. ${drags[0].body}` : 'No single limiting factor stands out yet.',
+      value: describeAnchorDrag(subnet, drags),
       tone: drags[0]?.tone ?? 'warning',
     },
   ]
@@ -1813,7 +1900,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     'No single limitation dominates yet.',
     'negative',
   )
-  const anchorInsights = buildAnchorInsights(topSupports, topDrags)
+  const anchorInsights = buildAnchorInsights(subnet, topSupports, topDrags)
   const setupTag = investabilityBadge(subnet.investability_status)
   const secondaryTag: InvestabilityBadge | null =
     researchSummary.evidenceStrength.value === 'high'
