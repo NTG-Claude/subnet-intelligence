@@ -57,8 +57,10 @@ from scorer.database import (
     get_latest_score_by_netuid,
     get_latest_scores,
     get_latest_scores_preview,
+    get_market_overview_points,
     get_previous_run_ranks,
     get_scores_since,
+    get_scores_since_compact,
     get_signal_history_points,
     get_score_distribution,
     get_score_history,
@@ -203,6 +205,18 @@ def _get_cached_scores_since(days: int) -> list[dict]:
     return rows
 
 
+def _get_cached_market_overview_points(days: int) -> list[dict]:
+    if _is_mocked_callable(get_market_overview_points):
+        return get_market_overview_points(days=days)
+    key = f"market_overview_points:{days}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    rows = get_market_overview_points(days=days)
+    _cache_set(key, rows, ttl=_HOT_DATA_CACHE_TTL)
+    return rows
+
+
 def _compact_history_row(row: dict) -> dict:
     raw_data = row.get("raw_data") or {}
     analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
@@ -226,13 +240,15 @@ def _compact_history_row(row: dict) -> dict:
 
 
 def _get_cached_scores_since_compact(days: int) -> list[dict]:
+    if _is_mocked_callable(get_scores_since_compact):
+        return get_scores_since_compact(days=days)
     if _is_mocked_callable(get_scores_since):
         return [_compact_history_row(row) for row in get_scores_since(days=days)]
     key = f"scores_since_compact:{days}"
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    rows = [_compact_history_row(row) for row in get_scores_since(days=days)]
+    rows = get_scores_since_compact(days=days)
     _cache_set(key, rows, ttl=_HOT_DATA_CACHE_TTL)
     return rows
 
@@ -968,7 +984,7 @@ def _build_market_overview_response(
     latest_score_version = next((row.get("score_version") for row in all_rows if row.get("score_version")), None)
     history_rows = [
         row
-        for row in _get_cached_scores_since_compact(days=days)
+        for row in _get_cached_market_overview_points(days=days)
         if _is_investable_row(row) and (latest_score_version is None or row.get("score_version") == latest_score_version)
     ]
     grouped: dict[str, dict[str, float]] = defaultdict(
