@@ -397,7 +397,7 @@ export default function DiscoverWorkspace({
                   <SortHeader label="Opportunity" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => toggleSort('mispricing')} />
                   <SortHeader label="Risk" active={sort === 'fragility'} direction={direction} align="right" onClick={() => toggleSort('fragility')} />
                   <SortHeader label="Confidence" active={sort === 'confidence'} direction={direction} align="right" onClick={() => toggleSort('confidence')} />
-                  <div className="font-medium">Status</div>
+                  <div className="pl-4 font-medium">Status</div>
                 </div>
 
                 <div>
