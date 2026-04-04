@@ -7,7 +7,7 @@ import TrustBadge from '@/components/ui/TrustBadge'
 import { cn } from '@/lib/formatting'
 import { SignalTone, UniverseRowViewModel } from '@/lib/view-models/research'
 
-export const DISCOVER_TABLE_GRID = 'grid-cols-[88px_minmax(180px,1.15fr)_92px_92px_108px_92px_100px_120px]'
+export const DISCOVER_TABLE_GRID = 'grid-cols-[88px_minmax(180px,1.15fr)_92px_92px_108px_92px_88px_108px]'
 
 function signalValue(row: UniverseRowViewModel, key: UniverseRowViewModel['signals'][number]['key']): string {
   const signal = row.signals.find((item) => item.key === key)
