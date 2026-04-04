@@ -455,6 +455,30 @@ def get_score_history(netuid: int, days: int = 30) -> list[dict]:
     return [_row_to_dict(r) for r in rows]
 
 
+def get_signal_history_points(netuid: int, days: int = 120) -> list[dict]:
+    """Return a compact signal-history shape for charting without loading full raw_data blobs."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(
+                SubnetScoreRow.computed_at.label("computed_at"),
+                SubnetScoreRow.score.label("score"),
+                SubnetScoreRow.raw_data["primary_outputs"]["fundamental_quality"].label("raw_quality"),
+                SubnetScoreRow.raw_data["primary_outputs"]["mispricing_signal"].label("raw_mispricing"),
+                SubnetScoreRow.raw_data["primary_outputs"]["fragility_risk"].label("raw_fragility"),
+                SubnetScoreRow.raw_data["primary_outputs"]["signal_confidence"].label("raw_confidence"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["fundamental_quality"].label("analysis_quality"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["mispricing_signal"].label("analysis_mispricing"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["fragility_risk"].label("analysis_fragility"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["signal_confidence"].label("analysis_confidence"),
+            )
+            .where(SubnetScoreRow.netuid == netuid)
+            .where(SubnetScoreRow.computed_at >= since)
+            .order_by(SubnetScoreRow.computed_at)
+        ).mappings().all()
+    return [_signal_history_row_to_dict(r) for r in rows]
+
+
 def get_score_at(netuid: int, timestamp: datetime) -> Optional[dict]:
     """Return the score row closest to (but not after) `timestamp`."""
     with SessionLocal() as session:
@@ -662,6 +686,31 @@ def _preview_row_to_dict(row: Any) -> dict:
         "market_cap_tao": row.get("market_cap_tao"),
         "staking_apy": row.get("staking_apy"),
         "raw_data": raw_data,
+    }
+
+
+def _signal_history_row_to_dict(row: Any) -> dict:
+    raw_quality = _to_float(row.get("raw_quality"))
+    raw_mispricing = _to_float(row.get("raw_mispricing"))
+    raw_fragility = _to_float(row.get("raw_fragility"))
+    raw_confidence = _to_float(row.get("raw_confidence"))
+    analysis_quality = _to_float(row.get("analysis_quality"))
+    analysis_mispricing = _to_float(row.get("analysis_mispricing"))
+    analysis_fragility = _to_float(row.get("analysis_fragility"))
+    analysis_confidence = _to_float(row.get("analysis_confidence"))
+
+    primary_outputs = {
+        "fundamental_quality": analysis_quality if analysis_quality is not None else raw_quality,
+        "mispricing_signal": analysis_mispricing if analysis_mispricing is not None else raw_mispricing,
+        "fragility_risk": analysis_fragility if analysis_fragility is not None else raw_fragility,
+        "signal_confidence": analysis_confidence if analysis_confidence is not None else raw_confidence,
+    }
+    primary_outputs = {key: value for key, value in primary_outputs.items() if value is not None}
+
+    return {
+        "computed_at": row.get("computed_at").isoformat() if row.get("computed_at") else None,
+        "score": row.get("score"),
+        "raw_data": {"primary_outputs": primary_outputs} if primary_outputs else {},
     }
 
 

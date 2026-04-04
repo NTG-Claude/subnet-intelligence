@@ -113,6 +113,7 @@ def _with_db_mocks(meta_netuid=1):
         get_latest_scores_preview=MagicMock(return_value=SCORES),
         get_previous_run_ranks=MagicMock(return_value={1: 2, 2: 1}),
         get_score_history=MagicMock(return_value=HISTORY),
+        get_signal_history_points=MagicMock(return_value=HISTORY),
         get_score_distribution=MagicMock(return_value=[
             {"range_start": i * 20.0, "range_end": (i + 1) * 20.0, "count": 1}
             for i in range(5)
@@ -533,7 +534,7 @@ def test_subnet_detailed_history():
 
 
 def test_subnet_signal_history_returns_empty_list_when_history_is_missing():
-    with patch("api.main.get_score_history", return_value=[]), \
+    with patch("api.main.get_signal_history_points", return_value=[]), \
          patch("api.main.get_latest_scores_preview", return_value=SCORES), \
          patch("api.main._cache_get", return_value=None):
         from api.main import app

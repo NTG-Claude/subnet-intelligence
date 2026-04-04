@@ -52,7 +52,6 @@ export default async function HomePage() {
       subnets={payload.subnets}
       lastRun={payload.lastRun}
       market={payload.market}
-      initialTimeseries={null}
     />
   )
 }

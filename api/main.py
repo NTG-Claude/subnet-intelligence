@@ -59,6 +59,7 @@ from scorer.database import (
     get_latest_scores_preview,
     get_previous_run_ranks,
     get_scores_since,
+    get_signal_history_points,
     get_score_distribution,
     get_score_history,
     get_top_subnets,
@@ -163,6 +164,18 @@ def _get_cached_score_history(netuid: int, days: int) -> list[dict]:
     if cached is not None:
         return cached
     history = get_score_history(netuid, days=days)
+    _cache_set(key, history, ttl=_HOT_DATA_CACHE_TTL)
+    return history
+
+
+def _get_cached_signal_history_points(netuid: int, days: int) -> list[dict]:
+    if _is_mocked_callable(get_signal_history_points):
+        return get_signal_history_points(netuid, days=days)
+    key = f"signal_history:{netuid}:{days}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    history = get_signal_history_points(netuid, days=days)
     _cache_set(key, history, ttl=_HOT_DATA_CACHE_TTL)
     return history
 
@@ -1328,7 +1341,7 @@ async def get_subnet_signal_history(
         return cached
 
     try:
-        history_raw = _get_cached_score_history(netuid, days=days)
+        history_raw = _get_cached_signal_history_points(netuid, days=days)
         result = [_row_to_signal_history_point(row) for row in history_raw]
         _cache_set(cache_key, result)
         _cache_set(stale_cache_key, result, ttl=24 * 60 * 60)

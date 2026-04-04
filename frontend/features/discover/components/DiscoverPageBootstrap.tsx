@@ -278,7 +278,6 @@ export default function DiscoverPageBootstrap({
         subnets={payload.subnets}
         lastRun={payload.lastRun}
         market={payload.market}
-        initialTimeseries={null}
       />
     )
   }
