@@ -1078,12 +1078,17 @@ async def market_overview(
     _: None = Depends(_check_rate_limit),
 ) -> MarketOverviewResponse:
     all_rows = get_latest_scores()
-    cache_key = _live_cache_key("market_overview_v3", days, rows=all_rows)
+    latest_score_version = next((row.get("score_version") for row in all_rows if row.get("score_version")), None)
+    cache_key = _live_cache_key("market_overview_v4", days, latest_score_version or "unknown", rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    history_rows = [row for row in get_scores_since(days=days) if _is_investable_row(row)]
+    history_rows = [
+        row
+        for row in get_scores_since(days=days)
+        if _is_investable_row(row) and (latest_score_version is None or row.get("score_version") == latest_score_version)
+    ]
     grouped: dict[str, dict[str, float]] = defaultdict(lambda: {"market_cap": 0.0, "market_cap_usd": 0.0, "count": 0, "usd_points": 0})
 
     for row in history_rows:
