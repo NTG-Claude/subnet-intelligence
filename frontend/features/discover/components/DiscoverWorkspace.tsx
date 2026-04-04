@@ -286,6 +286,16 @@ export default function DiscoverWorkspace({
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
   }, [compareIds, direction, pathname, router, search, sort])
 
+  useEffect(() => {
+    const previewId = pinnedId ?? focusedId
+    if (!previewId) return
+
+    const row = subnets.find((item) => item.netuid === previewId)
+    if (!row) return
+
+    router.prefetch(`/subnets/${row.netuid}`)
+  }, [focusedId, pinnedId, router, subnets])
+
   const rows = useMemo(() => {
     const searched = search.trim() ? subnets.filter((subnet) => queryMatches(subnet, search)) : subnets
     const sorted = sortUniverseRows(searched.map(toUniverseRow), sort)

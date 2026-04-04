@@ -1,5 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
+import { CompareSeriesData, fetchCompareTimeseries } from '@/lib/api'
 import { Line, LineChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 type TrendPoint = {
@@ -18,6 +21,97 @@ const SERIES = [
   { key: 'risk', label: 'Risk', color: '#ff5ca8', strokeWidth: 2.2 },
   { key: 'confidence', label: 'Confidence', color: '#bd93ff', strokeWidth: 2.2 },
 ] as const
+
+const DETAIL_TREND_CACHE_KEY = 'detail-compare-timeseries-v1'
+const DETAIL_TREND_CACHE_TTL_MS = 5 * 60 * 1000
+
+let cachedTimeseries: CompareSeriesData | null = null
+let cachedTimeseriesFetchedAt = 0
+let cachedTimeseriesPromise: Promise<CompareSeriesData> | null = null
+
+function hasFreshCachedTimeseries(now = Date.now()): boolean {
+  return Boolean(cachedTimeseries && now - cachedTimeseriesFetchedAt < DETAIL_TREND_CACHE_TTL_MS)
+}
+
+function rememberTimeseries(data: CompareSeriesData, now = Date.now()) {
+  cachedTimeseries = data
+  cachedTimeseriesFetchedAt = now
+
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.setItem(
+      DETAIL_TREND_CACHE_KEY,
+      JSON.stringify({
+        fetchedAt: now,
+        data,
+      }),
+    )
+  }
+}
+
+function readStoredTimeseries(): CompareSeriesData | null {
+  if (typeof window === 'undefined') return null
+
+  const raw = window.sessionStorage.getItem(DETAIL_TREND_CACHE_KEY)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as { fetchedAt?: number; data?: CompareSeriesData }
+    if (!parsed.fetchedAt || !parsed.data) return null
+    if (Date.now() - parsed.fetchedAt >= DETAIL_TREND_CACHE_TTL_MS) return null
+
+    cachedTimeseries = parsed.data
+    cachedTimeseriesFetchedAt = parsed.fetchedAt
+    return parsed.data
+  } catch {
+    return null
+  }
+}
+
+function getCachedTimeseries(): CompareSeriesData | null {
+  if (hasFreshCachedTimeseries()) {
+    return cachedTimeseries
+  }
+
+  return readStoredTimeseries()
+}
+
+async function loadCachedTimeseries(days: number): Promise<CompareSeriesData> {
+  const existing = getCachedTimeseries()
+  if (existing) return existing
+
+  if (!cachedTimeseriesPromise) {
+    cachedTimeseriesPromise = fetchCompareTimeseries(days)
+      .then((data) => {
+        rememberTimeseries(data)
+        return data
+      })
+      .finally(() => {
+        cachedTimeseriesPromise = null
+      })
+  }
+
+  return cachedTimeseriesPromise
+}
+
+function toTrendPoints(data: CompareSeriesData | null, netuid: number): TrendPoint[] {
+  if (!data) return []
+
+  return data.runs
+    .map((run) => {
+      const point = run.subnets.find((item) => item.netuid === netuid)
+      if (!point) return null
+
+      return {
+        computed_at: run.computed_at,
+        score: point.score,
+        quality: point.fundamental_quality,
+        opportunity: point.mispricing_signal,
+        risk: point.fragility_risk,
+        confidence: point.signal_confidence,
+      }
+    })
+    .filter((point): point is TrendPoint => Boolean(point))
+}
 
 function formatAxisDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value))
@@ -63,11 +157,58 @@ function TrendTooltip({
   )
 }
 
-export default function PrimarySignalsTrend({ points }: { points: TrendPoint[] }) {
+export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
+  const [points, setPoints] = useState<TrendPoint[]>(() => toTrendPoints(getCachedTimeseries(), netuid))
+  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>(points.length ? 'ready' : 'loading')
+
+  useEffect(() => {
+    const existing = getCachedTimeseries()
+    if (existing) {
+      setPoints(toTrendPoints(existing, netuid))
+      setStatus('ready')
+      return
+    }
+
+    let cancelled = false
+
+    async function loadTrend() {
+      try {
+        const data = await loadCachedTimeseries(45)
+        if (!cancelled) {
+          setPoints(toTrendPoints(data, netuid))
+          setStatus('ready')
+        }
+      } catch {
+        if (!cancelled) {
+          setStatus('unavailable')
+        }
+      }
+    }
+
+    void loadTrend()
+
+    return () => {
+      cancelled = true
+    }
+  }, [netuid])
+
+  if (status === 'loading') {
+    return (
+      <div className="mt-5 rounded-[var(--radius-lg)] border border-dashed border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.42)] px-6 py-8 text-center">
+        <div className="text-sm font-medium text-[color:var(--text-primary)]">Loading signal history</div>
+        <div className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">
+          The trend chart loads after the core subnet research so the page opens faster.
+        </div>
+      </div>
+    )
+  }
+
   if (points.length < 2) {
     return (
       <div className="mt-5 rounded-[var(--radius-lg)] border border-dashed border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.42)] px-6 py-8 text-center">
-        <div className="text-sm font-medium text-[color:var(--text-primary)]">Signal history is not available yet</div>
+        <div className="text-sm font-medium text-[color:var(--text-primary)]">
+          {status === 'unavailable' ? 'Signal history is currently unavailable' : 'Signal history is not available yet'}
+        </div>
         <div className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">
           This chart appears once there are enough completed runs to show how score, quality, opportunity, risk, and confidence are changing over time.
         </div>

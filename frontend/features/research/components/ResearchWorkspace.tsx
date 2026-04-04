@@ -80,17 +80,10 @@ function DiagnosticGrid({
 
 export default function ResearchWorkspace({
   memo,
-  signalTrend,
+  netuid,
 }: {
   memo: DetailMemoViewModel
-  signalTrend: {
-    computed_at: string
-    score: number
-    quality: number | null
-    opportunity: number | null
-    risk: number | null
-    confidence: number | null
-  }[]
+  netuid: number
 }) {
   return (
     <div className="space-y-6 pb-12">
@@ -179,7 +172,7 @@ export default function ResearchWorkspace({
             <SignalBar key={signal.key} signal={signal} />
           ))}
         </div>
-        <PrimarySignalsTrend points={signalTrend} />
+        <PrimarySignalsTrend netuid={netuid} />
       </section>
 
       <section className="surface-panel p-5 sm:p-6">
