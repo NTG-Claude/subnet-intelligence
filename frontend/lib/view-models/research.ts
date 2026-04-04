@@ -237,9 +237,9 @@ export const UNIVERSE_SORTS: UniverseSortOption[] = [
 
 const SIGNAL_META: Record<keyof PrimaryOutputs, Omit<SignalStat, 'value'>> = {
   fundamental_quality: { key: 'fundamental_quality', label: 'Quality', shortLabel: 'QLTY', tone: 'quality' },
-  mispricing_signal: { key: 'mispricing_signal', label: 'Upside', shortLabel: 'UPSD', tone: 'mispricing' },
-  fragility_risk: { key: 'fragility_risk', label: 'Downside', shortLabel: 'RISK', tone: 'fragility', invert: true },
-  signal_confidence: { key: 'signal_confidence', label: 'Trust', shortLabel: 'TRST', tone: 'confidence' },
+  mispricing_signal: { key: 'mispricing_signal', label: 'Opportunity', shortLabel: 'OPTY', tone: 'mispricing' },
+  fragility_risk: { key: 'fragility_risk', label: 'Risk', shortLabel: 'RISK', tone: 'fragility', invert: true },
+  signal_confidence: { key: 'signal_confidence', label: 'Confidence', shortLabel: 'CNFD', tone: 'confidence' },
 }
 
 const BLOCK_LABELS: Record<string, string> = {
