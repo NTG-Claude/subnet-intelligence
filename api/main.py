@@ -1071,7 +1071,7 @@ async def market_overview(
     _: None = Depends(_check_rate_limit),
 ) -> MarketOverviewResponse:
     all_rows = get_latest_scores()
-    cache_key = _live_cache_key("market_overview", days, rows=all_rows)
+    cache_key = _live_cache_key("market_overview_v2", days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
