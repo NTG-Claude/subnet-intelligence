@@ -125,6 +125,18 @@ def _get_cached_score_history(netuid: int, days: int) -> list[dict]:
     return history
 
 
+def _get_cached_scores_since(days: int) -> list[dict]:
+    if _is_mocked_callable(get_scores_since):
+        return get_scores_since(days=days)
+    key = f"scores_since:{days}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    rows = get_scores_since(days=days)
+    _cache_set(key, rows, ttl=_HOT_DATA_CACHE_TTL)
+    return rows
+
+
 def _metadata_fingerprint(metadata: Optional[dict[int, dict]] = None) -> str:
     try:
         live_metadata = metadata if metadata is not None else get_all_metadata()
@@ -234,7 +246,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 def _total_subnet_count() -> int:
-    return len([row for row in get_latest_scores() if _is_investable_row(row)])
+    return len([row for row in _get_cached_latest_scores() if _is_investable_row(row)])
 
 
 def _compute_percentile(rank: Optional[int], total: int) -> Optional[float]:
@@ -913,8 +925,8 @@ async def list_subnets(
         return cached
 
     all_rows = [r for r in all_rows if _is_investable_row(r)]
-    meta_by_netuid = get_all_metadata()
-    preview_history_rows = [row for row in get_scores_since(days=120) if _is_investable_row(row)]
+    meta_by_netuid = _get_cached_all_metadata()
+    preview_history_rows = [row for row in _get_cached_scores_since(days=120) if _is_investable_row(row)]
     previous_rank_by_netuid = _previous_rank_by_netuid(preview_history_rows)
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     reverse = sort_order == "desc"
@@ -961,7 +973,7 @@ async def get_subnet(
     view: Literal["page", "full"] = Query("full"),
     _: None = Depends(_check_rate_limit),
 ) -> SubnetDetailResponse:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     meta_by_netuid = _get_cached_all_metadata()
     cache_key = _live_cache_key("subnet", netuid, view, rows=all_rows, metadata=meta_by_netuid)
     cached = _cache_get(cache_key)
@@ -1055,13 +1067,13 @@ async def get_subnet_history(
     days: int = Query(30, ge=1, le=365),
     _: None = Depends(_check_rate_limit),
 ) -> list[ScoreHistoryPoint]:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("history", netuid, days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    history_raw = get_score_history(netuid, days=days)
+    history_raw = _get_cached_score_history(netuid, days=days)
     if not history_raw:
         raise HTTPException(status_code=404, detail=f"No history for subnet {netuid}")
 
@@ -1118,13 +1130,13 @@ async def get_subnet_signal_history(
     days: int = Query(120, ge=1, le=365),
     _: None = Depends(_check_rate_limit),
 ) -> list[SubnetSignalHistoryPoint]:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("history_signals", netuid, days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    history_raw = get_score_history(netuid, days=days)
+    history_raw = _get_cached_score_history(netuid, days=days)
     if not history_raw:
         raise HTTPException(status_code=404, detail=f"No history for subnet {netuid}")
 
@@ -1143,7 +1155,7 @@ async def latest_run(
     request: Request,
     _: None = Depends(_check_rate_limit),
 ) -> LatestRunResponse:
-    rows = get_latest_scores()
+    rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("latest_run", rows=rows)
     cached = _cache_get(cache_key)
     if cached is not None:
@@ -1166,7 +1178,7 @@ async def leaderboard(
     request: Request,
     _: None = Depends(_check_rate_limit),
 ) -> LeaderboardResponse:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("leaderboard", rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
@@ -1199,14 +1211,14 @@ async def compare_timeseries(
     days: int = Query(30, ge=1, le=180),
     _: None = Depends(_check_rate_limit),
 ) -> CompareSeriesResponse:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("compare_timeseries", days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    history_rows = [row for row in get_scores_since(days=days) if _is_investable_row(row)]
-    meta_by_netuid = get_all_metadata()
+    history_rows = [row for row in _get_cached_scores_since(days=days) if _is_investable_row(row)]
+    meta_by_netuid = _get_cached_all_metadata()
     grouped: dict[str, list[CompareSeriesSubnetPoint]] = defaultdict(list)
 
     for row in history_rows:
@@ -1250,7 +1262,7 @@ async def market_overview(
     days: int = Query(90, ge=7, le=365),
     _: None = Depends(_check_rate_limit),
 ) -> MarketOverviewResponse:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     latest_score_version = next((row.get("score_version") for row in all_rows if row.get("score_version")), None)
     cache_key = _live_cache_key("market_overview_v4", days, latest_score_version or "unknown", rows=all_rows)
     cached = _cache_get(cache_key)
@@ -1259,7 +1271,7 @@ async def market_overview(
 
     history_rows = [
         row
-        for row in get_scores_since(days=days)
+        for row in _get_cached_scores_since(days=days)
         if _is_investable_row(row) and (latest_score_version is None or row.get("score_version") == latest_score_version)
     ]
     grouped: dict[str, dict[str, float]] = defaultdict(lambda: {"market_cap": 0.0, "market_cap_usd": 0.0, "count": 0, "usd_points": 0})
@@ -1333,7 +1345,7 @@ async def score_distribution(
     buckets: int = Query(10, ge=2, le=20),
     _: None = Depends(_check_rate_limit),
 ) -> DistributionResponse:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("distribution", buckets, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
@@ -1359,13 +1371,13 @@ async def backtest_labels(
     days: int = Query(90, ge=7, le=365),
     _: None = Depends(_check_rate_limit),
 ) -> BacktestResponse:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("backtests", days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    rows = get_scores_since(days=days)
+    rows = _get_cached_scores_since(days=days)
     summary = build_backtest_summary(rows)
     result = BacktestResponse(
         observations=summary["observations"],
@@ -1385,7 +1397,7 @@ async def backtest_labels(
 )
 async def health() -> HealthResponse:
     try:
-        rows = get_latest_scores()
+        rows = _get_cached_latest_scores()
         last_ts = max((r["computed_at"] for r in rows if r.get("computed_at")), default=None)
         return HealthResponse(status="ok", last_score_run=last_ts, subnet_count=len(rows))
     except Exception as exc:
