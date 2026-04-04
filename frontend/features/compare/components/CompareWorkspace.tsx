@@ -43,33 +43,33 @@ const METRIC_CONFIG: Array<{
 }> = [
   {
     key: 'score',
-    title: 'Overall Performance',
-    subtitle: 'Total score across runs. This is the cleanest view of who is trending up or down overall.',
+    title: 'Score',
+    subtitle: 'Total score across runs. This is the cleanest view of broad relative positioning over time.',
     formatter: (value) => value.toFixed(1),
   },
   {
     key: 'fundamental_quality',
-    title: 'Strength',
-    subtitle: 'How business quality evolves run by run across the full universe.',
+    title: 'Quality',
+    subtitle: 'How fundamental quality evolves run by run across the subnet universe.',
     formatter: (value) => value.toFixed(1),
   },
   {
     key: 'mispricing_signal',
-    title: 'Upside Gap',
-    subtitle: 'Where the model still sees pricing upside left after each run.',
+    title: 'Opportunity',
+    subtitle: 'Where the model still sees residual upside and mispricing potential after each run.',
     formatter: (value) => value.toFixed(1),
   },
   {
     key: 'fragility_risk',
     title: 'Risk',
-    subtitle: 'Lower is better. This chart shows which subnets remain hardest to break under stress.',
+    subtitle: 'Lower is better. This shows which subnets remain more resilient under stress across runs.',
     lowerIsBetter: true,
     formatter: (value) => value.toFixed(1),
   },
   {
     key: 'signal_confidence',
-    title: 'Evidence Quality',
-    subtitle: 'How clean and trustworthy the underlying read looks over time.',
+    title: 'Confidence',
+    subtitle: 'How clean, trustworthy, and decision-usable the underlying read looks over time.',
     formatter: (value) => value.toFixed(1),
   },
 ]
@@ -368,7 +368,7 @@ export default function CompareWorkspace({ data }: { data: CompareSeriesData }) 
     <div className="space-y-6 pb-16">
       <PageHeader
         title="Compare runs"
-        subtitle="Five clean run-over-run charts show how the whole subnet universe evolves across score, strength, upside, risk, and evidence quality."
+        subtitle="Five clean run-over-run charts show how the subnet universe evolves across score, quality, opportunity, risk, and confidence."
         actions={
           <>
             <Link href="/" className="button-secondary">

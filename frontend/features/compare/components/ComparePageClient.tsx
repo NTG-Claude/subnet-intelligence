@@ -16,7 +16,7 @@ function CompareLoadingState({ attempt }: { attempt: number }) {
         <div className="text-[11px] uppercase tracking-[0.24em] text-[color:var(--text-tertiary)]">Compare</div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--text-primary)]">Loading run charts</h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)]">
-          Pulling the latest run history for score, strength, upside, risk, and evidence quality.
+          Pulling the latest run history for score, quality, opportunity, risk, and confidence.
           {attempt > 0 ? ` Retrying connection (${attempt + 1}/${MAX_RETRIES})...` : ''}
         </p>
       </section>
