@@ -1,5 +1,13 @@
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+type ApiFetchOptions = {
+  revalidate?: number
+}
+
+const DEFAULT_REVALIDATE_SECONDS = 600
+const DETAIL_REVALIDATE_SECONDS = 180
+const TIMESERIES_REVALIDATE_SECONDS = 300
+
 export interface SubnetSummary {
   netuid: number
   name: string | null
@@ -240,17 +248,26 @@ export interface MarketOverviewData {
   points: MarketOverviewPoint[]
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API}${path}`, { cache: 'no-store' })
+async function get<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const { revalidate = DEFAULT_REVALIDATE_SECONDS } = options
+  const init: RequestInit & { next?: { revalidate: number } } = {}
+
+  if (typeof window === 'undefined') {
+    init.next = { revalidate }
+  }
+
+  const res = await fetch(`${API}${path}`, init)
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
   return res.json()
 }
 
 export const fetchSubnets = (limit = 200) =>
-  get<{ total: number; subnets: SubnetSummary[] }>(`/api/v1/subnets?limit=${limit}`)
+  get<{ total: number; subnets: SubnetSummary[] }>(`/api/v1/subnets?limit=${limit}&preview=compact`, {
+    revalidate: DEFAULT_REVALIDATE_SECONDS,
+  })
 
 export const fetchSubnet = (netuid: number) =>
-  get<SubnetDetail>(`/api/v1/subnets/${netuid}`)
+  get<SubnetDetail>(`/api/v1/subnets/${netuid}`, { revalidate: DETAIL_REVALIDATE_SECONDS })
 
 export const fetchLeaderboard = () =>
   get<LeaderboardData>('/api/v1/leaderboard')
@@ -259,13 +276,19 @@ export const fetchDistribution = () =>
   get<{ buckets: DistributionBucket[]; total_subnets: number }>('/api/v1/scores/distribution?buckets=10')
 
 export const fetchLatestRun = () =>
-  get<{ last_score_run: string | null; subnet_count: number }>('/api/v1/scores/latest')
+  get<{ last_score_run: string | null; subnet_count: number }>('/api/v1/scores/latest', {
+    revalidate: TIMESERIES_REVALIDATE_SECONDS,
+  })
 
 export const fetchLabelBacktests = (days = 90) =>
   get<BacktestData>(`/api/v1/backtests/labels?days=${days}`)
 
 export const fetchCompareTimeseries = (days = 30) =>
-  get<CompareSeriesData>(`/api/v1/compare/timeseries?days=${days}`)
+  get<CompareSeriesData>(`/api/v1/compare/timeseries?days=${days}`, {
+    revalidate: TIMESERIES_REVALIDATE_SECONDS,
+  })
 
 export const fetchMarketOverview = (days = 90) =>
-  get<MarketOverviewData>(`/api/v1/market/overview?days=${days}`)
+  get<MarketOverviewData>(`/api/v1/market/overview?days=${days}`, {
+    revalidate: DEFAULT_REVALIDATE_SECONDS,
+  })

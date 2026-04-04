@@ -4,8 +4,6 @@ import ResearchWorkspace from '@/features/research/components/ResearchWorkspace'
 import { fetchSubnet } from '@/lib/api'
 import { buildDetailMemo } from '@/lib/view-models/research'
 
-export const dynamic = 'force-dynamic'
-
 interface Props {
   params: Promise<{ netuid: string }>
 }
