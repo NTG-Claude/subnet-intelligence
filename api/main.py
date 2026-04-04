@@ -27,6 +27,7 @@ from api.models import (
     CompareSeriesResponse,
     CompareSeriesRunPoint,
     CompareSeriesSubnetPoint,
+    DiscoverBootstrapResponse,
     DetailedScoreHistoryPoint,
     DistributionBucket,
     DistributionResponse,
@@ -80,6 +81,11 @@ def _cache_get(key: str) -> Any:
     if entry and time.time() < entry[1]:
         return entry[0]
     return None
+
+
+def _cache_get_stale(key: str) -> Any:
+    entry = _cache.get(key)
+    return entry[0] if entry else None
 
 
 def _cache_set(key: str, value: Any, ttl: int = _CACHE_TTL) -> None:
@@ -858,6 +864,74 @@ def _preview_metric_deltas_by_netuid(
     return preview_deltas
 
 
+def _build_market_overview_response(
+    all_rows: list[dict],
+    *,
+    days: int,
+) -> MarketOverviewResponse:
+    latest_score_version = next((row.get("score_version") for row in all_rows if row.get("score_version")), None)
+    history_rows = [
+        row
+        for row in _get_cached_scores_since(days=days)
+        if _is_investable_row(row) and (latest_score_version is None or row.get("score_version") == latest_score_version)
+    ]
+    grouped: dict[str, dict[str, float]] = defaultdict(
+        lambda: {"market_cap": 0.0, "market_cap_usd": 0.0, "count": 0, "usd_points": 0}
+    )
+
+    for row in history_rows:
+        market_cap = row.get("market_cap_tao")
+        if market_cap is None:
+            continue
+        bucket = grouped[row["computed_at"]]
+        bucket["market_cap"] += float(market_cap)
+        bucket["count"] += 1
+        market_cap_usd = _extract_market_cap_usd(row)
+        if market_cap_usd is not None:
+            bucket["market_cap_usd"] += market_cap_usd
+            bucket["usd_points"] += 1
+
+    points = [
+        MarketOverviewPoint(
+            computed_at=computed_at,
+            total_market_cap_tao=values["market_cap"],
+            total_market_cap_usd=values["market_cap_usd"] if values["usd_points"] > 0 else None,
+            subnet_count=int(values["count"]),
+        )
+        for computed_at, values in sorted(grouped.items())
+    ]
+
+    current_market_cap = points[-1].total_market_cap_tao if points else 0.0
+    current_market_cap_usd = points[-1].total_market_cap_usd if points else None
+    current_count = points[-1].subnet_count if points else 0
+    previous_market_cap = points[-2].total_market_cap_tao if len(points) > 1 else None
+    tao_price_usd = (
+        (current_market_cap_usd / current_market_cap)
+        if current_market_cap_usd is not None and current_market_cap > 0
+        else None
+    )
+    if tao_price_usd is None:
+        latest_rows = [row for row in all_rows if _is_investable_row(row)]
+        prices = [price for price in (_extract_price_usd(row) for row in latest_rows) if price is not None]
+        if prices:
+            tao_price_usd = sum(prices) / len(prices)
+            current_market_cap_usd = current_market_cap * tao_price_usd if current_market_cap > 0 else None
+    change_pct = (
+        round(((current_market_cap - previous_market_cap) / previous_market_cap) * 100, 2)
+        if previous_market_cap and previous_market_cap > 0
+        else None
+    )
+
+    return MarketOverviewResponse(
+        current_market_cap_tao=current_market_cap,
+        current_market_cap_usd=current_market_cap_usd,
+        tao_price_usd=tao_price_usd,
+        change_pct_vs_previous_run=change_pct,
+        current_subnet_count=current_count,
+        points=points,
+    )
+
+
 def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
     with SessionLocal() as session:
         row = session.get(SubnetMetadataRow, netuid)
@@ -890,6 +964,70 @@ async def root() -> dict[str, Any]:
         "health_url": "/health",
         "api_health_url": "/api/health",
     }
+
+@app.get(
+    "/api/v1/discover/bootstrap",
+    response_model=DiscoverBootstrapResponse,
+    summary="Homepage bootstrap payload for discover",
+    tags=["Discover"],
+)
+async def discover_bootstrap(
+    request: Request,
+    limit: int = Query(200, ge=1, le=200),
+    market_days: int = Query(365, ge=30, le=365),
+    _: None = Depends(_check_rate_limit),
+) -> DiscoverBootstrapResponse:
+    stale_cache_key = f"discover_bootstrap_stale:{limit}:{market_days}"
+
+    try:
+        all_rows = _get_cached_latest_scores()
+        meta_by_netuid = _get_cached_all_metadata()
+        cache_key = _live_cache_key("discover_bootstrap", limit, market_days, rows=all_rows, metadata=meta_by_netuid)
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        investable_rows = [row for row in all_rows if _is_investable_row(row)]
+        preview_history_rows = [row for row in _get_cached_scores_since(days=120) if _is_investable_row(row)]
+        previous_rank_by_netuid = _previous_rank_by_netuid(preview_history_rows)
+        page = investable_rows[:limit]
+        page_netuids = {row["netuid"] for row in page}
+        preview_metric_deltas_by_netuid = _preview_metric_deltas_by_netuid(preview_history_rows, page_netuids)
+        market = _build_market_overview_response(all_rows, days=market_days)
+
+        subnets = []
+        total = len(investable_rows)
+        for row in page:
+            meta_dict = meta_by_netuid.get(row["netuid"])
+            meta = SubnetMetadataResponse(netuid=row["netuid"], **(meta_dict or {})) if meta_dict else None
+            subnets.append(
+                _row_to_summary(
+                    row,
+                    total,
+                    meta,
+                    preview="compact",
+                    previous_rank=previous_rank_by_netuid.get(row["netuid"]),
+                    preview_metric_deltas=preview_metric_deltas_by_netuid.get(row["netuid"]),
+                )
+            )
+
+        last_score_run = max((r["computed_at"] for r in all_rows if r.get("computed_at")), default=None)
+        result = DiscoverBootstrapResponse(
+            subnets=subnets,
+            last_score_run=last_score_run,
+            subnet_count=total,
+            market=market,
+        )
+        _cache_set(cache_key, result, ttl=_HOT_DATA_CACHE_TTL)
+        _cache_set(stale_cache_key, result, ttl=24 * 60 * 60)
+        return result
+    except Exception as exc:
+        stale = _cache_get_stale(stale_cache_key)
+        if stale is not None:
+            logger.warning("Serving stale discover bootstrap after refresh failure: %s", exc)
+            return stale
+        raise
+
 
 @app.get(
     "/api/v1/subnets",
@@ -1269,67 +1407,7 @@ async def market_overview(
     if cached is not None:
         return cached
 
-    history_rows = [
-        row
-        for row in _get_cached_scores_since(days=days)
-        if _is_investable_row(row) and (latest_score_version is None or row.get("score_version") == latest_score_version)
-    ]
-    grouped: dict[str, dict[str, float]] = defaultdict(lambda: {"market_cap": 0.0, "market_cap_usd": 0.0, "count": 0, "usd_points": 0})
-
-    for row in history_rows:
-        market_cap = row.get("market_cap_tao")
-        if market_cap is None:
-            continue
-        bucket = grouped[row["computed_at"]]
-        bucket["market_cap"] += float(market_cap)
-        bucket["count"] += 1
-        market_cap_usd = _extract_market_cap_usd(row)
-        if market_cap_usd is not None:
-            bucket["market_cap_usd"] += market_cap_usd
-            bucket["usd_points"] += 1
-
-    points = [
-        MarketOverviewPoint(
-            computed_at=computed_at,
-            total_market_cap_tao=values["market_cap"],
-            total_market_cap_usd=values["market_cap_usd"] if values["usd_points"] > 0 else None,
-            subnet_count=int(values["count"]),
-        )
-        for computed_at, values in sorted(grouped.items())
-    ]
-
-    current_market_cap = points[-1].total_market_cap_tao if points else 0.0
-    current_market_cap_usd = points[-1].total_market_cap_usd if points else None
-    current_count = points[-1].subnet_count if points else 0
-    previous_market_cap = points[-2].total_market_cap_tao if len(points) > 1 else None
-    tao_price_usd = (
-        (current_market_cap_usd / current_market_cap)
-        if current_market_cap_usd is not None and current_market_cap > 0
-        else None
-    )
-    if tao_price_usd is None:
-        latest_rows = [row for row in all_rows if _is_investable_row(row)]
-        prices = [price for price in (_extract_price_usd(row) for row in latest_rows) if price is not None]
-        if prices:
-            tao_price_usd = sum(prices) / len(prices)
-            current_market_cap_usd = current_market_cap * tao_price_usd if current_market_cap > 0 else None
-        else:
-            tao_price_usd = await get_tao_price_usd()
-            current_market_cap_usd = current_market_cap * tao_price_usd if tao_price_usd is not None else current_market_cap_usd
-    change_pct = (
-        round(((current_market_cap - previous_market_cap) / previous_market_cap) * 100, 2)
-        if previous_market_cap and previous_market_cap > 0
-        else None
-    )
-
-    result = MarketOverviewResponse(
-        current_market_cap_tao=current_market_cap,
-        current_market_cap_usd=current_market_cap_usd,
-        tao_price_usd=tao_price_usd,
-        change_pct_vs_previous_run=change_pct,
-        current_subnet_count=current_count,
-        points=points,
-    )
+    result = _build_market_overview_response(all_rows, days=days)
     _cache_set(cache_key, result)
     return result
 
