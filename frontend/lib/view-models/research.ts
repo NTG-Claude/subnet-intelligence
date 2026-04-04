@@ -1966,6 +1966,61 @@ function minDefined(values: Array<number | null | undefined>): number | null {
   return Math.min(...resolved)
 }
 
+function calibrateScoresToTarget(
+  scores: Array<number | null>,
+  target: number | null,
+): Array<number | null> {
+  if (target == null || !Number.isFinite(target)) return scores
+
+  const next = [...scores]
+  let active = next
+    .map((value, index) => ({ value, index }))
+    .filter((entry): entry is { value: number; index: number } => entry.value != null && Number.isFinite(entry.value))
+
+  if (!active.length) return next
+
+  let remainingDelta = target * active.length - active.reduce((sum, entry) => sum + entry.value, 0)
+
+  for (let iteration = 0; iteration < 8 && active.length && Math.abs(remainingDelta) > 0.001; iteration += 1) {
+    const step = remainingDelta / active.length
+    const stillActive: typeof active = []
+
+    for (const entry of active) {
+      const adjusted = Math.max(0, Math.min(100, entry.value + step))
+      next[entry.index] = adjusted
+
+      if (adjusted > 0.001 && adjusted < 99.999) {
+        stillActive.push({ value: adjusted, index: entry.index })
+      }
+    }
+
+    active = stillActive
+    const defined = next.filter((value): value is number => value != null && Number.isFinite(value))
+    remainingDelta = target * defined.length - defined.reduce((sum, value) => sum + value, 0)
+  }
+
+  return next
+}
+
+function calibrateIndicatorRows(
+  rows: IndicatorRowViewModel[],
+  target: number | null,
+): IndicatorRowViewModel[] {
+  const calibratedScores = calibrateScoresToTarget(
+    rows.map((row) => row.desirabilityScore),
+    target,
+  )
+
+  return rows.map((row, index) => {
+    const desirabilityScore = calibratedScores[index]
+    return {
+      ...row,
+      desirabilityScore,
+      sentiment: sentimentFromDesirability(desirabilityScore),
+    }
+  })
+}
+
 function buildIndicatorStack(
   subnet: SubnetDetail,
   researchSummary: ResearchSummaryViewModel,
@@ -2091,14 +2146,8 @@ function buildIndicatorStack(
     -droppedInputs * 4,
   )
 
-  const quality: IndicatorCategoryViewModel = {
-    key: 'quality',
-    title: 'Quality',
-    displayScore: qualitySignal,
-    desirabilityScore: averageDefined([participationHealth, validatorHealth, liquidityHealth, marketRelevance, marketLegitimacy]),
-    sentiment: sentimentFromDesirability(averageDefined([participationHealth, validatorHealth, liquidityHealth, marketRelevance, marketLegitimacy])),
-    helperText: 'Core operating quality and market legitimacy.',
-    indicators: [
+  const qualityTarget = qualitySignal
+  const qualityIndicators = calibrateIndicatorRows([
       {
         key: 'participation_health',
         label: 'Participation health',
@@ -2134,17 +2183,19 @@ function buildIndicatorStack(
         sentiment: sentimentFromDesirability(marketLegitimacy),
         helperText: contributorSummary(analysis, ['market_legitimacy'], 'Legitimacy measures how much the market is confirming the thesis rather than fighting it.'),
       },
-    ],
+    ], qualityTarget)
+  const quality: IndicatorCategoryViewModel = {
+    key: 'quality',
+    title: 'Quality',
+    displayScore: qualitySignal,
+    desirabilityScore: qualityTarget,
+    sentiment: sentimentFromDesirability(qualityTarget),
+    helperText: 'Core operating quality and market legitimacy.',
+    indicators: qualityIndicators,
   }
 
-  const opportunity: IndicatorCategoryViewModel = {
-    key: 'opportunity',
-    title: 'Opportunity',
-    displayScore: opportunitySignal,
-    desirabilityScore: averageDefined([qualityMomentum, reserveMomentum, priceLag, fairValueGapLight, uncrowdedParticipation]),
-    sentiment: sentimentFromDesirability(averageDefined([qualityMomentum, reserveMomentum, priceLag, fairValueGapLight, uncrowdedParticipation])),
-    helperText: 'Where upside remains after quality, participation, and current pricing are considered.',
-    indicators: [
+  const opportunityTarget = opportunitySignal
+  const opportunityIndicators = calibrateIndicatorRows([
       {
         key: 'quality_momentum',
         label: 'Quality momentum',
@@ -2180,17 +2231,19 @@ function buildIndicatorStack(
         sentiment: sentimentFromDesirability(uncrowdedParticipation),
         helperText: 'This favors active participation that is not yet overcrowded or structurally cramped.',
       },
-    ],
+    ], opportunityTarget)
+  const opportunity: IndicatorCategoryViewModel = {
+    key: 'opportunity',
+    title: 'Opportunity',
+    displayScore: opportunitySignal,
+    desirabilityScore: opportunityTarget,
+    sentiment: sentimentFromDesirability(opportunityTarget),
+    helperText: 'Where upside remains after quality, participation, and current pricing are considered.',
+    indicators: opportunityIndicators,
   }
 
-  const risk: IndicatorCategoryViewModel = {
-    key: 'risk',
-    title: 'Risk',
-    displayScore: rawRiskSignal,
-    desirabilityScore: averageDefined([crowdingLevel, concentrationRisk, thinLiquidityRisk, reversalRisk, weakMarketStructure]),
-    sentiment: sentimentFromDesirability(averageDefined([crowdingLevel, concentrationRisk, thinLiquidityRisk, reversalRisk, weakMarketStructure])),
-    helperText: 'All risk rows are inverted into desirability, so higher still means better for the investment thesis.',
-    indicators: [
+  const riskTarget = safetySignal
+  const riskIndicators = calibrateIndicatorRows([
       {
         key: 'crowding_level',
         label: 'Crowding level',
@@ -2226,17 +2279,19 @@ function buildIndicatorStack(
         sentiment: sentimentFromDesirability(weakMarketStructure),
         helperText: 'This is inverted so weak structure, noisy market data, or poor confirmation show up as bearish.',
       },
-    ],
+    ], riskTarget)
+  const risk: IndicatorCategoryViewModel = {
+    key: 'risk',
+    title: 'Risk',
+    displayScore: rawRiskSignal,
+    desirabilityScore: riskTarget,
+    sentiment: sentimentFromDesirability(riskTarget),
+    helperText: 'All risk rows are inverted into desirability, so higher still means better for the investment thesis.',
+    indicators: riskIndicators,
   }
 
-  const confidenceBucket: IndicatorCategoryViewModel = {
-    key: 'confidence',
-    title: 'Confidence',
-    displayScore: confidenceSignal,
-    desirabilityScore: averageDefined([dataConfidenceScore, marketConfidenceScore, thesisConfidenceScore, evidenceDepth, evidenceFloor]),
-    sentiment: sentimentFromDesirability(averageDefined([dataConfidenceScore, marketConfidenceScore, thesisConfidenceScore, evidenceDepth, evidenceFloor])),
-    helperText: 'Confidence measures how much of the thesis can actually be trusted today.',
-    indicators: [
+  const confidenceTarget = confidenceSignal
+  const confidenceIndicators = calibrateIndicatorRows([
       {
         key: 'data_confidence',
         label: 'Data confidence',
@@ -2272,7 +2327,15 @@ function buildIndicatorStack(
         sentiment: sentimentFromDesirability(evidenceFloor),
         helperText: 'Evidence floor is intentionally conservative and follows the weakest trustworthy layer.',
       },
-    ],
+    ], confidenceTarget)
+  const confidenceBucket: IndicatorCategoryViewModel = {
+    key: 'confidence',
+    title: 'Confidence',
+    displayScore: confidenceSignal,
+    desirabilityScore: confidenceTarget,
+    sentiment: sentimentFromDesirability(confidenceTarget),
+    helperText: 'Confidence measures how much of the thesis can actually be trusted today.',
+    indicators: confidenceIndicators,
   }
 
   return [quality, opportunity, risk, confidenceBucket]
