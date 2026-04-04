@@ -6,20 +6,42 @@ import StatusChip from '@/components/ui/StatusChip'
 import { DetailMemoViewModel, MemoInsightItem, MemoSectionItem, ScoreExplanationItem } from '@/lib/view-models/research'
 import PrimarySignalsTrend from './PrimarySignalsTrend'
 
+function CompactStat({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string
+  detail?: string
+}) {
+  return (
+    <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
+      <div className="eyebrow">{label}</div>
+      <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">{value}</div>
+      {detail ? <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{detail}</p> : null}
+    </div>
+  )
+}
+
 function InsightGrid({
   title,
+  intro,
   items,
 }: {
   title: string
+  intro?: string
   items: MemoInsightItem[]
 }) {
   return (
     <section className="surface-panel p-5 sm:p-6">
       <div className="section-title">{title}</div>
+      {intro ? <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{intro}</p> : null}
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {items.map((item) => (
-          <div key={item.label} className="border-b border-[color:var(--border-subtle)] pb-4 last:border-b-0 last:pb-0">
+          <div key={item.label} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
             <div className="eyebrow">{item.label}</div>
+            <div className="mt-2 text-sm font-medium text-[color:var(--text-primary)]">{item.value}</div>
             <p className="mt-2 max-w-[54ch] text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
           </div>
         ))}
@@ -28,17 +50,22 @@ function InsightGrid({
   )
 }
 
-function ScoreList({
+function ExplanationList({
   title,
+  intro,
   items,
+  empty,
 }: {
   title: string
+  intro?: string
   items: ScoreExplanationItem[]
+  empty: string
 }) {
   return (
-    <div>
-      <div className="eyebrow">{title}</div>
-      <div className="mt-3 space-y-3">
+    <section className="surface-panel p-5 sm:p-6">
+      <div className="section-title">{title}</div>
+      {intro ? <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{intro}</p> : null}
+      <div className="mt-4 space-y-3">
         {items.length ? (
           items.map((item) => (
             <div key={`${title}-${item.title}`} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
@@ -47,10 +74,10 @@ function ScoreList({
             </div>
           ))
         ) : (
-          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">No clear items are available.</p>
+          <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{empty}</p>
         )}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -78,6 +105,39 @@ function DiagnosticGrid({
   )
 }
 
+function DetailList({
+  title,
+  intro,
+  items,
+  empty,
+}: {
+  title: string
+  intro?: string
+  items: MemoSectionItem[]
+  empty: string
+}) {
+  return (
+    <section className="surface-panel p-5 sm:p-6">
+      <div className="section-title">{title}</div>
+      {intro ? <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{intro}</p> : null}
+      <div className="mt-4">
+        <DiagnosticGrid items={items} empty={empty} />
+      </div>
+    </section>
+  )
+}
+
+function uniqueSectionItems(items: MemoSectionItem[]): MemoSectionItem[] {
+  const seen = new Set<string>()
+
+  return items.filter((item) => {
+    const key = `${item.title}::${item.body}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export default function ResearchWorkspace({
   memo,
   netuid,
@@ -85,6 +145,37 @@ export default function ResearchWorkspace({
   memo: DetailMemoViewModel
   netuid: number
 }) {
+  const verdict = memo.headerSubtitle || memo.researchSummary.setupRead
+  const strongestSupport = memo.anchorInsights.find((item) => item.label === 'Strongest support')?.value ?? 'No clear support stands out yet.'
+  const mainLimiter = memo.anchorInsights.find((item) => item.label === 'Main thing capping the score')?.value ?? 'No single limitation dominates yet.'
+  const trustSummary = memo.evidenceItems[0]?.body ?? 'Trust details are not available yet.'
+  const trustLabel =
+    memo.secondaryTag?.label ??
+    memo.contextRow.find((item) => item.label === 'Read Trust')?.value ??
+    'Trust not available'
+
+  const riskItems = uniqueSectionItems([
+    ...memo.topDrags.map((item) => ({ title: item.title, body: item.body, tone: item.tone })),
+    ...memo.breaks,
+    ...memo.uncertainties,
+  ])
+
+  const trustItems = uniqueSectionItems([
+    ...memo.evidenceItems.map((item) => ({
+      title: item.label,
+      body: item.body,
+      tone: item.tone,
+      meta: item.value,
+    })),
+    ...memo.confidenceHeadline.map((item) => ({
+      title: item.label,
+      body: item.meta ? `${item.value}. ${item.meta}` : item.value,
+      tone: item.tone,
+    })),
+    ...memo.confidenceItems,
+    ...memo.visibilityItems,
+  ])
+
   return (
     <div className="space-y-6 pb-12">
       <Link href="/" className="button-secondary">
@@ -92,73 +183,33 @@ export default function ResearchWorkspace({
       </Link>
 
       <section className="surface-panel p-5 sm:p-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 space-y-3">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone="neutral">{memo.netuidLabel}</StatusChip>
             </div>
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{memo.headerSubtitle}</p>
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <p className="mt-2 max-w-3xl text-base leading-7 text-[color:var(--text-primary)]">{verdict}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
-                  <div className="eyebrow">Why This Score</div>
-                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{memo.researchSummary.setupRead}</p>
+                  <div className="eyebrow">Biggest positive driver</div>
+                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{strongestSupport}</p>
                 </div>
                 <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
-                  <div className="eyebrow">How Much To Trust This Read</div>
-                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{memo.evidenceItems[0]?.body ?? 'Trust details are not available yet.'}</p>
+                  <div className="eyebrow">Biggest limiting factor</div>
+                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{mainLimiter}</p>
                 </div>
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {memo.anchorInsights.map((item) => (
-                  <div key={item.label} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
-                    <div className="eyebrow">{item.label}</div>
-                    <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{item.value}</p>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
 
-          <div className="grid min-w-full gap-3 sm:grid-cols-2 xl:min-w-[380px] xl:max-w-[420px]">
-            <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
-              <div className="eyebrow">Score</div>
-              <div className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.scoreLabel}</div>
-            </div>
-            <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
-              <div className="eyebrow">Rank</div>
-              <div className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.rankLabel}</div>
-            </div>
+          <div className="grid min-w-full gap-3 sm:grid-cols-2 xl:min-w-[420px] xl:max-w-[460px]">
+            <CompactStat label="Score" value={memo.scoreLabel} />
+            <CompactStat label="Rank" value={memo.rankLabel} />
+            <CompactStat label="Confidence" value={trustLabel} detail={trustSummary} />
+            <CompactStat label="Last updated" value={memo.updatedLabel} />
           </div>
-        </div>
-      </section>
-
-      <section className="surface-panel p-5 sm:p-6">
-        <div className="section-title">Decision Summary</div>
-        <div className="mt-4 grid gap-x-8 gap-y-5 md:grid-cols-2">
-          {memo.executiveSummary.map((item) => (
-            <div key={item.label} className="border-b border-[color:var(--border-subtle)] pb-4 last:border-b-0 md:last:border-b md:[&:nth-last-child(-n+2)]:border-b-0 md:[&:nth-last-child(-n+2)]:pb-0">
-              <div className="eyebrow">{item.label}</div>
-              <p className="mt-2 text-base leading-7 text-[color:var(--text-primary)]">{item.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <InsightGrid title="Evidence & Trust" items={memo.evidenceItems} />
-        <InsightGrid title="Market Structure" items={memo.marketStructure} />
-      </div>
-
-      <section className="surface-panel p-5 sm:p-6">
-        <div className="section-title">Why The Score Lands Here</div>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">
-          These are the clearest reasons the score holds up where it does, and the clearest reasons it is not higher.
-        </p>
-        <div className="mt-5 grid gap-6 xl:grid-cols-2">
-          <ScoreList title="What Is Supporting The Score" items={memo.topSupports} />
-          <ScoreList title="What Is Capping The Score" items={memo.topDrags} />
         </div>
       </section>
 
@@ -175,20 +226,36 @@ export default function ResearchWorkspace({
         <PrimarySignalsTrend netuid={netuid} />
       </section>
 
-      <section className="surface-panel p-5 sm:p-6">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {memo.contextRow.map((item) => (
-            <div key={item.label} className="border-b border-[color:var(--border-subtle)] pb-3 sm:border-b-0 sm:pb-0 sm:pr-3 sm:[&:not(:last-child)]:border-r sm:[&:not(:last-child)]:border-[color:var(--border-subtle)]">
-              <div className="eyebrow">{item.label}</div>
-              <div className="mt-2 text-base font-medium text-[color:var(--text-primary)]">{item.value}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <ExplanationList
+        title="What supports the case"
+        intro={memo.researchSummary.whyNow}
+        items={memo.topSupports}
+        empty="No clear support stands out yet."
+      />
+
+      <DetailList
+        title="What could break the case"
+        intro={`${memo.researchSummary.mainConstraint} ${memo.researchSummary.breakCondition}`}
+        items={riskItems}
+        empty="No single risk dominates yet."
+      />
+
+      <DetailList
+        title="How much to trust this read"
+        intro={trustSummary}
+        items={trustItems}
+        empty="No trust details are available yet."
+      />
+
+      <InsightGrid
+        title="How the market is set up"
+        intro={memo.researchSummary.relativePeerContext}
+        items={memo.marketStructure}
+      />
 
       <CollapsibleSection
         title="Deep Diagnostics"
-        subtitle="Reference checks for stress, inputs, and scoring."
+        subtitle="Lower-level stress, scenario, and scoring detail for deeper review."
         defaultOpen={false}
       >
         <div className="space-y-6">
@@ -207,23 +274,6 @@ export default function ResearchWorkspace({
           </div>
 
           <div>
-            <div className="section-title">Conviction Breakdown</div>
-            <div className="mt-3">
-              <DiagnosticGrid items={memo.confidenceHeadline.map((item) => ({ title: item.label, body: item.value, tone: item.tone, meta: item.meta }))} empty="No conviction summary is available." />
-            </div>
-            <div className="mt-3">
-              <DiagnosticGrid items={memo.confidenceItems} empty="No conviction breakdown is available." />
-            </div>
-          </div>
-
-          <div>
-            <div className="section-title">Failure Points</div>
-            <div className="mt-3">
-              <DiagnosticGrid items={memo.breaks} empty="No failure points were emitted for this subnet." />
-            </div>
-          </div>
-
-          <div>
             <div className="section-title">Score Pillars</div>
             <div className="mt-3">
               <DiagnosticGrid items={memo.blockScores} empty="No score pillar data is available." />
@@ -236,14 +286,6 @@ export default function ResearchWorkspace({
               <DiagnosticGrid items={memo.visibilityItems} empty="No input-check diagnostics are available." />
             </div>
           </div>
-
-          <div>
-            <div className="section-title">Key Uncertainties</div>
-            <div className="mt-3">
-              <DiagnosticGrid items={memo.uncertainties} empty="No key uncertainties were emitted for this subnet." />
-            </div>
-          </div>
-
         </div>
       </CollapsibleSection>
     </div>
