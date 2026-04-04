@@ -142,45 +142,48 @@ export function MobileDecisionCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <div className="surface-subtle p-3">
-          <div className="eyebrow">Quality</div>
-          <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
-        </div>
-        <div className="surface-subtle p-3">
-          <div className="eyebrow">Opportunity</div>
-          <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
-        </div>
-        <div className="surface-subtle p-3">
-          <div className="eyebrow">Risk</div>
-          <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
-        </div>
-        <div className="surface-subtle p-3">
-          <div className="eyebrow">Confidence</div>
-          <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <MobileMetric label="Quality" value={signalValue(row, 'fundamental_quality')} />
+        <MobileMetric label="Opportunity" value={signalValue(row, 'mispricing_signal')} />
+        <MobileMetric label="Risk" value={signalValue(row, 'fragility_risk')} />
+        <MobileMetric label="Confidence" value={signalValue(row, 'signal_confidence')} />
+      </div>
+
+      <div className="surface-subtle p-3.5">
+        <div className="eyebrow">Status</div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
         </div>
       </div>
 
-      <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{row.thesisLine}</p>
-      <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</p>
-
-      <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
-
       {row.warningFlags.length ? (
-        <div className="flex flex-wrap gap-2">
-          {row.warningFlags.slice(0, 3).map((flag) => (
-            <StatusChip key={flag.label} tone={flag.tone}>
-              {flag.label}
-            </StatusChip>
-          ))}
+        <div className="surface-subtle p-3.5">
+          <div className="eyebrow">Flags</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {row.warningFlags.slice(0, 3).map((flag) => (
+              <StatusChip key={flag.label} tone={flag.tone}>
+                {flag.label}
+              </StatusChip>
+            ))}
+          </div>
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <Link href={row.href} className="button-primary">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</div>
+        <Link href={row.href} className="button-primary sm:min-w-[148px]">
           Open research
         </Link>
       </div>
     </article>
+  )
+}
+
+function MobileMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="surface-subtle p-3">
+      <div className="eyebrow">{label}</div>
+      <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{value}</div>
+    </div>
   )
 }
