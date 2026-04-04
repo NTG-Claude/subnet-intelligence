@@ -25,6 +25,45 @@ function CompactStat({
   )
 }
 
+function ThesisPanel({
+  tone,
+  title,
+  summary,
+  items,
+}: {
+  tone: 'bull' | 'bear'
+  title: string
+  summary: string
+  items: Array<{ title: string; body: string }>
+}) {
+  const shellClass =
+    tone === 'bull'
+      ? 'border-[color:rgba(74,222,128,0.12)] bg-[color:rgba(18,32,24,0.28)]'
+      : 'border-[color:rgba(244,114,182,0.12)] bg-[color:rgba(38,20,28,0.28)]'
+  const labelClass = tone === 'bull' ? 'text-[color:rgba(134,239,172,0.9)]' : 'text-[color:rgba(251,182,206,0.9)]'
+  const cardClass =
+    tone === 'bull'
+      ? 'border-[color:rgba(74,222,128,0.1)] bg-[color:rgba(12,24,18,0.42)]'
+      : 'border-[color:rgba(244,114,182,0.1)] bg-[color:rgba(28,15,22,0.42)]'
+
+  return (
+    <div className={`rounded-[var(--radius-xl)] border p-4 sm:p-5 ${shellClass}`}>
+      <div className={`eyebrow ${labelClass}`}>{title}</div>
+      <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{summary}</p>
+      {items.length ? (
+        <div className="mt-4 space-y-3">
+          {items.map((item, index) => (
+            <div key={`${title}-${item.title}-${index}`} className={`rounded-[var(--radius-lg)] border px-4 py-3.5 ${cardClass}`}>
+              <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
+              <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function InsightGrid({
   title,
   intro,
@@ -444,72 +483,49 @@ export default function ResearchWorkspace({
       </Link>
 
       <section className="surface-panel p-5 sm:p-6">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 space-y-4">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone="neutral">{memo.netuidLabel}</StatusChip>
             </div>
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
-              <div className="mt-2 text-sm text-[color:var(--text-tertiary)]">Updated {memo.updatedLabel}</div>
-              <div className="mt-4 max-w-[420px] rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="eyebrow">Overall setup</div>
-                  <div className="text-sm font-medium text-[color:var(--text-primary)]">{barometer.label}</div>
-                </div>
-                <div className={`mt-3 h-2 rounded-full ${barometer.trackClass}`}>
-                  <div
-                    className={`h-2 rounded-full ${barometer.toneClass}`}
-                    style={{ width: `${Math.max(8, Math.min(100, barometer.value))}%` }}
-                  />
-                </div>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
+            <div className="mt-2 text-sm text-[color:var(--text-tertiary)]">Updated {memo.updatedLabel}</div>
+
+            <div className="mt-5 max-w-[460px] rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="eyebrow">Overall setup</div>
+                <div className="text-sm font-medium text-[color:var(--text-primary)]">{barometer.label}</div>
               </div>
-              <p className="mt-2 max-w-3xl text-base leading-7 text-[color:var(--text-primary)]">{verdict}</p>
+              <div className={`mt-3 h-2 rounded-full ${barometer.trackClass}`}>
+                <div
+                  className={`h-2 rounded-full ${barometer.toneClass}`}
+                  style={{ width: `${Math.max(8, Math.min(100, barometer.value))}%` }}
+                />
+              </div>
             </div>
+
+            <p className="mt-5 max-w-3xl text-base leading-8 text-[color:var(--text-primary)]">{verdict}</p>
           </div>
 
-          <div className="grid min-w-full gap-3 sm:grid-cols-2 xl:min-w-[420px] xl:max-w-[460px]">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <CompactStat label="Score" value={memo.scoreLabel} />
             <CompactStat label="Rank" value={memo.rankLabel} />
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-[var(--radius-xl)] border border-[color:rgba(74,222,128,0.12)] bg-[color:rgba(18,32,24,0.34)] p-4 sm:p-5">
-            <div className="eyebrow text-[color:rgba(134,239,172,0.9)]">Bullish case</div>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{strongestSupport}</p>
-            {primarySupports.length ? (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {primarySupports.map((item) => (
-                  <div
-                    key={`hero-support-${item.title}`}
-                    className="rounded-[var(--radius-lg)] border border-[color:rgba(74,222,128,0.12)] bg-[color:rgba(12,24,18,0.46)] px-4 py-3.5"
-                  >
-                    <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
-                    <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-[var(--radius-xl)] border border-[color:rgba(244,114,182,0.12)] bg-[color:rgba(38,20,28,0.34)] p-4 sm:p-5">
-            <div className="eyebrow text-[color:rgba(251,182,206,0.9)]">Bearish case</div>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{mainLimiter}</p>
-            {primaryRisks.length ? (
-              <div className="mt-4 space-y-3">
-                {primaryRisks.map((item, index) => (
-                  <div
-                    key={`hero-risk-${item.title}-${index}`}
-                    className="rounded-[var(--radius-lg)] border border-[color:rgba(244,114,182,0.12)] bg-[color:rgba(28,15,22,0.46)] px-4 py-3.5"
-                  >
-                    <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
-                    <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          <ThesisPanel
+            tone="bull"
+            title="Bullish case"
+            summary={strongestSupport}
+            items={primarySupports.map((item) => ({ title: item.title, body: item.body }))}
+          />
+          <ThesisPanel
+            tone="bear"
+            title="Bearish case"
+            summary={mainLimiter}
+            items={primaryRisks.map((item) => ({ title: item.title, body: item.body }))}
+          />
         </div>
       </section>
 
