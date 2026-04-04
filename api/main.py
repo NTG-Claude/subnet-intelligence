@@ -72,6 +72,7 @@ logger = logging.getLogger(__name__)
 _cache: dict[str, tuple[Any, float]] = {}
 _CACHE_TTL = 3600  # 1 hour
 _HOT_DATA_CACHE_TTL = 300  # 5 minutes
+_CACHE_MAX_ENTRIES = 256
 _SEED_NAMES_PATH = Path(__file__).resolve().parent.parent / "data" / "subnet_names.json"
 _NAME_OVERRIDES_PATH = Path(__file__).resolve().parent.parent / "data" / "subnet_name_overrides.json"
 
@@ -88,7 +89,22 @@ def _cache_get_stale(key: str) -> Any:
     return entry[0] if entry else None
 
 
+def _prune_cache() -> None:
+    now = time.time()
+    expired_keys = [key for key, (_, expiry) in _cache.items() if expiry <= now]
+    for key in expired_keys:
+        _cache.pop(key, None)
+
+    overflow = len(_cache) - _CACHE_MAX_ENTRIES
+    if overflow <= 0:
+        return
+
+    for key, _ in sorted(_cache.items(), key=lambda item: item[1][1])[:overflow]:
+        _cache.pop(key, None)
+
+
 def _cache_set(key: str, value: Any, ttl: int = _CACHE_TTL) -> None:
+    _prune_cache()
     _cache[key] = (value, time.time() + ttl)
 
 
@@ -139,6 +155,40 @@ def _get_cached_scores_since(days: int) -> list[dict]:
     if cached is not None:
         return cached
     rows = get_scores_since(days=days)
+    _cache_set(key, rows, ttl=_HOT_DATA_CACHE_TTL)
+    return rows
+
+
+def _compact_history_row(row: dict) -> dict:
+    raw_data = row.get("raw_data") or {}
+    analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
+    primary_outputs = analysis.get("primary_outputs") or raw_data.get("primary_outputs") or {}
+    raw_metrics = raw_data.get("raw_metrics") or {}
+
+    return {
+        "netuid": row.get("netuid"),
+        "score": row.get("score"),
+        "rank": row.get("rank"),
+        "computed_at": row.get("computed_at"),
+        "score_version": row.get("score_version"),
+        "market_cap_tao": row.get("market_cap_tao"),
+        "raw_data": {
+            "primary_outputs": primary_outputs,
+            "raw_metrics": {
+                "market_cap_usd": raw_metrics.get("market_cap_usd"),
+            },
+        },
+    }
+
+
+def _get_cached_scores_since_compact(days: int) -> list[dict]:
+    if _is_mocked_callable(get_scores_since):
+        return [_compact_history_row(row) for row in get_scores_since(days=days)]
+    key = f"scores_since_compact:{days}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    rows = [_compact_history_row(row) for row in get_scores_since(days=days)]
     _cache_set(key, rows, ttl=_HOT_DATA_CACHE_TTL)
     return rows
 
@@ -872,7 +922,7 @@ def _build_market_overview_response(
     latest_score_version = next((row.get("score_version") for row in all_rows if row.get("score_version")), None)
     history_rows = [
         row
-        for row in _get_cached_scores_since(days=days)
+        for row in _get_cached_scores_since_compact(days=days)
         if _is_investable_row(row) and (latest_score_version is None or row.get("score_version") == latest_score_version)
     ]
     grouped: dict[str, dict[str, float]] = defaultdict(
@@ -988,7 +1038,7 @@ async def discover_bootstrap(
             return cached
 
         investable_rows = [row for row in all_rows if _is_investable_row(row)]
-        preview_history_rows = [row for row in _get_cached_scores_since(days=120) if _is_investable_row(row)]
+        preview_history_rows = [row for row in _get_cached_scores_since_compact(days=120) if _is_investable_row(row)]
         previous_rank_by_netuid = _previous_rank_by_netuid(preview_history_rows)
         page = investable_rows[:limit]
         page_netuids = {row["netuid"] for row in page}
@@ -1064,7 +1114,7 @@ async def list_subnets(
 
     all_rows = [r for r in all_rows if _is_investable_row(r)]
     meta_by_netuid = _get_cached_all_metadata()
-    preview_history_rows = [row for row in _get_cached_scores_since(days=120) if _is_investable_row(row)]
+    preview_history_rows = [row for row in _get_cached_scores_since_compact(days=120) if _is_investable_row(row)]
     previous_rank_by_netuid = _previous_rank_by_netuid(preview_history_rows)
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     reverse = sort_order == "desc"
@@ -1355,7 +1405,7 @@ async def compare_timeseries(
     if cached is not None:
         return cached
 
-    history_rows = [row for row in _get_cached_scores_since(days=days) if _is_investable_row(row)]
+    history_rows = [row for row in _get_cached_scores_since_compact(days=days) if _is_investable_row(row)]
     meta_by_netuid = _get_cached_all_metadata()
     grouped: dict[str, list[CompareSeriesSubnetPoint]] = defaultdict(list)
 
