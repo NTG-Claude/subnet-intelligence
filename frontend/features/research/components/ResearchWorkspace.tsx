@@ -27,21 +27,6 @@ function CompactStat({
   )
 }
 
-function SlimInsightRow({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="flex flex-col gap-1 rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-      <div className="eyebrow">{label}</div>
-      <div className="min-w-0 text-sm text-[color:var(--text-primary)] sm:max-w-[72ch] sm:text-right">{value}</div>
-    </div>
-  )
-}
-
 function DiagnosticGrid({
   items,
   empty,
@@ -68,60 +53,6 @@ function DiagnosticGrid({
   )
 }
 
-function thesisBarometer(memo: DetailMemoViewModel): {
-  label: string
-  value: number
-  toneClass: string
-  trackClass: string
-} {
-  const quality = memo.signals.find((signal) => signal.label === 'Quality')?.value ?? 50
-  const opportunity = memo.signals.find((signal) => signal.label === 'Opportunity')?.value ?? 50
-  const confidence = memo.signals.find((signal) => signal.label === 'Confidence')?.value ?? 50
-  const risk = memo.signals.find((signal) => signal.label === 'Risk')?.value
-  const safety = risk == null ? 50 : 100 - risk
-
-  const composite = quality * 0.32 + opportunity * 0.24 + confidence * 0.2 + safety * 0.24
-
-  if (composite >= 72) {
-    return {
-      label: 'Strongly bullish',
-      value: composite,
-      toneClass: 'bg-[color:rgba(74,222,128,0.95)]',
-      trackClass: 'bg-[linear-gradient(90deg,rgba(74,222,128,0.22),rgba(74,222,128,0.05))]',
-    }
-  }
-  if (composite >= 60) {
-    return {
-      label: 'Bullish',
-      value: composite,
-      toneClass: 'bg-[color:rgba(134,239,172,0.9)]',
-      trackClass: 'bg-[linear-gradient(90deg,rgba(134,239,172,0.2),rgba(134,239,172,0.05))]',
-    }
-  }
-  if (composite >= 48) {
-    return {
-      label: 'Balanced',
-      value: composite,
-      toneClass: 'bg-[color:rgba(250,204,21,0.9)]',
-      trackClass: 'bg-[linear-gradient(90deg,rgba(250,204,21,0.2),rgba(250,204,21,0.05))]',
-    }
-  }
-  if (composite >= 36) {
-    return {
-      label: 'Bearish',
-      value: composite,
-      toneClass: 'bg-[color:rgba(251,146,60,0.9)]',
-      trackClass: 'bg-[linear-gradient(90deg,rgba(251,146,60,0.2),rgba(251,146,60,0.05))]',
-    }
-  }
-  return {
-    label: 'Strongly bearish',
-    value: composite,
-    toneClass: 'bg-[color:rgba(244,114,182,0.95)]',
-    trackClass: 'bg-[linear-gradient(90deg,rgba(244,114,182,0.2),rgba(244,114,182,0.05))]',
-  }
-}
-
 export default function ResearchWorkspace({
   memo,
   netuid,
@@ -131,7 +62,6 @@ export default function ResearchWorkspace({
   netuid: number
   initialSignalHistory?: SubnetSignalHistoryPoint[] | null
 }) {
-  const barometer = thesisBarometer(memo)
   const evidenceSummary = memo.evidenceItems[0]?.body ?? 'Trust details are not available yet.'
 
   return (
@@ -141,56 +71,38 @@ export default function ResearchWorkspace({
       </Link>
 
       <section className="surface-panel p-5 sm:p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_320px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone="neutral">{memo.netuidLabel}</StatusChip>
-              <StatusChip tone={memo.primaryTag.tone}>{memo.primaryTag.label}</StatusChip>
-              {memo.secondaryTag ? <StatusChip tone={memo.secondaryTag.tone}>{memo.secondaryTag.label}</StatusChip> : null}
             </div>
-
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
-            <div className="mt-2 text-sm text-[color:var(--text-tertiary)]">Updated {memo.updatedLabel}</div>
-            <p className="mt-4 max-w-3xl text-[15px] leading-7 text-[color:var(--text-primary)]">{memo.headerSubtitle}</p>
-
-            <div className="mt-5 max-w-[440px] rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="eyebrow">Overall setup</div>
-                <div className="text-sm font-medium text-[color:var(--text-primary)]">{barometer.label}</div>
+            <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
+                <div className="mt-2 text-sm text-[color:var(--text-tertiary)]">Updated {memo.updatedLabel}</div>
               </div>
-              <div className={`mt-3 h-2 rounded-full ${barometer.trackClass}`}>
-                <div
-                  className={`h-2 rounded-full ${barometer.toneClass}`}
-                  style={{ width: `${Math.max(8, Math.min(100, barometer.value))}%` }}
-                />
+              <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:min-w-[320px]">
+                <CompactStat label="Score" value={memo.scoreLabel} />
+                <CompactStat label="Rank" value={memo.rankLabel} detail={memo.percentileLabel === 'n/a' ? undefined : memo.percentileLabel} />
               </div>
-            </div>
-
-            <div className="mt-4 space-y-2.5">
-              {memo.anchorInsights.map((item) => (
-                <SlimInsightRow key={item.label} label={item.label} value={item.value} />
-              ))}
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 xl:content-start">
-            <CompactStat label="Score" value={memo.scoreLabel} />
-            <CompactStat label="Rank" value={memo.rankLabel} detail={memo.percentileLabel === 'n/a' ? undefined : memo.percentileLabel} />
-            <CompactStat label="Setup" value={memo.primaryTag.label} />
-            <CompactStat label="Confidence" value={memo.secondaryTag?.label ?? memo.researchSummary.evidenceStrength.label} />
+          <div className="xl:pl-2">
+            <div className="section-title">Primary Signals</div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              {memo.signals.map((signal) => (
+                <SignalBar key={signal.key} signal={signal} compact />
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       <section className="surface-panel p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
-          <div className="section-title">Primary Signals</div>
-          <div className="eyebrow">Higher is better, except raw risk</div>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {memo.signals.map((signal) => (
-            <SignalBar key={signal.key} signal={signal} />
-          ))}
+          <div className="section-title">Signal Trend</div>
+          <div className="eyebrow">Primary score history</div>
         </div>
         <PrimarySignalsTrend netuid={netuid} initialPoints={initialSignalHistory} />
       </section>
