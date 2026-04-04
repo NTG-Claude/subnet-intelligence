@@ -798,7 +798,8 @@ export default function DiscoverWorkspace({
 
           {rows.length ? (
             <>
-              <div className="hidden md:block">
+              <div className="hidden overflow-x-auto md:block">
+                <div className="min-w-[940px]">
                 <div
                   className={[
                     'grid items-center gap-x-5 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-5 py-3 text-[12px] text-[color:var(--text-secondary)]',
@@ -829,6 +830,7 @@ export default function DiscoverWorkspace({
                     />
                   ))}
                 </div>
+                </div>
               </div>
 
               <div className="space-y-4 p-4 md:hidden">
@@ -836,6 +838,7 @@ export default function DiscoverWorkspace({
                   <MobileDecisionCard
                     key={row.id}
                     row={row}
+                    rankDelta={rankDeltaMap.get(row.id) ?? null}
                     focused={focusedId === row.id}
                     onFocus={() => setFocusedId(row.id)}
                   />

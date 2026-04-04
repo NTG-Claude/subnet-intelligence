@@ -38,7 +38,7 @@ export default function AppShell({
             </div>
 
             <div className="flex items-center gap-2">
-              <nav className="hidden items-center gap-1 rounded-full border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] p-1 sm:flex">
+              <nav className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] p-1">
                 {NAV_ITEMS.map((item) => {
                   const active = item.match(pathname)
                   const href = item.label === 'Research' ? (pathname.startsWith('/subnets/') ? pathname : '/') : item.href
@@ -47,7 +47,7 @@ export default function AppShell({
                       key={item.href}
                       href={href}
                       className={cn(
-                        'rounded-full px-4 py-2 text-sm transition-colors',
+                        'shrink-0 rounded-full px-4 py-2 text-sm transition-colors',
                         active
                           ? 'bg-[color:var(--surface-2)] text-[color:var(--text-primary)] shadow-[var(--shadow-soft)]'
                           : 'text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]',

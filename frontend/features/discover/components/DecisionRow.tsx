@@ -111,10 +111,12 @@ function RankDeltaBadge({ rankDelta }: { rankDelta: { change: number; previousRa
 
 export function MobileDecisionCard({
   row,
+  rankDelta,
   focused,
   onFocus,
 }: {
   row: UniverseRowViewModel
+  rankDelta: { change: number; previousRank: number } | null
   focused: boolean
   onFocus: () => void
 }) {
@@ -129,46 +131,50 @@ export function MobileDecisionCard({
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
             <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
+            <StatusChip tone={row.investability.tone}>{row.investability.label}</StatusChip>
+            {rankDelta ? <RankDeltaBadge rankDelta={rankDelta} /> : null}
           </div>
           <div className="mt-3 text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</div>
-          <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">{row.thesisLine}</p>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</p>
+        </div>
+        <div className="surface-subtle min-w-[96px] p-3 text-right">
+          <div className="eyebrow">Score</div>
+          <div className="mt-2 font-mono text-lg font-semibold text-[color:var(--text-primary)]">{row.scoreLabel}</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="surface-subtle p-3">
-          <div className="eyebrow">Score</div>
-          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{row.scoreLabel}</div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div className="surface-subtle p-3">
           <div className="eyebrow">Quality</div>
-          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
+          <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'fundamental_quality')}</div>
         </div>
         <div className="surface-subtle p-3">
           <div className="eyebrow">Opportunity</div>
-          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
+          <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
         </div>
         <div className="surface-subtle p-3">
           <div className="eyebrow">Risk</div>
-          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
+          <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
         </div>
         <div className="surface-subtle p-3">
           <div className="eyebrow">Confidence</div>
-          <div className="mt-2 font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
+          <div className="mt-2 font-mono font-semibold text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <StatusChip tone={row.investability.tone}>{row.investability.label}</StatusChip>
-        {row.warningFlags.slice(0, 3).map((flag) => (
-          <StatusChip key={flag.label} tone={flag.tone}>
-            {flag.label}
-          </StatusChip>
-        ))}
-      </div>
+      <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{row.thesisLine}</p>
+      <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</p>
 
       <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
+
+      {row.warningFlags.length ? (
+        <div className="flex flex-wrap gap-2">
+          {row.warningFlags.slice(0, 3).map((flag) => (
+            <StatusChip key={flag.label} tone={flag.tone}>
+              {flag.label}
+            </StatusChip>
+          ))}
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Link href={row.href} className="button-primary">
