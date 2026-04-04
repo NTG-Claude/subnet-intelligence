@@ -6,8 +6,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import MetricCard from '@/components/ui/MetricCard'
 import SegmentedControl from '@/components/ui/SegmentedControl'
 import {
-  CompareSeriesData,
-  fetchCompareTimeseries,
   fetchSubnetSignalHistory,
   MarketOverviewData,
   PreviewMetricDeltas as ApiPreviewMetricDeltas,
@@ -33,20 +31,14 @@ type PreviewMetricDeltas = {
 }
 type RankDelta = { change: number; previousRank: number } | null
 
-const TIMESERIES_CACHE_KEY = 'discover-compare-timeseries-v1'
 const TIMESERIES_CACHE_TTL_MS = 5 * 60 * 1000
 const PREVIEW_HISTORY_CACHE_PREFIX = 'discover-preview-history-v1'
 const DETAIL_WARMUP_LIMIT = 3
 
-let cachedTimeseries: CompareSeriesData | null = null
-let cachedTimeseriesFetchedAt = 0
-let cachedTimeseriesPromise: Promise<CompareSeriesData> | null = null
 const cachedPreviewHistory = new Map<number, { fetchedAt: number; points: SubnetSignalHistoryPoint[] }>()
 const cachedPreviewHistoryPromises = new Map<number, Promise<SubnetSignalHistoryPoint[]>>()
 const warmedDetailPayloads = new Set<number>()
-const warmedSignalHistoryPayloads = new Set<number>()
 const detailWarmupPromises = new Map<number, Promise<void>>()
-const signalHistoryWarmupPromises = new Map<number, Promise<void>>()
 
 const MARKET_TIMEFRAME_ITEMS = [
   { id: '7d', label: '7D' },
@@ -55,70 +47,6 @@ const MARKET_TIMEFRAME_ITEMS = [
   { id: '180d', label: '180D' },
   { id: 'max', label: 'MAX' },
 ] as const
-
-function hasFreshCachedTimeseries(now = Date.now()): boolean {
-  return Boolean(cachedTimeseries && now - cachedTimeseriesFetchedAt < TIMESERIES_CACHE_TTL_MS)
-}
-
-function rememberTimeseries(data: CompareSeriesData, now = Date.now()) {
-  cachedTimeseries = data
-  cachedTimeseriesFetchedAt = now
-
-  if (typeof window !== 'undefined') {
-    window.sessionStorage.setItem(
-      TIMESERIES_CACHE_KEY,
-      JSON.stringify({
-        fetchedAt: now,
-        data,
-      }),
-    )
-  }
-}
-
-function readStoredTimeseries(): CompareSeriesData | null {
-  if (typeof window === 'undefined') return null
-
-  const raw = window.sessionStorage.getItem(TIMESERIES_CACHE_KEY)
-  if (!raw) return null
-
-  try {
-    const parsed = JSON.parse(raw) as { fetchedAt?: number; data?: CompareSeriesData }
-    if (!parsed.fetchedAt || !parsed.data) return null
-    if (Date.now() - parsed.fetchedAt >= TIMESERIES_CACHE_TTL_MS) return null
-
-    cachedTimeseries = parsed.data
-    cachedTimeseriesFetchedAt = parsed.fetchedAt
-    return parsed.data
-  } catch {
-    return null
-  }
-}
-
-function getCachedTimeseries(): CompareSeriesData | null {
-  if (hasFreshCachedTimeseries()) {
-    return cachedTimeseries
-  }
-
-  return readStoredTimeseries()
-}
-
-async function loadCachedTimeseries(days: number): Promise<CompareSeriesData> {
-  const existing = getCachedTimeseries()
-  if (existing) return existing
-
-  if (!cachedTimeseriesPromise) {
-    cachedTimeseriesPromise = fetchCompareTimeseries(days)
-      .then((data) => {
-        rememberTimeseries(data)
-        return data
-      })
-      .finally(() => {
-        cachedTimeseriesPromise = null
-      })
-  }
-
-  return cachedTimeseriesPromise
-}
 
 function queryMatches(subnet: SubnetSummary, query: string): boolean {
   const q = query.toLowerCase()
@@ -182,42 +110,6 @@ function nearestPointAtOrBefore(points: SubnetSignalHistoryPoint[], targetTime: 
   return match
 }
 
-function nearestRunAtOrBefore(data: CompareSeriesData, targetTime: number) {
-  let match: CompareSeriesData['runs'][number] | null = null
-  for (const run of data.runs) {
-    const runTime = Date.parse(run.computed_at)
-    if (!Number.isFinite(runTime) || runTime > targetTime) continue
-    match = run
-  }
-  return match
-}
-
-function metricDelta(
-  data: CompareSeriesData,
-  netuid: number,
-  metric: 'fundamental_quality' | 'mispricing_signal' | 'fragility_risk' | 'signal_confidence',
-  days: number,
-): MetricDelta {
-  const latestRun = data.runs[data.runs.length - 1]
-  if (!latestRun) return emptyDelta()
-
-  const latestPoint = latestRun.subnets.find((item) => item.netuid === netuid)
-  const latestValue = latestPoint?.[metric]
-  if (latestValue == null) return emptyDelta()
-
-  const referenceRun = nearestRunAtOrBefore(data, Date.parse(latestRun.computed_at) - days * 24 * 60 * 60 * 1000)
-  if (!referenceRun) return emptyDelta()
-
-  const referencePoint = referenceRun.subnets.find((item) => item.netuid === netuid)
-  const referenceValue = referencePoint?.[metric]
-  if (referenceValue == null) return emptyDelta()
-
-  return {
-    value: Number((latestValue - referenceValue).toFixed(1)),
-    hasHistory: true,
-  }
-}
-
 function signalDelta(
   points: SubnetSignalHistoryPoint[],
   metric: 'quality' | 'opportunity' | 'risk' | 'confidence',
@@ -238,33 +130,6 @@ function signalDelta(
   return {
     value: Number((latestValue - referenceValue).toFixed(1)),
     hasHistory: true,
-  }
-}
-
-function buildPreviewMetricDeltas(data: CompareSeriesData | null, netuid: number | null): PreviewMetricDeltas | null {
-  if (!data || !netuid) return null
-
-  return {
-    strength: {
-      '1d': metricDelta(data, netuid, 'fundamental_quality', 1),
-      '7d': metricDelta(data, netuid, 'fundamental_quality', 7),
-      '30d': metricDelta(data, netuid, 'fundamental_quality', 30),
-    },
-    upside: {
-      '1d': metricDelta(data, netuid, 'mispricing_signal', 1),
-      '7d': metricDelta(data, netuid, 'mispricing_signal', 7),
-      '30d': metricDelta(data, netuid, 'mispricing_signal', 30),
-    },
-    risk: {
-      '1d': metricDelta(data, netuid, 'fragility_risk', 1),
-      '7d': metricDelta(data, netuid, 'fragility_risk', 7),
-      '30d': metricDelta(data, netuid, 'fragility_risk', 30),
-    },
-    evidence: {
-      '1d': metricDelta(data, netuid, 'signal_confidence', 1),
-      '7d': metricDelta(data, netuid, 'signal_confidence', 7),
-      '30d': metricDelta(data, netuid, 'signal_confidence', 30),
-    },
   }
 }
 
@@ -379,29 +244,6 @@ async function warmDetailPayload(netuid: number): Promise<void> {
   return request
 }
 
-async function warmSignalHistoryPayload(netuid: number): Promise<void> {
-  if (warmedSignalHistoryPayloads.has(netuid)) return
-
-  const existing = signalHistoryWarmupPromises.get(netuid)
-  if (existing) return existing
-
-  const request = fetch(`/api/v1/subnets/${netuid}/history/signals?days=120`, {
-    method: 'GET',
-  })
-    .then(() => {
-      warmedSignalHistoryPayloads.add(netuid)
-    })
-    .catch(() => {
-      // Ignore warmup failures; the detail page will fall back gracefully.
-    })
-    .finally(() => {
-      signalHistoryWarmupPromises.delete(netuid)
-    })
-
-  signalHistoryWarmupPromises.set(netuid, request)
-  return request
-}
-
 function normalizePreviewMetricDeltas(deltas: ApiPreviewMetricDeltas | null | undefined): PreviewMetricDeltas | null {
   if (!deltas) return null
 
@@ -452,7 +294,7 @@ function applyMarketTimeframe(market: MarketOverviewData, timeframe: MarketTimef
   }
 }
 
-function buildRankDeltaMap(subnets: SubnetSummary[], data: CompareSeriesData | null): Map<number, RankDelta> {
+function buildRankDeltaMap(subnets: SubnetSummary[]): Map<number, RankDelta> {
   const previousRanks = new Map<number, number>()
 
   subnets.forEach((subnet) => {
@@ -460,15 +302,6 @@ function buildRankDeltaMap(subnets: SubnetSummary[], data: CompareSeriesData | n
       previousRanks.set(subnet.netuid, subnet.previous_rank)
     }
   })
-
-  if (!previousRanks.size && data?.runs.length && data.runs.length >= 2) {
-    const previousRun = data.runs[data.runs.length - 2]
-    if (previousRun) {
-      ;[...previousRun.subnets]
-        .sort((left, right) => right.score - left.score || left.netuid - right.netuid)
-        .forEach((subnet, index) => previousRanks.set(subnet.netuid, index + 1))
-    }
-  }
 
   if (!previousRanks.size) return new Map()
 
@@ -528,16 +361,13 @@ export default function DiscoverWorkspace({
   subnets,
   lastRun,
   market,
-  initialTimeseries,
 }: {
   subnets: SubnetSummary[]
   lastRun: string | null
   market: MarketOverviewData
-  initialTimeseries: CompareSeriesData | null
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const cachedInitialTimeseries = initialTimeseries ?? getCachedTimeseries()
 
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<UniverseSortId>('rank')
@@ -546,10 +376,6 @@ export default function DiscoverWorkspace({
   const [compareIds, setCompareIds] = useState<number[]>([])
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const [pinnedId, setPinnedId] = useState<number | null>(null)
-  const [timeseries, setTimeseries] = useState<CompareSeriesData | null>(cachedInitialTimeseries)
-  const [timeseriesStatus, setTimeseriesStatus] = useState<'loading' | 'ready' | 'unavailable'>(
-    cachedInitialTimeseries ? 'ready' : 'loading',
-  )
   const [previewHistory, setPreviewHistory] = useState<SubnetSignalHistoryPoint[] | null>(null)
   const [previewHistoryStatus, setPreviewHistoryStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
   const [queryStateReady, setQueryStateReady] = useState(false)
@@ -586,7 +412,6 @@ export default function DiscoverWorkspace({
 
     router.prefetch(`/subnets/${row.netuid}`)
     void warmDetailPayload(row.netuid)
-    void warmSignalHistoryPayload(row.netuid)
   }, [focusedId, pinnedId, router, subnets])
 
   const rows = useMemo(() => {
@@ -678,65 +503,17 @@ export default function DiscoverWorkspace({
   }, [focusedId, router, rows])
 
   useEffect(() => {
-    if (initialTimeseries) {
-      rememberTimeseries(initialTimeseries)
-      setTimeseries(initialTimeseries)
-      setTimeseriesStatus('ready')
-      return
-    }
-
-    const existing = getCachedTimeseries()
-    if (existing) {
-      setTimeseries(existing)
-      setTimeseriesStatus('ready')
-      return
-    }
-
-    let cancelled = false
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
-    let idleId: number | null = null
-
-    async function loadTimeseries() {
-      try {
-        const next = await loadCachedTimeseries(35)
-        if (!cancelled) {
-          setTimeseries(next)
-          setTimeseriesStatus('ready')
-        }
-      } catch {
-        if (!cancelled && !initialTimeseries) {
-          setTimeseries(null)
-          setTimeseriesStatus('unavailable')
-        }
-      }
-    }
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(() => {
-        void loadTimeseries()
-      })
-    } else {
-      timeoutId = setTimeout(() => {
-        void loadTimeseries()
-      }, 250)
-    }
-
-    return () => {
-      cancelled = true
-      if (idleId != null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        window.cancelIdleCallback(idleId)
-      }
-      if (timeoutId != null) {
-        clearTimeout(timeoutId)
-      }
-    }
-  }, [initialTimeseries])
-
-  useEffect(() => {
     const previewNetuid = pinnedId ?? focusedId
-    if (!previewNetuid || timeseries) {
+    if (!previewNetuid) {
       setPreviewHistory(null)
-      setPreviewHistoryStatus(timeseries ? 'ready' : 'idle')
+      setPreviewHistoryStatus('idle')
+      return
+    }
+
+    const previewSubnet = subnets.find((item) => item.netuid === previewNetuid) ?? null
+    if (previewSubnet?.preview_metric_deltas) {
+      setPreviewHistory(null)
+      setPreviewHistoryStatus('ready')
       return
     }
 
@@ -748,27 +525,33 @@ export default function DiscoverWorkspace({
     }
 
     let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
     setPreviewHistory(null)
     setPreviewHistoryStatus('loading')
 
-    void loadPreviewHistory(previewNetuid)
-      .then((points) => {
-        if (!cancelled) {
-          setPreviewHistory(points)
-          setPreviewHistoryStatus('ready')
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPreviewHistory(null)
-          setPreviewHistoryStatus('unavailable')
-        }
-      })
+    timeoutId = setTimeout(() => {
+      void loadPreviewHistory(previewNetuid)
+        .then((points) => {
+          if (!cancelled) {
+            setPreviewHistory(points)
+            setPreviewHistoryStatus('ready')
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPreviewHistory(null)
+            setPreviewHistoryStatus('unavailable')
+          }
+        })
+    }, pinnedId === previewNetuid ? 0 : 180)
 
     return () => {
       cancelled = true
+      if (timeoutId != null) {
+        clearTimeout(timeoutId)
+      }
     }
-  }, [focusedId, pinnedId, timeseries])
+  }, [focusedId, pinnedId, subnets])
 
   function toggleSort(nextSort: UniverseSortId) {
     if (sort === nextSort) {
@@ -794,15 +577,15 @@ export default function DiscoverWorkspace({
   const metricDeltas = useMemo(
     () =>
       normalizePreviewMetricDeltas(previewSubnet?.preview_metric_deltas) ??
-      (timeseries ? buildPreviewMetricDeltas(timeseries, previewRow?.id ?? null) : buildPreviewMetricDeltasFromHistory(previewHistory)),
-    [previewHistory, previewRow?.id, previewSubnet?.preview_metric_deltas, timeseries],
+      buildPreviewMetricDeltasFromHistory(previewHistory),
+    [previewHistory, previewSubnet?.preview_metric_deltas],
   )
   const metricHistoryStatus = metricDeltas
     ? 'ready'
-    : timeseriesStatus === 'loading' || previewHistoryStatus === 'loading' || previewHistoryStatus === 'idle'
+    : previewHistoryStatus === 'loading' || previewHistoryStatus === 'idle'
       ? 'loading'
       : 'unavailable'
-  const rankDeltaMap = useMemo(() => buildRankDeltaMap(subnets, timeseries), [subnets, timeseries])
+  const rankDeltaMap = useMemo(() => buildRankDeltaMap(subnets), [subnets])
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
     .filter((item): item is SubnetSummary => Boolean(item))
