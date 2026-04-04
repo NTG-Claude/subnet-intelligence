@@ -275,6 +275,13 @@ export interface MarketOverviewData {
   points: MarketOverviewPoint[]
 }
 
+export interface DiscoverBootstrapData {
+  subnets: SubnetSummary[]
+  last_score_run: string | null
+  subnet_count: number
+  market: MarketOverviewData
+}
+
 function getServerApiOrigin(): string {
   const apiOrigin = process.env.NEXT_PUBLIC_API_URL || process.env.RAILWAY_API_URL
   if (apiOrigin) return apiOrigin
@@ -341,5 +348,10 @@ export const fetchSubnetSignalHistory = (netuid: number, days = 120) =>
 
 export const fetchMarketOverview = (days = 90) =>
   get<MarketOverviewData>(`/api/v1/market/overview?days=${days}`, {
+    revalidate: DEFAULT_REVALIDATE_SECONDS,
+  })
+
+export const fetchDiscoverBootstrap = (limit = 200, marketDays = 365) =>
+  get<DiscoverBootstrapData>(`/api/v1/discover/bootstrap?limit=${limit}&market_days=${marketDays}`, {
     revalidate: DEFAULT_REVALIDATE_SECONDS,
   })

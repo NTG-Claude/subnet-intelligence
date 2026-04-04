@@ -185,6 +185,13 @@ class LatestRunResponse(BaseModel):
     subnet_count: int
 
 
+class DiscoverBootstrapResponse(BaseModel):
+    subnets: list[SubnetSummaryResponse]
+    last_score_run: Optional[str] = None
+    subnet_count: int
+    market: MarketOverviewResponse
+
+
 class LeaderboardResponse(BaseModel):
     top: list[SubnetSummaryResponse]
     bottom: list[SubnetSummaryResponse]
