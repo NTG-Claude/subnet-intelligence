@@ -4,7 +4,7 @@ import ResearchWorkspace from '@/features/research/components/ResearchWorkspace'
 import { fetchSubnet, fetchSubnetSignalHistory } from '@/lib/api'
 import { buildDetailMemo } from '@/lib/view-models/research'
 
-const SIGNAL_HISTORY_SSR_TIMEOUT_MS = 650
+const SIGNAL_HISTORY_SSR_TIMEOUT_MS = 1200
 
 interface Props {
   params: Promise<{ netuid: string }>
