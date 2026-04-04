@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { CompareSeriesData, fetchCompareTimeseries } from '@/lib/api'
 import { Line, LineChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -21,6 +21,16 @@ const SERIES = [
   { key: 'risk', label: 'Risk', color: '#ff5ca8', strokeWidth: 2.2 },
   { key: 'confidence', label: 'Confidence', color: '#bd93ff', strokeWidth: 2.2 },
 ] as const
+
+type SeriesKey = (typeof SERIES)[number]['key']
+type TimeframeId = '24h' | '7d' | '30d' | 'all'
+
+const TIMEFRAMES: { id: TimeframeId; label: string; days: number | null }[] = [
+  { id: '24h', label: '24H', days: 1 },
+  { id: '7d', label: '7D', days: 7 },
+  { id: '30d', label: '30D', days: 30 },
+  { id: 'all', label: 'All', days: null },
+]
 
 const DETAIL_TREND_CACHE_KEY = 'detail-compare-timeseries-v1'
 const DETAIL_TREND_CACHE_TTL_MS = 5 * 60 * 1000
@@ -93,6 +103,18 @@ async function loadCachedTimeseries(days: number): Promise<CompareSeriesData> {
   return cachedTimeseriesPromise
 }
 
+function filterPointsByTimeframe(points: TrendPoint[], timeframe: TimeframeId): TrendPoint[] {
+  if (timeframe === 'all' || points.length < 2) return points
+
+  const timeframeConfig = TIMEFRAMES.find((item) => item.id === timeframe)
+  if (!timeframeConfig?.days) return points
+
+  const newest = new Date(points[points.length - 1].computed_at).getTime()
+  const cutoff = newest - timeframeConfig.days * 24 * 60 * 60 * 1000
+
+  return points.filter((point) => new Date(point.computed_at).getTime() >= cutoff)
+}
+
 function toTrendPoints(data: CompareSeriesData | null, netuid: number): TrendPoint[] {
   if (!data) return []
 
@@ -160,6 +182,14 @@ function TrendTooltip({
 export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
   const [points, setPoints] = useState<TrendPoint[]>(() => toTrendPoints(getCachedTimeseries(), netuid))
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>(points.length ? 'ready' : 'loading')
+  const [activeSeries, setActiveSeries] = useState<Record<SeriesKey, boolean>>({
+    score: true,
+    quality: true,
+    opportunity: true,
+    risk: true,
+    confidence: true,
+  })
+  const [timeframe, setTimeframe] = useState<TimeframeId>('30d')
 
   useEffect(() => {
     const existing = getCachedTimeseries()
@@ -173,7 +203,7 @@ export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
 
     async function loadTrend() {
       try {
-        const data = await loadCachedTimeseries(45)
+        const data = await loadCachedTimeseries(120)
         if (!cancelled) {
           setPoints(toTrendPoints(data, netuid))
           setStatus('ready')
@@ -191,6 +221,16 @@ export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
       cancelled = true
     }
   }, [netuid])
+
+  const visibleSeries = SERIES.filter((series) => activeSeries[series.key])
+  const filteredPoints = useMemo(() => filterPointsByTimeframe(points, timeframe), [points, timeframe])
+
+  function toggleSeries(key: SeriesKey) {
+    setActiveSeries((current) => {
+      const next = { ...current, [key]: !current[key] }
+      return next
+    })
+  }
 
   if (status === 'loading') {
     return (
@@ -218,49 +258,98 @@ export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
 
   return (
     <div className="mt-5 rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.52)] p-4 sm:p-5">
-      <div className="flex flex-wrap gap-4 text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">
-        {SERIES.map((series) => (
-          <div key={series.key} className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
-            <span>{series.label}</span>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="eyebrow">Visible lines</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {SERIES.map((series) => {
+              const isActive = activeSeries[series.key]
+              return (
+                <button
+                  key={series.key}
+                  type="button"
+                  onClick={() => toggleSeries(series.key)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium uppercase tracking-[0.14em] transition ${
+                    isActive
+                      ? 'border-[color:var(--border-strong)] bg-[color:rgba(18,30,42,0.92)] text-[color:var(--text-primary)]'
+                      : 'border-[color:var(--border-subtle)] bg-transparent text-[color:var(--text-tertiary)]'
+                  }`}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color, opacity: isActive ? 1 : 0.45 }} />
+                  <span>{series.label}</span>
+                </button>
+              )
+            })}
           </div>
-        ))}
+        </div>
+
+        <div className="lg:text-right">
+          <div className="eyebrow">Timeframe</div>
+          <div className="mt-3 flex flex-wrap gap-2 lg:justify-end">
+            {TIMEFRAMES.map((option) => {
+              const isActive = timeframe === option.id
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setTimeframe(option.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium uppercase tracking-[0.14em] transition ${
+                    isActive
+                      ? 'border-[color:var(--border-strong)] bg-[color:rgba(18,30,42,0.92)] text-[color:var(--text-primary)]'
+                      : 'border-[color:var(--border-subtle)] bg-transparent text-[color:var(--text-tertiary)]'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 h-[280px] sm:h-[340px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={points} margin={{ top: 10, right: 8, left: 0, bottom: 6 }}>
-            <CartesianGrid stroke="rgba(138, 163, 184, 0.14)" vertical={false} />
-            <XAxis
-              dataKey="computed_at"
-              tickFormatter={formatAxisDate}
-              minTickGap={28}
-              stroke="rgba(138, 163, 184, 0.45)"
-              tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
-            />
-            <YAxis
-              domain={[0, 100]}
-              width={40}
-              stroke="rgba(138, 163, 184, 0.45)"
-              tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
-            />
-            <Tooltip content={<TrendTooltip />} />
-            {SERIES.map((series) => (
-              <Line
-                key={series.key}
-                type="monotone"
-                dataKey={series.key}
-                name={series.label}
-                stroke={series.color}
-                strokeWidth={series.strokeWidth}
-                dot={false}
-                connectNulls
-                isAnimationActive={false}
+      {visibleSeries.length ? (
+        <div className="mt-4 h-[280px] sm:h-[340px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={filteredPoints} margin={{ top: 10, right: 8, left: 0, bottom: 6 }}>
+              <CartesianGrid stroke="rgba(138, 163, 184, 0.14)" vertical={false} />
+              <XAxis
+                dataKey="computed_at"
+                tickFormatter={formatAxisDate}
+                minTickGap={28}
+                stroke="rgba(138, 163, 184, 0.45)"
+                tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
               />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+              <YAxis
+                domain={[0, 100]}
+                width={40}
+                stroke="rgba(138, 163, 184, 0.45)"
+                tick={{ fontSize: 11, fill: 'rgba(138, 163, 184, 0.72)' }}
+              />
+              <Tooltip content={<TrendTooltip />} />
+              {visibleSeries.map((series) => (
+                <Line
+                  key={series.key}
+                  type="monotone"
+                  dataKey={series.key}
+                  name={series.label}
+                  stroke={series.color}
+                  strokeWidth={series.strokeWidth}
+                  dot={false}
+                  connectNulls
+                  isAnimationActive={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-[var(--radius-lg)] border border-dashed border-[color:var(--border-subtle)] bg-[color:rgba(10,18,26,0.42)] px-6 py-8 text-center">
+          <div className="text-sm font-medium text-[color:var(--text-primary)]">No lines are currently visible</div>
+          <div className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">
+            Turn one or more signals back on to compare how this subnet has been moving across runs.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
