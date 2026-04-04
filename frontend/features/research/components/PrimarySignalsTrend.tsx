@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { CompareSeriesData, fetchCompareTimeseries } from '@/lib/api'
+import { fetchSubnetSignalHistory, SubnetSignalHistoryPoint } from '@/lib/api'
 import { Line, LineChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 type TrendPoint = {
@@ -32,75 +32,97 @@ const TIMEFRAMES: { id: TimeframeId; label: string; days: number | null }[] = [
   { id: 'all', label: 'All', days: null },
 ]
 
-const DETAIL_TREND_CACHE_KEY = 'detail-compare-timeseries-v1'
+const DETAIL_TREND_CACHE_KEY = 'detail-signal-history-v1'
 const DETAIL_TREND_CACHE_TTL_MS = 5 * 60 * 1000
 
-let cachedTimeseries: CompareSeriesData | null = null
-let cachedTimeseriesFetchedAt = 0
-let cachedTimeseriesPromise: Promise<CompareSeriesData> | null = null
+let cachedSignalHistory = new Map<number, TrendPoint[]>()
+let cachedSignalHistoryFetchedAt = new Map<number, number>()
+let cachedSignalHistoryPromise = new Map<number, Promise<TrendPoint[]>>()
 
-function hasFreshCachedTimeseries(now = Date.now()): boolean {
-  return Boolean(cachedTimeseries && now - cachedTimeseriesFetchedAt < DETAIL_TREND_CACHE_TTL_MS)
+function hasFreshCachedSignalHistory(netuid: number, now = Date.now()): boolean {
+  const fetchedAt = cachedSignalHistoryFetchedAt.get(netuid)
+  return Boolean(cachedSignalHistory.get(netuid)?.length && fetchedAt && now - fetchedAt < DETAIL_TREND_CACHE_TTL_MS)
 }
 
-function rememberTimeseries(data: CompareSeriesData, now = Date.now()) {
-  cachedTimeseries = data
-  cachedTimeseriesFetchedAt = now
+function rememberSignalHistory(netuid: number, data: TrendPoint[], now = Date.now()) {
+  cachedSignalHistory.set(netuid, data)
+  cachedSignalHistoryFetchedAt.set(netuid, now)
 
   if (typeof window !== 'undefined') {
+    const payload = Object.fromEntries(
+      [...cachedSignalHistory.entries()].map(([key, points]) => [
+        String(key),
+        {
+          fetchedAt: cachedSignalHistoryFetchedAt.get(key) ?? now,
+          points,
+        },
+      ]),
+    )
     window.sessionStorage.setItem(
       DETAIL_TREND_CACHE_KEY,
-      JSON.stringify({
-        fetchedAt: now,
-        data,
-      }),
+      JSON.stringify(payload),
     )
   }
 }
 
-function readStoredTimeseries(): CompareSeriesData | null {
+function readStoredSignalHistory(netuid: number): TrendPoint[] | null {
   if (typeof window === 'undefined') return null
 
   const raw = window.sessionStorage.getItem(DETAIL_TREND_CACHE_KEY)
   if (!raw) return null
 
   try {
-    const parsed = JSON.parse(raw) as { fetchedAt?: number; data?: CompareSeriesData }
-    if (!parsed.fetchedAt || !parsed.data) return null
-    if (Date.now() - parsed.fetchedAt >= DETAIL_TREND_CACHE_TTL_MS) return null
+    const parsed = JSON.parse(raw) as Record<string, { fetchedAt?: number; points?: TrendPoint[] }>
+    const entry = parsed[String(netuid)]
+    if (!entry?.fetchedAt || !entry.points) return null
+    if (Date.now() - entry.fetchedAt >= DETAIL_TREND_CACHE_TTL_MS) return null
 
-    cachedTimeseries = parsed.data
-    cachedTimeseriesFetchedAt = parsed.fetchedAt
-    return parsed.data
+    cachedSignalHistory.set(netuid, entry.points)
+    cachedSignalHistoryFetchedAt.set(netuid, entry.fetchedAt)
+    return entry.points
   } catch {
     return null
   }
 }
 
-function getCachedTimeseries(): CompareSeriesData | null {
-  if (hasFreshCachedTimeseries()) {
-    return cachedTimeseries
+function getCachedSignalHistory(netuid: number): TrendPoint[] | null {
+  if (hasFreshCachedSignalHistory(netuid)) {
+    return cachedSignalHistory.get(netuid) ?? null
   }
 
-  return readStoredTimeseries()
+  return readStoredSignalHistory(netuid)
 }
 
-async function loadCachedTimeseries(days: number): Promise<CompareSeriesData> {
-  const existing = getCachedTimeseries()
+function toTrendPoints(data: SubnetSignalHistoryPoint[]): TrendPoint[] {
+  return data.map((point) => ({
+    computed_at: point.computed_at,
+    score: point.score,
+    quality: point.quality,
+    opportunity: point.opportunity,
+    risk: point.risk,
+    confidence: point.confidence,
+  }))
+}
+
+async function loadCachedSignalHistory(netuid: number, days: number): Promise<TrendPoint[]> {
+  const existing = getCachedSignalHistory(netuid)
   if (existing) return existing
 
-  if (!cachedTimeseriesPromise) {
-    cachedTimeseriesPromise = fetchCompareTimeseries(days)
+  const existingPromise = cachedSignalHistoryPromise.get(netuid)
+  if (existingPromise) return existingPromise
+
+  const nextPromise = fetchSubnetSignalHistory(netuid, days)
       .then((data) => {
-        rememberTimeseries(data)
-        return data
+        const points = toTrendPoints(data)
+        rememberSignalHistory(netuid, points)
+        return points
       })
       .finally(() => {
-        cachedTimeseriesPromise = null
+        cachedSignalHistoryPromise.delete(netuid)
       })
-  }
 
-  return cachedTimeseriesPromise
+  cachedSignalHistoryPromise.set(netuid, nextPromise)
+  return nextPromise
 }
 
 function filterPointsByTimeframe(points: TrendPoint[], timeframe: TimeframeId): TrendPoint[] {
@@ -113,26 +135,6 @@ function filterPointsByTimeframe(points: TrendPoint[], timeframe: TimeframeId): 
   const cutoff = newest - timeframeConfig.days * 24 * 60 * 60 * 1000
 
   return points.filter((point) => new Date(point.computed_at).getTime() >= cutoff)
-}
-
-function toTrendPoints(data: CompareSeriesData | null, netuid: number): TrendPoint[] {
-  if (!data) return []
-
-  return data.runs
-    .map((run) => {
-      const point = run.subnets.find((item) => item.netuid === netuid)
-      if (!point) return null
-
-      return {
-        computed_at: run.computed_at,
-        score: point.score,
-        quality: point.fundamental_quality,
-        opportunity: point.mispricing_signal,
-        risk: point.fragility_risk,
-        confidence: point.signal_confidence,
-      }
-    })
-    .filter((point): point is TrendPoint => Boolean(point))
 }
 
 function formatAxisDate(value: string): string {
@@ -180,7 +182,7 @@ function TrendTooltip({
 }
 
 export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
-  const [points, setPoints] = useState<TrendPoint[]>(() => toTrendPoints(getCachedTimeseries(), netuid))
+  const [points, setPoints] = useState<TrendPoint[]>(() => getCachedSignalHistory(netuid) ?? [])
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>(points.length ? 'ready' : 'loading')
   const [activeSeries, setActiveSeries] = useState<Record<SeriesKey, boolean>>({
     score: true,
@@ -192,9 +194,9 @@ export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
   const [timeframe, setTimeframe] = useState<TimeframeId>('30d')
 
   useEffect(() => {
-    const existing = getCachedTimeseries()
+    const existing = getCachedSignalHistory(netuid)
     if (existing) {
-      setPoints(toTrendPoints(existing, netuid))
+      setPoints(existing)
       setStatus('ready')
       return
     }
@@ -203,9 +205,9 @@ export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
 
     async function loadTrend() {
       try {
-        const data = await loadCachedTimeseries(120)
+        const data = await loadCachedSignalHistory(netuid, 120)
         if (!cancelled) {
-          setPoints(toTrendPoints(data, netuid))
+          setPoints(data)
           setStatus('ready')
         }
       } catch {

@@ -42,6 +42,7 @@ from api.models import (
     SubnetDetailResponse,
     SubnetListResponse,
     SubnetMetadataResponse,
+    SubnetSignalHistoryPoint,
     SubnetSummaryResponse,
 )
 from scorer.database import (
@@ -616,6 +617,20 @@ def _row_to_detailed_history_point(row: dict) -> DetailedScoreHistoryPoint:
     )
 
 
+def _row_to_signal_history_point(row: dict) -> SubnetSignalHistoryPoint:
+    raw_data = row.get("raw_data") or {}
+    analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
+    primary_outputs = analysis.get("primary_outputs") or raw_data.get("primary_outputs") or {}
+    return SubnetSignalHistoryPoint(
+        computed_at=row["computed_at"],
+        score=row["score"],
+        quality=primary_outputs.get("fundamental_quality"),
+        opportunity=primary_outputs.get("mispricing_signal"),
+        risk=primary_outputs.get("fragility_risk"),
+        confidence=primary_outputs.get("signal_confidence"),
+    )
+
+
 def _sort_value(row: dict, sort_by: str, meta_by_netuid: dict[int, dict]) -> Any:
     raw_data = row.get("raw_data") or {}
     primary_outputs = raw_data.get("analysis", {}).get("primary_outputs") or raw_data.get("primary_outputs") or {}
@@ -883,6 +898,34 @@ async def get_subnet_history_detailed(
         raise HTTPException(status_code=404, detail=f"No history for subnet {netuid}")
 
     result = [_row_to_detailed_history_point(row) for row in history_raw]
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.get(
+    "/api/v1/subnets/{netuid}/history/signals",
+    response_model=list[SubnetSignalHistoryPoint],
+    summary="Signal history for a subnet chart",
+    tags=["Subnets"],
+    responses={404: {"model": ErrorResponse}},
+)
+async def get_subnet_signal_history(
+    request: Request,
+    netuid: int,
+    days: int = Query(120, ge=1, le=365),
+    _: None = Depends(_check_rate_limit),
+) -> list[SubnetSignalHistoryPoint]:
+    all_rows = get_latest_scores()
+    cache_key = _live_cache_key("history_signals", netuid, days, rows=all_rows)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    history_raw = get_score_history(netuid, days=days)
+    if not history_raw:
+        raise HTTPException(status_code=404, detail=f"No history for subnet {netuid}")
+
+    result = [_row_to_signal_history_point(row) for row in history_raw]
     _cache_set(cache_key, result)
     return result
 
