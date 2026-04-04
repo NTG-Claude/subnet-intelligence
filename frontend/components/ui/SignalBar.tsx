@@ -18,7 +18,7 @@ export default function SignalBar({
   compact?: boolean
 }) {
   const rawValue = signal.value
-  const visibleValue = rawValue == null ? 0 : Math.max(4, Math.min(100, signal.invert ? 100 - rawValue : rawValue))
+  const visibleValue = rawValue == null ? 0 : Math.max(4, Math.min(100, rawValue))
   const label = rawValue == null ? 'n/a' : rawValue.toFixed(1)
 
   return (
@@ -28,7 +28,6 @@ export default function SignalBar({
           <div className={cn('text-[11px] font-medium uppercase text-[color:var(--text-tertiary)]', compact ? 'tracking-[0.22em]' : 'tracking-[0.28em]')}>
             {signal.label}
           </div>
-          {signal.invert ? <div className="mt-1 text-xs text-[color:var(--text-tertiary)]">Lower is safer</div> : null}
         </div>
         <div className="shrink-0 text-right text-base font-semibold text-[color:var(--text-primary)]">{label}</div>
       </div>
