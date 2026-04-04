@@ -23,6 +23,77 @@ type PreviewMetricDeltas = {
 }
 type RankDelta = { change: number; previousRank: number } | null
 
+const TIMESERIES_CACHE_KEY = 'discover-compare-timeseries-v1'
+const TIMESERIES_CACHE_TTL_MS = 5 * 60 * 1000
+
+let cachedTimeseries: CompareSeriesData | null = null
+let cachedTimeseriesFetchedAt = 0
+let cachedTimeseriesPromise: Promise<CompareSeriesData> | null = null
+
+function hasFreshCachedTimeseries(now = Date.now()): boolean {
+  return Boolean(cachedTimeseries && now - cachedTimeseriesFetchedAt < TIMESERIES_CACHE_TTL_MS)
+}
+
+function rememberTimeseries(data: CompareSeriesData, now = Date.now()) {
+  cachedTimeseries = data
+  cachedTimeseriesFetchedAt = now
+
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.setItem(
+      TIMESERIES_CACHE_KEY,
+      JSON.stringify({
+        fetchedAt: now,
+        data,
+      }),
+    )
+  }
+}
+
+function readStoredTimeseries(): CompareSeriesData | null {
+  if (typeof window === 'undefined') return null
+
+  const raw = window.sessionStorage.getItem(TIMESERIES_CACHE_KEY)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as { fetchedAt?: number; data?: CompareSeriesData }
+    if (!parsed.fetchedAt || !parsed.data) return null
+    if (Date.now() - parsed.fetchedAt >= TIMESERIES_CACHE_TTL_MS) return null
+
+    cachedTimeseries = parsed.data
+    cachedTimeseriesFetchedAt = parsed.fetchedAt
+    return parsed.data
+  } catch {
+    return null
+  }
+}
+
+function getCachedTimeseries(): CompareSeriesData | null {
+  if (hasFreshCachedTimeseries()) {
+    return cachedTimeseries
+  }
+
+  return readStoredTimeseries()
+}
+
+async function loadCachedTimeseries(days: number): Promise<CompareSeriesData> {
+  const existing = getCachedTimeseries()
+  if (existing) return existing
+
+  if (!cachedTimeseriesPromise) {
+    cachedTimeseriesPromise = fetchCompareTimeseries(days)
+      .then((data) => {
+        rememberTimeseries(data)
+        return data
+      })
+      .finally(() => {
+        cachedTimeseriesPromise = null
+      })
+  }
+
+  return cachedTimeseriesPromise
+}
+
 function queryMatches(subnet: SubnetSummary, query: string): boolean {
   const q = query.toLowerCase()
   return (subnet.name ?? '').toLowerCase().includes(q) || String(subnet.netuid).includes(q)
@@ -192,6 +263,7 @@ export default function DiscoverWorkspace({
 }) {
   const router = useRouter()
   const pathname = usePathname()
+  const cachedInitialTimeseries = initialTimeseries ?? getCachedTimeseries()
 
   const [search, setSearch] = useState(initialSearch)
   const [sort, setSort] = useState<UniverseSortId>((initialSort as UniverseSortId) ?? 'rank')
@@ -199,9 +271,9 @@ export default function DiscoverWorkspace({
   const [compareIds, setCompareIds] = useState<number[]>(parseIds(initialCompareIds))
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const [pinnedId, setPinnedId] = useState<number | null>(null)
-  const [timeseries, setTimeseries] = useState<CompareSeriesData | null>(initialTimeseries)
+  const [timeseries, setTimeseries] = useState<CompareSeriesData | null>(cachedInitialTimeseries)
   const [timeseriesStatus, setTimeseriesStatus] = useState<'loading' | 'ready' | 'unavailable'>(
-    initialTimeseries ? 'ready' : 'loading',
+    cachedInitialTimeseries ? 'ready' : 'loading',
   )
 
   useEffect(() => {
@@ -266,7 +338,15 @@ export default function DiscoverWorkspace({
 
   useEffect(() => {
     if (initialTimeseries) {
+      rememberTimeseries(initialTimeseries)
       setTimeseries(initialTimeseries)
+      setTimeseriesStatus('ready')
+      return
+    }
+
+    const existing = getCachedTimeseries()
+    if (existing) {
+      setTimeseries(existing)
       setTimeseriesStatus('ready')
       return
     }
@@ -277,7 +357,7 @@ export default function DiscoverWorkspace({
 
     async function loadTimeseries() {
       try {
-        const next = await fetchCompareTimeseries(35)
+        const next = await loadCachedTimeseries(35)
         if (!cancelled) {
           setTimeseries(next)
           setTimeseriesStatus('ready')
