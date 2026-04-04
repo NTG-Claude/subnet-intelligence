@@ -20,7 +20,7 @@ const SENTIMENT_STYLES: Record<IndicatorSentiment, string> = {
 export default function SentimentBadge({ sentiment }: { sentiment: IndicatorSentiment }) {
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-[0.08em] ${SENTIMENT_STYLES[sentiment]}`}
+      className={`inline-flex h-10 items-center justify-center rounded-full border px-4 text-[0.92rem] font-semibold tracking-[0.06em] ${SENTIMENT_STYLES[sentiment]}`}
     >
       {sentiment}
     </span>

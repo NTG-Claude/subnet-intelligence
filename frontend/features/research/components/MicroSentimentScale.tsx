@@ -27,11 +27,11 @@ export default function MicroSentimentScale({ score }: { score: number | null })
   const highlightedStep = activeStep(score)
 
   return (
-    <div className="flex min-w-[112px] items-center justify-end gap-1.5" aria-hidden="true">
+    <div className="flex min-w-[132px] items-center justify-end gap-1.5" aria-hidden="true">
       {Array.from({ length: 7 }).map((_, index) => (
         <span
           key={index}
-          className={`h-2 w-3.5 rounded-full transition-colors duration-150 sm:w-4 ${stepClass(index, highlightedStep)}`}
+          className={`h-2.5 w-5 rounded-full transition-colors duration-150 ${stepClass(index, highlightedStep)}`}
         />
       ))}
     </div>
