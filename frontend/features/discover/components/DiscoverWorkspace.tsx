@@ -5,7 +5,15 @@ import { usePathname, useRouter } from 'next/navigation'
 
 import MetricCard from '@/components/ui/MetricCard'
 import SegmentedControl from '@/components/ui/SegmentedControl'
-import { CompareSeriesData, fetchCompareTimeseries, MarketOverviewData, SubnetSummary } from '@/lib/api'
+import {
+  CompareSeriesData,
+  fetchCompareTimeseries,
+  fetchSubnetSignalHistory,
+  MarketOverviewData,
+  PreviewMetricDeltas as ApiPreviewMetricDeltas,
+  SubnetSignalHistoryPoint,
+  SubnetSummary,
+} from '@/lib/api'
 import { UniverseRowViewModel, UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
 
 import CompareDock from './CompareDock'
@@ -27,10 +35,13 @@ type RankDelta = { change: number; previousRank: number } | null
 
 const TIMESERIES_CACHE_KEY = 'discover-compare-timeseries-v1'
 const TIMESERIES_CACHE_TTL_MS = 5 * 60 * 1000
+const PREVIEW_HISTORY_CACHE_PREFIX = 'discover-preview-history-v1'
 
 let cachedTimeseries: CompareSeriesData | null = null
 let cachedTimeseriesFetchedAt = 0
 let cachedTimeseriesPromise: Promise<CompareSeriesData> | null = null
+const cachedPreviewHistory = new Map<number, { fetchedAt: number; points: SubnetSignalHistoryPoint[] }>()
+const cachedPreviewHistoryPromises = new Map<number, Promise<SubnetSignalHistoryPoint[]>>()
 
 const MARKET_TIMEFRAME_ITEMS = [
   { id: '7d', label: '7D' },
@@ -121,8 +132,49 @@ function reverseRows(rows: UniverseRowViewModel[]): UniverseRowViewModel[] {
   return [...rows].reverse()
 }
 
+function parseSort(value: string | null): UniverseSortId {
+  switch (value) {
+    case 'score':
+    case 'quality':
+    case 'mispricing':
+    case 'fragility':
+    case 'confidence':
+    case 'rank':
+      return value
+    default:
+      return 'rank'
+  }
+}
+
+function parseDirection(value: string | null): SortDirection {
+  return value === 'desc' ? 'desc' : 'asc'
+}
+
+function parseMarketTimeframe(value: string | null): MarketTimeframeId {
+  switch (value) {
+    case '7d':
+    case '30d':
+    case '90d':
+    case '180d':
+    case 'max':
+      return value
+    default:
+      return 'max'
+  }
+}
+
 function emptyDelta(): MetricDelta {
   return { value: null, hasHistory: false }
+}
+
+function nearestPointAtOrBefore(points: SubnetSignalHistoryPoint[], targetTime: number) {
+  let match: SubnetSignalHistoryPoint | null = null
+  for (const point of points) {
+    const pointTime = Date.parse(point.computed_at)
+    if (!Number.isFinite(pointTime) || pointTime > targetTime) continue
+    match = point
+  }
+  return match
 }
 
 function nearestRunAtOrBefore(data: CompareSeriesData, targetTime: number) {
@@ -161,6 +213,29 @@ function metricDelta(
   }
 }
 
+function signalDelta(
+  points: SubnetSignalHistoryPoint[],
+  metric: 'quality' | 'opportunity' | 'risk' | 'confidence',
+  days: number,
+): MetricDelta {
+  const latestPoint = points[points.length - 1]
+  if (!latestPoint) return emptyDelta()
+
+  const latestValue = latestPoint[metric]
+  if (latestValue == null) return emptyDelta()
+
+  const referencePoint = nearestPointAtOrBefore(points, Date.parse(latestPoint.computed_at) - days * 24 * 60 * 60 * 1000)
+  if (!referencePoint) return emptyDelta()
+
+  const referenceValue = referencePoint[metric]
+  if (referenceValue == null) return emptyDelta()
+
+  return {
+    value: Number((latestValue - referenceValue).toFixed(1)),
+    hasHistory: true,
+  }
+}
+
 function buildPreviewMetricDeltas(data: CompareSeriesData | null, netuid: number | null): PreviewMetricDeltas | null {
   if (!data || !netuid) return null
 
@@ -188,17 +263,163 @@ function buildPreviewMetricDeltas(data: CompareSeriesData | null, netuid: number
   }
 }
 
+function buildPreviewMetricDeltasFromHistory(points: SubnetSignalHistoryPoint[] | null): PreviewMetricDeltas | null {
+  if (!points?.length) return null
+
+  return {
+    strength: {
+      '1d': signalDelta(points, 'quality', 1),
+      '7d': signalDelta(points, 'quality', 7),
+      '30d': signalDelta(points, 'quality', 30),
+    },
+    upside: {
+      '1d': signalDelta(points, 'opportunity', 1),
+      '7d': signalDelta(points, 'opportunity', 7),
+      '30d': signalDelta(points, 'opportunity', 30),
+    },
+    risk: {
+      '1d': signalDelta(points, 'risk', 1),
+      '7d': signalDelta(points, 'risk', 7),
+      '30d': signalDelta(points, 'risk', 30),
+    },
+    evidence: {
+      '1d': signalDelta(points, 'confidence', 1),
+      '7d': signalDelta(points, 'confidence', 7),
+      '30d': signalDelta(points, 'confidence', 30),
+    },
+  }
+}
+
+function hasFreshPreviewHistory(netuid: number, now = Date.now()): boolean {
+  const cached = cachedPreviewHistory.get(netuid)
+  return Boolean(cached && now - cached.fetchedAt < TIMESERIES_CACHE_TTL_MS)
+}
+
+function rememberPreviewHistory(netuid: number, points: SubnetSignalHistoryPoint[], now = Date.now()) {
+  cachedPreviewHistory.set(netuid, { fetchedAt: now, points })
+
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.setItem(
+      `${PREVIEW_HISTORY_CACHE_PREFIX}:${netuid}`,
+      JSON.stringify({
+        fetchedAt: now,
+        points,
+      }),
+    )
+  }
+}
+
+function getCachedPreviewHistory(netuid: number): SubnetSignalHistoryPoint[] | null {
+  if (hasFreshPreviewHistory(netuid)) {
+    return cachedPreviewHistory.get(netuid)?.points ?? null
+  }
+
+  if (typeof window === 'undefined') return null
+
+  const raw = window.sessionStorage.getItem(`${PREVIEW_HISTORY_CACHE_PREFIX}:${netuid}`)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as { fetchedAt?: number; points?: SubnetSignalHistoryPoint[] }
+    if (!parsed.fetchedAt || !parsed.points) return null
+    if (Date.now() - parsed.fetchedAt >= TIMESERIES_CACHE_TTL_MS) return null
+
+    cachedPreviewHistory.set(netuid, { fetchedAt: parsed.fetchedAt, points: parsed.points })
+    return parsed.points
+  } catch {
+    return null
+  }
+}
+
+async function loadPreviewHistory(netuid: number): Promise<SubnetSignalHistoryPoint[]> {
+  const existing = getCachedPreviewHistory(netuid)
+  if (existing) return existing
+
+  const inFlight = cachedPreviewHistoryPromises.get(netuid)
+  if (inFlight) return inFlight
+
+  const request = fetchSubnetSignalHistory(netuid, 120)
+    .then((points) => {
+      rememberPreviewHistory(netuid, points)
+      return points
+    })
+    .finally(() => {
+      cachedPreviewHistoryPromises.delete(netuid)
+    })
+
+  cachedPreviewHistoryPromises.set(netuid, request)
+  return request
+}
+
+function normalizePreviewMetricDeltas(deltas: ApiPreviewMetricDeltas | null | undefined): PreviewMetricDeltas | null {
+  if (!deltas) return null
+
+  return {
+    strength: {
+      '1d': { value: deltas.strength['1d']?.value ?? null, hasHistory: deltas.strength['1d']?.has_history ?? false },
+      '7d': { value: deltas.strength['7d']?.value ?? null, hasHistory: deltas.strength['7d']?.has_history ?? false },
+      '30d': { value: deltas.strength['30d']?.value ?? null, hasHistory: deltas.strength['30d']?.has_history ?? false },
+    },
+    upside: {
+      '1d': { value: deltas.upside['1d']?.value ?? null, hasHistory: deltas.upside['1d']?.has_history ?? false },
+      '7d': { value: deltas.upside['7d']?.value ?? null, hasHistory: deltas.upside['7d']?.has_history ?? false },
+      '30d': { value: deltas.upside['30d']?.value ?? null, hasHistory: deltas.upside['30d']?.has_history ?? false },
+    },
+    risk: {
+      '1d': { value: deltas.risk['1d']?.value ?? null, hasHistory: deltas.risk['1d']?.has_history ?? false },
+      '7d': { value: deltas.risk['7d']?.value ?? null, hasHistory: deltas.risk['7d']?.has_history ?? false },
+      '30d': { value: deltas.risk['30d']?.value ?? null, hasHistory: deltas.risk['30d']?.has_history ?? false },
+    },
+    evidence: {
+      '1d': { value: deltas.evidence['1d']?.value ?? null, hasHistory: deltas.evidence['1d']?.has_history ?? false },
+      '7d': { value: deltas.evidence['7d']?.value ?? null, hasHistory: deltas.evidence['7d']?.has_history ?? false },
+      '30d': { value: deltas.evidence['30d']?.value ?? null, hasHistory: deltas.evidence['30d']?.has_history ?? false },
+    },
+  }
+}
+
+function filterMarketPoints(points: MarketOverviewData['points'], timeframe: MarketTimeframeId) {
+  if (timeframe === 'max' || points.length <= 1) return points
+
+  const latestPoint = points[points.length - 1]
+  const latestTime = Date.parse(latestPoint.computed_at)
+  if (!Number.isFinite(latestTime)) return points
+
+  const days = timeframe === '7d' ? 7 : timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 180
+  const cutoff = latestTime - days * 24 * 60 * 60 * 1000
+  const filtered = points.filter((point) => {
+    const pointTime = Date.parse(point.computed_at)
+    return Number.isFinite(pointTime) && pointTime >= cutoff
+  })
+  return filtered.length ? filtered : points
+}
+
+function applyMarketTimeframe(market: MarketOverviewData, timeframe: MarketTimeframeId): MarketOverviewData {
+  return {
+    ...market,
+    points: filterMarketPoints(market.points, timeframe),
+  }
+}
+
 function buildRankDeltaMap(subnets: SubnetSummary[], data: CompareSeriesData | null): Map<number, RankDelta> {
-  if (!data || data.runs.length < 2) return new Map()
+  const previousRanks = new Map<number, number>()
 
-  const previousRun = data.runs[data.runs.length - 2]
-  if (!previousRun) return new Map()
+  subnets.forEach((subnet) => {
+    if (subnet.previous_rank != null) {
+      previousRanks.set(subnet.netuid, subnet.previous_rank)
+    }
+  })
 
-  const previousRanks = new Map(
-    [...previousRun.subnets]
-      .sort((left, right) => right.score - left.score || left.netuid - right.netuid)
-      .map((subnet, index) => [subnet.netuid, index + 1]),
-  )
+  if (!previousRanks.size && data?.runs.length && data.runs.length >= 2) {
+    const previousRun = data.runs[data.runs.length - 2]
+    if (previousRun) {
+      ;[...previousRun.subnets]
+        .sort((left, right) => right.score - left.score || left.netuid - right.netuid)
+        .forEach((subnet, index) => previousRanks.set(subnet.netuid, index + 1))
+    }
+  }
+
+  if (!previousRanks.size) return new Map()
 
   return new Map(
     subnets.map((subnet) => {
@@ -257,39 +478,44 @@ export default function DiscoverWorkspace({
   lastRun,
   market,
   initialTimeseries,
-  initialMarketTimeframe,
-  initialSearch,
-  initialSort,
-  initialDirection,
-  initialCompareIds,
 }: {
   subnets: SubnetSummary[]
   lastRun: string | null
   market: MarketOverviewData
   initialTimeseries: CompareSeriesData | null
-  initialMarketTimeframe: MarketTimeframeId
-  initialSearch: string
-  initialSort: string
-  initialDirection: string
-  initialCompareIds: string | null
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const cachedInitialTimeseries = initialTimeseries ?? getCachedTimeseries()
 
-  const [search, setSearch] = useState(initialSearch)
-  const [sort, setSort] = useState<UniverseSortId>((initialSort as UniverseSortId) ?? 'rank')
-  const [direction, setDirection] = useState<SortDirection>((initialDirection as SortDirection) ?? 'asc')
-  const [marketTimeframe, setMarketTimeframe] = useState<MarketTimeframeId>(initialMarketTimeframe)
-  const [compareIds, setCompareIds] = useState<number[]>(parseIds(initialCompareIds))
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<UniverseSortId>('rank')
+  const [direction, setDirection] = useState<SortDirection>('asc')
+  const [marketTimeframe, setMarketTimeframe] = useState<MarketTimeframeId>('max')
+  const [compareIds, setCompareIds] = useState<number[]>([])
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const [pinnedId, setPinnedId] = useState<number | null>(null)
   const [timeseries, setTimeseries] = useState<CompareSeriesData | null>(cachedInitialTimeseries)
   const [timeseriesStatus, setTimeseriesStatus] = useState<'loading' | 'ready' | 'unavailable'>(
     cachedInitialTimeseries ? 'ready' : 'loading',
   )
+  const [previewHistory, setPreviewHistory] = useState<SubnetSignalHistoryPoint[] | null>(null)
+  const [previewHistoryStatus, setPreviewHistoryStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
+  const [queryStateReady, setQueryStateReady] = useState(false)
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setSearch(params.get('q') ?? '')
+    setSort(parseSort(params.get('sort')))
+    setDirection(parseDirection(params.get('dir')))
+    setMarketTimeframe(parseMarketTimeframe(params.get('tf')))
+    setCompareIds(parseIds(params.get('ids')))
+    setQueryStateReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!queryStateReady) return
+
     const params = new URLSearchParams()
     if (search.trim()) params.set('q', search.trim())
     if (sort !== 'rank') params.set('sort', sort)
@@ -298,7 +524,7 @@ export default function DiscoverWorkspace({
     if (compareIds.length) params.set('ids', compareIds.join(','))
     const next = params.toString()
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
-  }, [compareIds, direction, marketTimeframe, pathname, router, search, sort])
+  }, [compareIds, direction, marketTimeframe, pathname, queryStateReady, router, search, sort])
 
   useEffect(() => {
     const previewId = pinnedId ?? focusedId
@@ -415,6 +641,44 @@ export default function DiscoverWorkspace({
     }
   }, [initialTimeseries])
 
+  useEffect(() => {
+    const previewNetuid = pinnedId ?? focusedId
+    if (!previewNetuid || timeseries) {
+      setPreviewHistory(null)
+      setPreviewHistoryStatus(timeseries ? 'ready' : 'idle')
+      return
+    }
+
+    const cached = getCachedPreviewHistory(previewNetuid)
+    if (cached) {
+      setPreviewHistory(cached)
+      setPreviewHistoryStatus('ready')
+      return
+    }
+
+    let cancelled = false
+    setPreviewHistory(null)
+    setPreviewHistoryStatus('loading')
+
+    void loadPreviewHistory(previewNetuid)
+      .then((points) => {
+        if (!cancelled) {
+          setPreviewHistory(points)
+          setPreviewHistoryStatus('ready')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPreviewHistory(null)
+          setPreviewHistoryStatus('unavailable')
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [focusedId, pinnedId, timeseries])
+
   function toggleSort(nextSort: UniverseSortId) {
     if (sort === nextSort) {
       setDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
@@ -435,7 +699,18 @@ export default function DiscoverWorkspace({
 
   const previewId = pinnedId ?? focusedId
   const previewRow = rows.find((row) => row.id === previewId) ?? null
-  const metricDeltas = useMemo(() => buildPreviewMetricDeltas(timeseries, previewRow?.id ?? null), [previewRow?.id, timeseries])
+  const previewSubnet = previewId != null ? subnets.find((subnet) => subnet.netuid === previewId) ?? null : null
+  const metricDeltas = useMemo(
+    () =>
+      normalizePreviewMetricDeltas(previewSubnet?.preview_metric_deltas) ??
+      (timeseries ? buildPreviewMetricDeltas(timeseries, previewRow?.id ?? null) : buildPreviewMetricDeltasFromHistory(previewHistory)),
+    [previewHistory, previewRow?.id, previewSubnet?.preview_metric_deltas, timeseries],
+  )
+  const metricHistoryStatus = metricDeltas
+    ? 'ready'
+    : timeseriesStatus === 'loading' || previewHistoryStatus === 'loading' || previewHistoryStatus === 'idle'
+      ? 'loading'
+      : 'unavailable'
   const rankDeltaMap = useMemo(() => buildRankDeltaMap(subnets, timeseries), [subnets, timeseries])
   const compareItems = compareIds
     .map((id) => subnets.find((subnet) => subnet.netuid === id))
@@ -444,11 +719,12 @@ export default function DiscoverWorkspace({
       id: subnet.netuid,
       name: subnet.name?.trim() || `SN${subnet.netuid}`,
     }))
+  const marketForTimeframe = useMemo(() => applyMarketTimeframe(market, marketTimeframe), [market, marketTimeframe])
 
   return (
     <div className="space-y-6 pb-28">
       <DiscoverMarketHero
-        market={market}
+        market={marketForTimeframe}
         lastRun={lastRun}
         timeframe={marketTimeframe}
         timeframeControl={
@@ -573,7 +849,7 @@ export default function DiscoverWorkspace({
           )}
         </section>
 
-        <SidePreviewPanel row={previewRow} metricDeltas={metricDeltas} metricHistoryStatus={timeseriesStatus} />
+        <SidePreviewPanel row={previewRow} metricDeltas={metricDeltas} metricHistoryStatus={metricHistoryStatus} />
       </section>
 
       <CompareDock items={compareItems} onRemove={(id) => setCompareIds((current) => current.filter((item) => item !== id))} />

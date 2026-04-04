@@ -181,8 +181,18 @@ function TrendTooltip({
   )
 }
 
-export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
-  const [points, setPoints] = useState<TrendPoint[]>(() => getCachedSignalHistory(netuid) ?? [])
+export default function PrimarySignalsTrend({
+  netuid,
+  initialPoints = null,
+}: {
+  netuid: number
+  initialPoints?: SubnetSignalHistoryPoint[] | null
+}) {
+  const [points, setPoints] = useState<TrendPoint[]>(() => {
+    const cached = getCachedSignalHistory(netuid)
+    if (cached?.length) return cached
+    return initialPoints ? toTrendPoints(initialPoints) : []
+  })
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>(points.length ? 'ready' : 'loading')
   const [activeSeries, setActiveSeries] = useState<Record<SeriesKey, boolean>>({
     score: true,
@@ -194,6 +204,14 @@ export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
   const [timeframe, setTimeframe] = useState<TimeframeId>('30d')
 
   useEffect(() => {
+    if (initialPoints?.length) {
+      const next = toTrendPoints(initialPoints)
+      rememberSignalHistory(netuid, next)
+      setPoints(next)
+      setStatus('ready')
+      return
+    }
+
     const existing = getCachedSignalHistory(netuid)
     if (existing) {
       setPoints(existing)
@@ -222,7 +240,7 @@ export default function PrimarySignalsTrend({ netuid }: { netuid: number }) {
     return () => {
       cancelled = true
     }
-  }, [netuid])
+  }, [initialPoints, netuid])
 
   const visibleSeries = SERIES.filter((series) => activeSeries[series.key])
   const filteredPoints = useMemo(() => filterPointsByTimeframe(points, timeframe), [points, timeframe])

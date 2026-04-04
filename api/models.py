@@ -38,6 +38,8 @@ class SubnetSummaryResponse(BaseModel):
     score: float
     primary_outputs: Optional[PrimaryOutputsResponse] = None
     rank: Optional[int] = None
+    previous_rank: Optional[int] = None
+    preview_metric_deltas: Optional["PreviewMetricDeltasResponse"] = None
     percentile: Optional[float] = None  # 0-100
     computed_at: Optional[str] = None
     score_version: str = "v1"
@@ -93,6 +95,18 @@ class SubnetSignalHistoryPoint(BaseModel):
     opportunity: Optional[float] = None
     risk: Optional[float] = None
     confidence: Optional[float] = None
+
+
+class MetricDeltaValueResponse(BaseModel):
+    value: Optional[float] = None
+    has_history: bool = False
+
+
+class PreviewMetricDeltasResponse(BaseModel):
+    strength: dict[str, MetricDeltaValueResponse] = Field(default_factory=dict)
+    upside: dict[str, MetricDeltaValueResponse] = Field(default_factory=dict)
+    risk: dict[str, MetricDeltaValueResponse] = Field(default_factory=dict)
+    evidence: dict[str, MetricDeltaValueResponse] = Field(default_factory=dict)
 
 
 class CompareSeriesSubnetPoint(BaseModel):
