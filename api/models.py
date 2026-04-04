@@ -126,8 +126,8 @@ class SubnetDetailResponse(BaseModel):
     primary_outputs: Optional[PrimaryOutputsResponse] = None
     rank: Optional[int] = None
     percentile: Optional[float] = None
-    breakdown: ScoreBreakdownResponse
-    history: list[ScoreHistoryPoint]
+    breakdown: Optional[ScoreBreakdownResponse] = None
+    history: list[ScoreHistoryPoint] = Field(default_factory=list)
     metadata: Optional[SubnetMetadataResponse] = None
     computed_at: Optional[str] = None
     score_version: str = "v1"

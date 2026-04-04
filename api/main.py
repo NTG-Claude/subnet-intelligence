@@ -740,10 +740,11 @@ async def list_subnets(
 async def get_subnet(
     request: Request,
     netuid: int,
+    view: Literal["page", "full"] = Query("full"),
     _: None = Depends(_check_rate_limit),
 ) -> SubnetDetailResponse:
     all_rows = get_latest_scores()
-    cache_key = _live_cache_key("subnet", netuid, rows=all_rows)
+    cache_key = _live_cache_key("subnet", netuid, view, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -755,22 +756,26 @@ async def get_subnet(
     if row is None:
         raise HTTPException(status_code=404, detail=f"Subnet {netuid} not found")
 
-    history_raw = get_score_history(netuid, days=30)
-    history = [
-        ScoreHistoryPoint(
-            computed_at=h["computed_at"],
-            score=h["score"],
-            rank=h.get("rank"),
-        )
-        for h in history_raw
-    ]
-
-    # Score delta: current vs oldest point in 7-day window
     score_delta_7d: Optional[float] = None
-    if len(history_raw) >= 2:
-        score_delta_7d = round(row["score"] - history_raw[0]["score"], 1)
+    history_for_delta = get_score_history(netuid, days=7)
+    if len(history_for_delta) >= 2:
+        score_delta_7d = round(row["score"] - history_for_delta[0]["score"], 1)
 
-    meta = _get_metadata(netuid)
+    history: list[ScoreHistoryPoint] = []
+    if view == "full":
+        history_raw = get_score_history(netuid, days=30)
+        history = [
+            ScoreHistoryPoint(
+                computed_at=h["computed_at"],
+                score=h["score"],
+                rank=h.get("rank"),
+            )
+            for h in history_raw
+        ]
+
+    meta_by_netuid = get_all_metadata()
+    meta_dict = meta_by_netuid.get(netuid)
+    meta = SubnetMetadataResponse(netuid=netuid, **(meta_dict or {})) if meta_dict else None
 
     analysis_payload = _normalize_analysis_payload((row.get("raw_data") or {}).get("analysis"))
     detail_primary_outputs = ((analysis_payload or {}).get("primary_outputs"))
@@ -798,7 +803,7 @@ async def get_subnet(
             efficiency_score=row["efficiency_score"],
             health_score=row["health_score"],
             dev_score=row["dev_score"],
-        ),
+        ) if view == "full" else None,
         history=history,
         metadata=meta,
         computed_at=row.get("computed_at"),
