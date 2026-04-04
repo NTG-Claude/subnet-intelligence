@@ -82,17 +82,13 @@ function ExplanationList({
 }
 
 function CaseComparison({
-  supportIntro,
   supports,
   supportEmpty,
-  riskIntro,
   risks,
   riskEmpty,
 }: {
-  supportIntro?: string
   supports: ScoreExplanationItem[]
   supportEmpty: string
-  riskIntro?: string
   risks: MemoSectionItem[]
   riskEmpty: string
 }) {
@@ -102,7 +98,6 @@ function CaseComparison({
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
         <div className="rounded-[var(--radius-xl)] border border-[color:rgba(74,222,128,0.16)] bg-[color:rgba(18,32,24,0.42)] p-4 sm:p-5">
           <div className="eyebrow text-[color:rgba(134,239,172,0.9)]">What is working</div>
-          {supportIntro ? <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{supportIntro}</p> : null}
           <div className="mt-4 space-y-3">
             {supports.length ? (
               supports.map((item) => (
@@ -122,7 +117,6 @@ function CaseComparison({
 
         <div className="rounded-[var(--radius-xl)] border border-[color:rgba(244,114,182,0.16)] bg-[color:rgba(38,20,28,0.42)] p-4 sm:p-5">
           <div className="eyebrow text-[color:rgba(251,182,206,0.9)]">What is holding it back</div>
-          {riskIntro ? <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{riskIntro}</p> : null}
           <div className="mt-4 space-y-3">
             {risks.length ? (
               risks.map((item, index) => (
@@ -215,6 +209,53 @@ function uniqueSectionItems(items: MemoSectionItem[]): MemoSectionItem[] {
     seen.add(key)
     return true
   })
+}
+
+function semanticKey(title: string, body: string): string {
+  const text = `${cleanVisibleText(title)} ${cleanVisibleText(body)}`.toLowerCase()
+  if (/(confidence|reliable|trust|evidence|telemetry|history|dropped|rebuilt|discarded|reconstructed)/.test(text)) {
+    return 'trust'
+  }
+  if (/(stress|drawdown|downside|fragility|break)/.test(text)) {
+    return 'stress'
+  }
+  if (/(usage|activity|quality|health|dev|efficiency)/.test(text)) {
+    return 'quality'
+  }
+  if (/(price|market|upside|opportunity|valuation)/.test(text)) {
+    return 'market'
+  }
+  return text
+}
+
+function dedupeComparisonSupports(items: ScoreExplanationItem[]): ScoreExplanationItem[] {
+  const seen = new Set<string>()
+  const result: ScoreExplanationItem[] = []
+
+  for (const item of items) {
+    const key = semanticKey(item.title, item.body)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(item)
+    if (result.length >= 2) break
+  }
+
+  return result
+}
+
+function dedupeComparisonRisks(items: MemoSectionItem[]): MemoSectionItem[] {
+  const seen = new Set<string>()
+  const result: MemoSectionItem[] = []
+
+  for (const item of items) {
+    const key = semanticKey(item.title, item.body)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(item)
+    if (result.length >= 3) break
+  }
+
+  return result
 }
 
 function signalValue(signals: SignalStat[], label: string): number | null {
@@ -378,9 +419,9 @@ export default function ResearchWorkspace({
     body: cleanVisibleText(item.body),
     meta: undefined,
   }))
-  const primarySupports = memo.topSupports.slice(0, 2)
+  const primarySupports = dedupeComparisonSupports(memo.topSupports)
   const extraSupports = memo.topSupports.slice(2)
-  const primaryRisks = riskItems.slice(0, 4)
+  const primaryRisks = dedupeComparisonRisks(riskItems)
   const extraRisks = riskItems.slice(4)
 
   const trustItems = uniqueSectionItems([
@@ -450,10 +491,8 @@ export default function ResearchWorkspace({
       </section>
 
       <CaseComparison
-        supportIntro={cleanVisibleText(memo.researchSummary.whyNow)}
         supports={primarySupports}
         supportEmpty="No clear support stands out yet."
-        riskIntro={cleanVisibleText(`${memo.researchSummary.mainConstraint} ${memo.researchSummary.breakCondition}`)}
         risks={primaryRisks}
         riskEmpty="No single risk dominates yet."
       />
