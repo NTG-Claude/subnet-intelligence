@@ -38,22 +38,22 @@ function ThesisPanel({
 }) {
   const shellClass =
     tone === 'bull'
-      ? 'border-[color:rgba(74,222,128,0.12)] bg-[color:rgba(18,32,24,0.28)]'
-      : 'border-[color:rgba(244,114,182,0.12)] bg-[color:rgba(38,20,28,0.28)]'
+      ? 'border-[color:rgba(74,222,128,0.12)] bg-[linear-gradient(180deg,rgba(18,32,24,0.32),rgba(10,18,26,0.92))]'
+      : 'border-[color:rgba(244,114,182,0.12)] bg-[linear-gradient(180deg,rgba(38,20,28,0.32),rgba(10,18,26,0.92))]'
   const labelClass = tone === 'bull' ? 'text-[color:rgba(134,239,172,0.9)]' : 'text-[color:rgba(251,182,206,0.9)]'
-  const cardClass =
+  const rowClass =
     tone === 'bull'
-      ? 'border-[color:rgba(74,222,128,0.1)] bg-[color:rgba(12,24,18,0.42)]'
-      : 'border-[color:rgba(244,114,182,0.1)] bg-[color:rgba(28,15,22,0.42)]'
+      ? 'border-[color:rgba(74,222,128,0.1)]'
+      : 'border-[color:rgba(244,114,182,0.1)]'
 
   return (
-    <div className={`rounded-[var(--radius-xl)] border p-4 sm:p-5 ${shellClass}`}>
+    <div className={`rounded-[var(--radius-xl)] border p-5 sm:p-6 ${shellClass}`}>
       <div className={`eyebrow ${labelClass}`}>{title}</div>
-      <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{summary}</p>
+      <p className="mt-2 min-h-[72px] text-sm leading-6 text-[color:var(--text-primary)]">{summary}</p>
       {items.length ? (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 divide-y divide-[color:var(--border-subtle)]">
           {items.map((item, index) => (
-            <div key={`${title}-${item.title}-${index}`} className={`rounded-[var(--radius-lg)] border px-4 py-3.5 ${cardClass}`}>
+            <div key={`${title}-${item.title}-${index}`} className={`py-3 first:pt-0 last:pb-0 ${rowClass}`}>
               <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
               <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
             </div>
@@ -253,6 +253,11 @@ function formatWhole(value: number | null | undefined): string {
   return value == null ? 'n/a' : value.toFixed(0)
 }
 
+function isLowUpside(memo: DetailMemoViewModel): boolean {
+  const opportunity = signalValue(memo.signals, 'Opportunity')
+  return opportunity != null && opportunity < 45
+}
+
 function thesisBarometer(memo: DetailMemoViewModel): {
   label: string
   value: number
@@ -319,6 +324,7 @@ function buildHeroVerdict(memo: DetailMemoViewModel): string {
   const risk = signalValue(memo.signals, 'Risk')
   const confidence = signalValue(memo.signals, 'Confidence')
   const breakdown = memo.scoreBreakdown
+  const lowUpside = isLowUpside(memo)
 
   if ([quality, opportunity, risk, confidence].every((value) => value == null)) {
     return 'This subnet is still waiting on a clean run, so the rank is provisional.'
@@ -342,9 +348,9 @@ function buildHeroVerdict(memo: DetailMemoViewModel): string {
   }
 
   if (opportunity != null) {
-    if (quality != null && quality >= 60 && opportunity < 50) {
-      positives.push(`The subnet looks better operationally than its price read alone would suggest, which is why it still ranks well.`)
-      limits.push(`It is not ranked even higher because the market is no longer leaving a huge pricing gap.`)
+    if (quality != null && quality >= 60 && lowUpside) {
+      positives.push(`The subnet still ranks well because the operating side is solid even though the easy upside may already be gone.`)
+      limits.push(`It is not higher because the market is no longer leaving a large pricing gap.`)
     } else if (opportunity >= 60) {
       positives.push(`Price still looks behind the operating picture, so there is a real upside case on top of the current quality.`)
     }
@@ -377,6 +383,7 @@ function buildPositiveDriverText(memo: DetailMemoViewModel): string {
   const breakdown = memo.scoreBreakdown
   const quality = signalValue(memo.signals, 'Quality')
   const opportunity = signalValue(memo.signals, 'Opportunity')
+  const lowUpside = isLowUpside(memo)
 
   if (breakdown && quality != null && quality >= 60) {
     const reasons = [
@@ -391,7 +398,7 @@ function buildPositiveDriverText(memo: DetailMemoViewModel): string {
     }
   }
 
-  if (opportunity != null && quality != null && quality > opportunity + 10) {
+  if (!lowUpside && opportunity != null && quality != null && quality > opportunity + 10) {
     return `Quality is reading better than price, which suggests the market has not fully caught up to the operating picture.`
   }
 
@@ -459,6 +466,10 @@ export default function ResearchWorkspace({
   const extraSupports = memo.topSupports.slice(2)
   const primaryRisks = dedupeComparisonRisks(riskItems)
   const extraRisks = riskItems.slice(4)
+  const lowUpside = isLowUpside(memo)
+
+  const heroSupports = primarySupports.filter((item) => !(lowUpside && semanticKey(item.title, item.body) === 'market')).slice(0, 2)
+  const heroRisks = primaryRisks.slice(0, 2)
 
   const trustItems = uniqueSectionItems([
     ...memo.evidenceItems.map((item) => ({
@@ -483,7 +494,7 @@ export default function ResearchWorkspace({
       </Link>
 
       <section className="surface-panel p-5 sm:p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone="neutral">{memo.netuidLabel}</StatusChip>
@@ -491,7 +502,7 @@ export default function ResearchWorkspace({
             <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
             <div className="mt-2 text-sm text-[color:var(--text-tertiary)]">Updated {memo.updatedLabel}</div>
 
-            <div className="mt-5 max-w-[460px] rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
+            <div className="mt-5 max-w-[420px] rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="eyebrow">Overall setup</div>
                 <div className="text-sm font-medium text-[color:var(--text-primary)]">{barometer.label}</div>
@@ -504,10 +515,10 @@ export default function ResearchWorkspace({
               </div>
             </div>
 
-            <p className="mt-5 max-w-3xl text-base leading-8 text-[color:var(--text-primary)]">{verdict}</p>
+            <p className="mt-5 max-w-3xl text-[15px] leading-8 text-[color:var(--text-primary)]">{verdict}</p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 xl:content-start">
             <CompactStat label="Score" value={memo.scoreLabel} />
             <CompactStat label="Rank" value={memo.rankLabel} />
           </div>
@@ -518,13 +529,13 @@ export default function ResearchWorkspace({
             tone="bull"
             title="Bullish case"
             summary={strongestSupport}
-            items={primarySupports.map((item) => ({ title: item.title, body: item.body }))}
+            items={heroSupports.map((item) => ({ title: item.title, body: item.body }))}
           />
           <ThesisPanel
             tone="bear"
             title="Bearish case"
             summary={mainLimiter}
-            items={primaryRisks.map((item) => ({ title: item.title, body: item.body }))}
+            items={heroRisks.map((item) => ({ title: item.title, body: item.body }))}
           />
         </div>
       </section>
