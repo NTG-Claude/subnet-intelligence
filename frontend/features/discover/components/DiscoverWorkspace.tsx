@@ -15,7 +15,7 @@ import {
 import { UniverseRowViewModel, UniverseSortId, sortUniverseRows, toUniverseRow } from '@/lib/view-models/research'
 
 import CompareDock from './CompareDock'
-import DecisionRow, { DISCOVER_TABLE_GRID, MobileDecisionCard } from './DecisionRow'
+import DecisionRow, { DISCOVER_TABLE_GRID } from './DecisionRow'
 import DiscoverMarketHero from './DiscoverMarketHero'
 import SidePreviewPanel from './SidePreviewPanel'
 
@@ -672,7 +672,7 @@ export default function DiscoverWorkspace({
 
           {rows.length ? (
             <>
-              <div className="hidden overflow-x-auto md:block">
+              <div className="overflow-x-auto">
                 <div className="min-w-[940px]">
                 <div
                   className={[
@@ -705,18 +705,6 @@ export default function DiscoverWorkspace({
                   ))}
                 </div>
                 </div>
-              </div>
-
-              <div className="space-y-4 p-4 md:hidden">
-                {rows.map((row) => (
-                  <MobileDecisionCard
-                    key={row.id}
-                    row={row}
-                    rankDelta={rankDeltaMap.get(row.id) ?? null}
-                    focused={focusedId === row.id}
-                    onFocus={() => setFocusedId(row.id)}
-                  />
-                ))}
               </div>
             </>
           ) : (
