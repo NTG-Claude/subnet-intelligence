@@ -1339,17 +1339,26 @@ async def get_subnet_signal_history(
 ) -> list[SubnetSignalHistoryPoint]:
     all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("history_signals", netuid, days, rows=all_rows)
+    stale_cache_key = f"history_signals_stale:{netuid}:{days}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    history_raw = _get_cached_score_history(netuid, days=days)
-    if not history_raw:
-        raise HTTPException(status_code=404, detail=f"No history for subnet {netuid}")
-
-    result = [_row_to_signal_history_point(row) for row in history_raw]
-    _cache_set(cache_key, result)
-    return result
+    try:
+        history_raw = _get_cached_score_history(netuid, days=days)
+        result = [_row_to_signal_history_point(row) for row in history_raw]
+        _cache_set(cache_key, result)
+        _cache_set(stale_cache_key, result, ttl=24 * 60 * 60)
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        stale = _cache_get_stale(stale_cache_key)
+        if stale is not None:
+            logger.warning("Serving stale signal history for subnet %s after refresh failure: %s", netuid, exc)
+            return stale
+        logger.warning("Signal history fetch failed for subnet %s: %s", netuid, exc)
+        return []
 
 
 @app.get(

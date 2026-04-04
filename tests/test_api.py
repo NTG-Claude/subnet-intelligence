@@ -649,6 +649,17 @@ def test_subnet_detailed_history():
     assert data[0]["top_negative_drags"][0]["name"] == "base_opportunity"
 
 
+def test_subnet_signal_history_returns_empty_list_when_history_is_missing():
+    with patch("api.main.get_score_history", return_value=[]), \
+         patch("api.main.get_latest_scores_preview", return_value=SCORES), \
+         patch("api.main._cache_get", return_value=None):
+        from api.main import app
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/subnets/1/history/signals?days=120")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 def test_subnet_history_not_found():
     with patch("api.main.get_score_history", return_value=[]), \
          patch("api.main.get_latest_scores", return_value=SCORES):
