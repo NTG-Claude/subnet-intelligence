@@ -159,6 +159,10 @@ export default function ResearchWorkspace({
     ...memo.breaks,
     ...memo.uncertainties,
   ])
+  const primarySupports = memo.topSupports.slice(0, 2)
+  const extraSupports = memo.topSupports.slice(2)
+  const primaryRisks = riskItems.slice(0, 4)
+  const extraRisks = riskItems.slice(4)
 
   const trustItems = uniqueSectionItems([
     ...memo.evidenceItems.map((item) => ({
@@ -229,36 +233,70 @@ export default function ResearchWorkspace({
       <ExplanationList
         title="What supports the case"
         intro={memo.researchSummary.whyNow}
-        items={memo.topSupports}
+        items={primarySupports}
         empty="No clear support stands out yet."
       />
 
       <DetailList
         title="What could break the case"
         intro={`${memo.researchSummary.mainConstraint} ${memo.researchSummary.breakCondition}`}
-        items={riskItems}
+        items={primaryRisks}
         empty="No single risk dominates yet."
-      />
-
-      <DetailList
-        title="How much to trust this read"
-        intro={trustSummary}
-        items={trustItems}
-        empty="No trust details are available yet."
-      />
-
-      <InsightGrid
-        title="How the market is set up"
-        intro={memo.researchSummary.relativePeerContext}
-        items={memo.marketStructure}
       />
 
       <CollapsibleSection
         title="Deep Diagnostics"
-        subtitle="Lower-level stress, scenario, and scoring detail for deeper review."
+        subtitle="Trust detail, market structure, and lower-level stress or scoring checks."
         defaultOpen={false}
       >
         <div className="space-y-6">
+          <div>
+            <div className="section-title">Trust & Evidence</div>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{trustSummary}</p>
+            <div className="mt-3">
+              <DiagnosticGrid items={trustItems} empty="No trust details are available yet." />
+            </div>
+          </div>
+
+          <div>
+            <div className="section-title">Market Structure</div>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">{memo.researchSummary.relativePeerContext}</p>
+            <div className="mt-3 grid gap-2.5 lg:grid-cols-2">
+              {memo.marketStructure.length ? (
+                memo.marketStructure.map((item) => (
+                  <div key={item.label} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
+                    <div className="eyebrow">{item.label}</div>
+                    <div className="mt-1.5 text-sm font-medium text-[color:var(--text-primary)]">{item.value}</div>
+                    <p className="mt-1.5 text-sm leading-5 text-[color:var(--text-secondary)]">{item.body}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm leading-6 text-[color:var(--text-secondary)]">No market-structure detail is available.</p>
+              )}
+            </div>
+          </div>
+
+          {extraSupports.length ? (
+            <div>
+              <div className="section-title">Additional Support</div>
+              <div className="mt-3">
+                <DiagnosticGrid
+                  items={extraSupports.map((item) => ({ title: item.title, body: item.body, tone: item.tone }))}
+                  empty="No additional support details are available."
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {extraRisks.length ? (
+            <div>
+              <div className="section-title">Additional Risks</div>
+              <div className="mt-3">
+                <DiagnosticGrid items={extraRisks} empty="No additional risk details are available." />
+              </div>
+            </div>
+          ) : null}
+
           <div>
             <div className="section-title">Stress View</div>
             <div className="mt-3">
