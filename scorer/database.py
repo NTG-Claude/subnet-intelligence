@@ -479,6 +479,70 @@ def get_signal_history_points(netuid: int, days: int = 120) -> list[dict]:
     return [_signal_history_row_to_dict(r) for r in rows]
 
 
+def get_scores_since_compact(days: int = 90) -> list[dict]:
+    """Return a compact cross-subnet history without loading full raw_data blobs."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(
+                SubnetScoreRow.netuid.label("netuid"),
+                SubnetScoreRow.score.label("score"),
+                SubnetScoreRow.rank.label("rank"),
+                SubnetScoreRow.computed_at.label("computed_at"),
+                SubnetScoreRow.score_version.label("score_version"),
+                SubnetScoreRow.market_cap_tao.label("market_cap_tao"),
+                SubnetScoreRow.raw_data["investable"].label("investable"),
+                SubnetScoreRow.raw_data["special_case"].label("special_case"),
+                SubnetScoreRow.raw_data["raw_metrics"]["market_cap_usd"].label("metric_market_cap_usd"),
+                SubnetScoreRow.raw_data["primary_outputs"]["fundamental_quality"].label("raw_quality"),
+                SubnetScoreRow.raw_data["primary_outputs"]["mispricing_signal"].label("raw_mispricing"),
+                SubnetScoreRow.raw_data["primary_outputs"]["fragility_risk"].label("raw_fragility"),
+                SubnetScoreRow.raw_data["primary_outputs"]["signal_confidence"].label("raw_confidence"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["fundamental_quality"].label("analysis_quality"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["mispricing_signal"].label("analysis_mispricing"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["fragility_risk"].label("analysis_fragility"),
+                SubnetScoreRow.raw_data["analysis"]["primary_outputs"]["signal_confidence"].label("analysis_confidence"),
+            )
+            .where(SubnetScoreRow.computed_at >= since)
+            .order_by(SubnetScoreRow.netuid, SubnetScoreRow.computed_at)
+        ).mappings().all()
+    return [_compact_score_row_to_dict(r) for r in rows]
+
+
+def get_market_overview_points(days: int = 365) -> list[dict]:
+    """Return minimal market-overview points grouped by run without loading per-subnet raw rows."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(
+                SubnetScoreRow.computed_at.label("computed_at"),
+                SubnetScoreRow.score_version.label("score_version"),
+                SubnetScoreRow.market_cap_tao.label("market_cap_tao"),
+                SubnetScoreRow.raw_data["investable"].label("investable"),
+                SubnetScoreRow.raw_data["special_case"].label("special_case"),
+                SubnetScoreRow.raw_data["raw_metrics"]["market_cap_usd"].label("metric_market_cap_usd"),
+            )
+            .where(SubnetScoreRow.computed_at >= since)
+            .order_by(SubnetScoreRow.computed_at)
+        ).mappings().all()
+
+    return [
+        {
+            "computed_at": row.get("computed_at").isoformat() if row.get("computed_at") else None,
+            "score_version": row.get("score_version"),
+            "market_cap_tao": row.get("market_cap_tao"),
+            "raw_data": {
+                "investable": _to_bool(row.get("investable"), default=True),
+                **({"special_case": _decode_json_value(row.get("special_case"))} if row.get("special_case") is not None else {}),
+                "raw_metrics": {
+                    **({"market_cap_usd": _to_float(row.get("metric_market_cap_usd"))} if _to_float(row.get("metric_market_cap_usd")) is not None else {})
+                },
+            },
+        }
+        for row in rows
+    ]
+
+
 def get_score_at(netuid: int, timestamp: datetime) -> Optional[dict]:
     """Return the score row closest to (but not after) `timestamp`."""
     with SessionLocal() as session:
@@ -711,6 +775,43 @@ def _signal_history_row_to_dict(row: Any) -> dict:
         "computed_at": row.get("computed_at").isoformat() if row.get("computed_at") else None,
         "score": row.get("score"),
         "raw_data": {"primary_outputs": primary_outputs} if primary_outputs else {},
+    }
+
+
+def _compact_score_row_to_dict(row: Any) -> dict:
+    raw_quality = _to_float(row.get("raw_quality"))
+    raw_mispricing = _to_float(row.get("raw_mispricing"))
+    raw_fragility = _to_float(row.get("raw_fragility"))
+    raw_confidence = _to_float(row.get("raw_confidence"))
+    analysis_quality = _to_float(row.get("analysis_quality"))
+    analysis_mispricing = _to_float(row.get("analysis_mispricing"))
+    analysis_fragility = _to_float(row.get("analysis_fragility"))
+    analysis_confidence = _to_float(row.get("analysis_confidence"))
+
+    primary_outputs = {
+        "fundamental_quality": analysis_quality if analysis_quality is not None else raw_quality,
+        "mispricing_signal": analysis_mispricing if analysis_mispricing is not None else raw_mispricing,
+        "fragility_risk": analysis_fragility if analysis_fragility is not None else raw_fragility,
+        "signal_confidence": analysis_confidence if analysis_confidence is not None else raw_confidence,
+    }
+    primary_outputs = {key: value for key, value in primary_outputs.items() if value is not None}
+
+    market_cap_usd = _to_float(row.get("metric_market_cap_usd"))
+    raw_data: dict[str, Any] = {
+        "investable": _to_bool(row.get("investable"), default=True),
+        **({"special_case": _decode_json_value(row.get("special_case"))} if row.get("special_case") is not None else {}),
+        **({"primary_outputs": primary_outputs} if primary_outputs else {}),
+        **({"raw_metrics": {"market_cap_usd": market_cap_usd}} if market_cap_usd is not None else {}),
+    }
+
+    return {
+        "netuid": row.get("netuid"),
+        "score": row.get("score"),
+        "rank": row.get("rank"),
+        "computed_at": row.get("computed_at").isoformat() if row.get("computed_at") else None,
+        "score_version": row.get("score_version"),
+        "market_cap_tao": row.get("market_cap_tao"),
+        "raw_data": raw_data,
     }
 
 
