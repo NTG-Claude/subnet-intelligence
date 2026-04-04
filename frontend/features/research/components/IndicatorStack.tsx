@@ -7,8 +7,8 @@ import MicroSentimentScale from './MicroSentimentScale'
 import SentimentBadge from './SentimentBadge'
 
 function CompactCategoryHeader({ category }: { category: IndicatorCategoryViewModel }) {
-  const score = category.desirabilityScore == null ? 'n/a' : category.desirabilityScore.toFixed(0)
-  const barWidth = category.desirabilityScore == null ? 18 : Math.max(10, Math.min(100, category.desirabilityScore))
+  const score = category.displayScore == null ? 'n/a' : category.displayScore.toFixed(1)
+  const barWidth = category.displayScore == null ? 18 : Math.max(10, Math.min(100, category.displayScore))
 
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--border-subtle)] pb-3">
