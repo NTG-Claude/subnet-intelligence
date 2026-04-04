@@ -86,6 +86,15 @@ class DetailedScoreHistoryPoint(BaseModel):
     top_negative_drags: list[dict] = Field(default_factory=list)
 
 
+class SubnetSignalHistoryPoint(BaseModel):
+    computed_at: str
+    score: float
+    quality: Optional[float] = None
+    opportunity: Optional[float] = None
+    risk: Optional[float] = None
+    confidence: Optional[float] = None
+
+
 class CompareSeriesSubnetPoint(BaseModel):
     netuid: int
     name: Optional[str] = None

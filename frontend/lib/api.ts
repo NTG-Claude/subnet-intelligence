@@ -235,6 +235,15 @@ export interface CompareSeriesData {
   total_subnets: number
 }
 
+export interface SubnetSignalHistoryPoint {
+  computed_at: string
+  score: number
+  quality: number | null
+  opportunity: number | null
+  risk: number | null
+  confidence: number | null
+}
+
 export interface MarketOverviewPoint {
   computed_at: string
   total_market_cap_tao: number
@@ -285,6 +294,11 @@ export const fetchLabelBacktests = (days = 90) =>
 
 export const fetchCompareTimeseries = (days = 30) =>
   get<CompareSeriesData>(`/api/v1/compare/timeseries?days=${days}`, {
+    revalidate: TIMESERIES_REVALIDATE_SECONDS,
+  })
+
+export const fetchSubnetSignalHistory = (netuid: number, days = 120) =>
+  get<SubnetSignalHistoryPoint[]>(`/api/v1/subnets/${netuid}/history/signals?days=${days}`, {
     revalidate: TIMESERIES_REVALIDATE_SECONDS,
   })
 
