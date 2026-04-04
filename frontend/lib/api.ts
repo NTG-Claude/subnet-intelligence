@@ -1,7 +1,8 @@
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const DEV_SERVER_API = 'http://localhost:8000'
 
 type ApiFetchOptions = {
   revalidate?: number
+  cache?: RequestCache
 }
 
 const DEFAULT_REVALIDATE_SECONDS = 600
@@ -274,15 +275,34 @@ export interface MarketOverviewData {
   points: MarketOverviewPoint[]
 }
 
-async function get<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const { revalidate = DEFAULT_REVALIDATE_SECONDS } = options
-  const init: RequestInit & { next?: { revalidate: number } } = {}
+function getServerApiOrigin(): string {
+  const apiOrigin = process.env.NEXT_PUBLIC_API_URL || process.env.RAILWAY_API_URL
+  if (apiOrigin) return apiOrigin
+  if (process.env.NODE_ENV !== 'production') return DEV_SERVER_API
 
-  if (typeof window === 'undefined') {
-    init.next = { revalidate }
+  throw new Error(
+    'Missing API origin for server-side frontend fetches. Set RAILWAY_API_URL or NEXT_PUBLIC_API_URL in production.',
+  )
+}
+
+async function get<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const { revalidate = DEFAULT_REVALIDATE_SECONDS, cache } = options
+  const init: RequestInit & { next?: { revalidate: number } } = {}
+  const baseUrl = typeof window === 'undefined' ? getServerApiOrigin() : ''
+
+  if (cache) {
+    init.cache = cache
   }
 
-  const res = await fetch(`${API}${path}`, init)
+  if (typeof window === 'undefined') {
+    if (cache === 'no-store') {
+      init.cache = 'no-store'
+    } else {
+      init.next = { revalidate }
+    }
+  }
+
+  const res = await fetch(`${baseUrl}${path}`, init)
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
   return res.json()
 }
