@@ -11,20 +11,24 @@ function CompactCategoryHeader({ category }: { category: IndicatorCategoryViewMo
   const barWidth = category.displayScore == null ? 18 : Math.max(10, Math.min(100, category.displayScore))
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--border-subtle)] pb-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-3">
-          <h3 className="text-base font-semibold tracking-tight text-[color:var(--text-primary)]">{category.title}</h3>
-          <div className="text-sm font-medium text-[color:var(--text-primary)]">{score}</div>
+    <div className="border-b border-[color:rgba(148,163,184,0.1)] pb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-3">
+            <h3 className="text-[1.55rem] font-semibold tracking-tight text-[color:var(--text-primary)]">{category.title}</h3>
+            <div className="text-lg font-semibold tabular-nums text-[color:rgba(226,232,240,0.94)]">{score}</div>
+          </div>
+          <div className="mt-3 h-1.5 max-w-[260px] rounded-full bg-[color:rgba(71,85,105,0.38)]">
+            <div
+              className="h-1.5 rounded-full bg-[linear-gradient(90deg,rgba(74,222,128,0.9),rgba(96,165,250,0.9))]"
+              style={{ width: `${barWidth}%` }}
+            />
+          </div>
         </div>
-        <div className="mt-2 h-1.5 max-w-[180px] rounded-full bg-[color:rgba(148,163,184,0.14)]">
-          <div
-            className="h-1.5 rounded-full bg-[linear-gradient(90deg,rgba(74,222,128,0.88),rgba(125,184,255,0.92))]"
-            style={{ width: `${barWidth}%` }}
-          />
+        <div className="pt-1">
+          <SentimentBadge sentiment={category.sentiment} />
         </div>
       </div>
-      <SentimentBadge sentiment={category.sentiment} />
     </div>
   )
 }
@@ -34,24 +38,31 @@ function IndicatorRow({ indicator }: { indicator: IndicatorRowViewModel }) {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] px-1 py-2.5 text-sm sm:flex-nowrap"
+      className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[18px] px-1 py-4 text-sm transition-colors duration-150 hover:bg-[color:rgba(15,23,42,0.28)] md:grid md:grid-cols-[minmax(0,1fr)_44px_132px_auto] md:gap-4"
       title={indicator.helperText}
     >
-      <div className="min-w-0 flex-1 text-[color:var(--text-primary)]">{indicator.label}</div>
-      <div className="text-xs font-medium tabular-nums text-[color:var(--text-tertiary)]">{scoreLabel}</div>
-      <MicroSentimentScale score={indicator.desirabilityScore} />
-      <SentimentBadge sentiment={indicator.sentiment} />
+      <div className="min-w-0 flex-[1_1_260px] text-[1.02rem] font-medium text-[color:rgba(226,232,240,0.96)]">{indicator.label}</div>
+      <div className="text-sm font-semibold tabular-nums text-[color:rgba(148,163,184,0.78)] md:text-right">{scoreLabel}</div>
+      <div className="ml-auto md:ml-0">
+        <MicroSentimentScale score={indicator.desirabilityScore} />
+      </div>
+      <div className="md:justify-self-end">
+        <SentimentBadge sentiment={indicator.sentiment} />
+      </div>
     </div>
   )
 }
 
 export default function IndicatorStack({ categories }: { categories: IndicatorCategoryViewModel[] }) {
   return (
-    <section className="space-y-4">
+    <section className="space-y-5">
       {categories.map((category) => (
-        <div key={category.key} className="surface-panel p-4 sm:p-5">
+        <div
+          key={category.key}
+          className="overflow-hidden rounded-[32px] border border-[color:rgba(148,163,184,0.12)] bg-[linear-gradient(180deg,rgba(18,30,42,0.96),rgba(15,25,36,0.98))] px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] sm:px-7 sm:py-6"
+        >
           <CompactCategoryHeader category={category} />
-          <div className="mt-2 divide-y divide-[color:rgba(148,163,184,0.08)]">
+          <div className="mt-4 divide-y divide-[color:rgba(148,163,184,0.06)]">
             {category.indicators.map((indicator) => (
               <IndicatorRow key={indicator.key} indicator={indicator} />
             ))}
