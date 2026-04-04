@@ -144,8 +144,8 @@ export interface SubnetDetail {
   primary_outputs: PrimaryOutputs | null
   rank: number | null
   percentile: number | null
-  breakdown: ScoreBreakdown
-  history: { computed_at: string; score: number; rank: number | null }[]
+  breakdown?: ScoreBreakdown | null
+  history?: { computed_at: string; score: number; rank: number | null }[]
   metadata: {
     netuid: number
     name: string | null
@@ -267,7 +267,7 @@ export const fetchSubnets = (limit = 200) =>
   })
 
 export const fetchSubnet = (netuid: number) =>
-  get<SubnetDetail>(`/api/v1/subnets/${netuid}`, { revalidate: DETAIL_REVALIDATE_SECONDS })
+  get<SubnetDetail>(`/api/v1/subnets/${netuid}?view=page`, { revalidate: DETAIL_REVALIDATE_SECONDS })
 
 export const fetchLeaderboard = () =>
   get<LeaderboardData>('/api/v1/leaderboard')
