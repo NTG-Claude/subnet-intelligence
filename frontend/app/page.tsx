@@ -1,38 +1,37 @@
-import DiscoverWorkspace from '@/features/discover/components/DiscoverWorkspace'
+import DiscoverPageBootstrap from '@/features/discover/components/DiscoverPageBootstrap'
 import { fetchLatestRun, fetchMarketOverview, fetchSubnets } from '@/lib/api'
 
 const MARKET_OVERVIEW_DAYS = 365
 
-function DiscoverUnavailable({ message }: { message: string }) {
-  return (
-    <div className="space-y-6 pb-20">
-      <section className="surface-panel p-6 sm:p-8">
-        <div className="max-w-3xl">
-          <div className="eyebrow">Service status</div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">
-            Discover data is temporarily unavailable
-          </h1>
-          <p className="mt-4 text-base leading-7 text-[color:var(--text-secondary)]">{message}</p>
-          <p className="mt-3 text-sm leading-6 text-[color:var(--text-tertiary)]">
-            The homepage intentionally avoids rendering misleading empty leaderboard data when the backend cannot be reached.
-          </p>
-        </div>
-      </section>
-    </div>
-  )
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function retry<T>(task: () => Promise<T>, attempts = 2, waitMs = 250): Promise<T> {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await task()
+    } catch (error) {
+      lastError = error
+      if (attempt === attempts - 1) break
+      await delay(waitMs)
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Failed to load discover data')
 }
 
 export default async function HomePage() {
   const [subnetsResult, latestResult, marketResult] = await Promise.allSettled([
-    fetchSubnets(200),
+    retry(() => fetchSubnets(200)),
     fetchLatestRun(),
     fetchMarketOverview(MARKET_OVERVIEW_DAYS),
   ])
 
   if (subnetsResult.status !== 'fulfilled') {
-    return (
-      <DiscoverUnavailable message="The frontend could not reach the subnet API during the initial page render. Once the API connection is restored, the ranked subnet list and market summary will load normally." />
-    )
+    return <DiscoverPageBootstrap initialPayload={null} />
   }
 
   const { subnets } = subnetsResult.value
@@ -77,11 +76,12 @@ export default async function HomePage() {
         }
 
   return (
-    <DiscoverWorkspace
-      subnets={subnets}
-      lastRun={latest.last_score_run}
-      market={marketWithFallback}
-      initialTimeseries={null}
+    <DiscoverPageBootstrap
+      initialPayload={{
+        subnets,
+        lastRun: latest.last_score_run,
+        market: marketWithFallback,
+      }}
     />
   )
 }
