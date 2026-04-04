@@ -110,6 +110,8 @@ def _with_db_mocks(meta_netuid=1):
         "api.main",
         get_scores_since=MagicMock(return_value=SCORES),
         get_latest_scores=MagicMock(return_value=SCORES),
+        get_latest_scores_preview=MagicMock(return_value=SCORES),
+        get_previous_run_ranks=MagicMock(return_value={1: 2, 2: 1}),
         get_score_history=MagicMock(return_value=HISTORY),
         get_score_distribution=MagicMock(return_value=[
             {"range_start": i * 20.0, "range_end": (i + 1) * 20.0, "count": 1}
@@ -195,6 +197,7 @@ def test_list_subnets_includes_investability_status_and_warning_flags():
         }
     ]
     with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_previous_run_ranks", return_value={1: 2}), \
          patch("api.main.get_all_metadata", return_value={}), \
          patch("api.main.get_score_history", return_value=HISTORY), \
          patch("api.main.get_score_distribution", return_value=[]), \
@@ -337,6 +340,7 @@ def test_strong_quality_case_with_just_below_old_threshold_can_be_investable():
 def test_list_subnets_excludes_root_subnet():
     rows = [ROOT_ROW, *SCORES]
     with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_previous_run_ranks", return_value={1: 2, 2: 1, 3: 3, 4: 4, 5: 5}), \
          patch("api.main.get_all_metadata", return_value={}), \
          patch("api.main.get_score_history", return_value=HISTORY), \
          patch("api.main.get_score_distribution", return_value=[]), \
@@ -451,6 +455,7 @@ def test_list_subnets_uses_override_name_fallback():
         }
     ]
     with patch("api.main.get_latest_scores", return_value=rows), \
+         patch("api.main.get_previous_run_ranks", return_value={64: 1}), \
          patch("api.main.get_all_metadata", return_value={}), \
          patch("api.main.get_score_history", return_value=HISTORY), \
          patch("api.main.get_score_distribution", return_value=[]), \

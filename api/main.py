@@ -57,6 +57,7 @@ from scorer.database import (
     get_latest_score_by_netuid,
     get_latest_scores,
     get_latest_scores_preview,
+    get_previous_run_ranks,
     get_scores_since,
     get_score_distribution,
     get_score_history,
@@ -164,6 +165,17 @@ def _get_cached_score_history(netuid: int, days: int) -> list[dict]:
     history = get_score_history(netuid, days=days)
     _cache_set(key, history, ttl=_HOT_DATA_CACHE_TTL)
     return history
+
+
+def _get_cached_previous_run_ranks() -> dict[int, int]:
+    if _is_mocked_callable(get_previous_run_ranks):
+        return get_previous_run_ranks()
+    cached = _cache_get("previous_run_ranks")
+    if cached is not None:
+        return cached
+    ranks = get_previous_run_ranks()
+    _cache_set("previous_run_ranks", ranks, ttl=_HOT_DATA_CACHE_TTL)
+    return ranks
 
 
 def _get_cached_scores_since(days: int) -> list[dict]:
@@ -899,6 +911,8 @@ def _previous_rank_by_netuid(
     history_rows: Optional[list[dict]] = None,
     days: int = 14,
 ) -> dict[int, int]:
+    if history_rows is None:
+        return _get_cached_previous_run_ranks()
     rows = history_rows if history_rows is not None else [row for row in get_scores_since(days=days) if _is_investable_row(row)]
     run_timestamps = sorted(
         {row.get("computed_at") for row in rows if row.get("computed_at")},
@@ -1057,11 +1071,8 @@ async def discover_bootstrap(
             return cached
 
         investable_rows = [row for row in all_rows if _is_investable_row(row)]
-        preview_history_rows = [row for row in _get_cached_scores_since_compact(days=120) if _is_investable_row(row)]
-        previous_rank_by_netuid = _previous_rank_by_netuid(preview_history_rows)
+        previous_rank_by_netuid = _get_cached_previous_run_ranks()
         page = investable_rows[:limit]
-        page_netuids = {row["netuid"] for row in page}
-        preview_metric_deltas_by_netuid = _preview_metric_deltas_by_netuid(preview_history_rows, page_netuids)
         market = _build_market_overview_response(all_rows, days=market_days)
 
         subnets = []
@@ -1076,7 +1087,6 @@ async def discover_bootstrap(
                     meta,
                     preview="compact",
                     previous_rank=previous_rank_by_netuid.get(row["netuid"]),
-                    preview_metric_deltas=preview_metric_deltas_by_netuid.get(row["netuid"]),
                 )
             )
 
@@ -1133,8 +1143,7 @@ async def list_subnets(
 
     all_rows = [r for r in all_rows if _is_investable_row(r)]
     meta_by_netuid = _get_cached_all_metadata()
-    preview_history_rows = [row for row in _get_cached_scores_since_compact(days=120) if _is_investable_row(row)]
-    previous_rank_by_netuid = _previous_rank_by_netuid(preview_history_rows)
+    previous_rank_by_netuid = _get_cached_previous_run_ranks()
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     reverse = sort_order == "desc"
     filtered = sorted(
@@ -1144,8 +1153,6 @@ async def list_subnets(
     )
     total = len(filtered)
     page = filtered[offset: offset + limit]
-    page_netuids = {row["netuid"] for row in page}
-    preview_metric_deltas_by_netuid = _preview_metric_deltas_by_netuid(preview_history_rows, page_netuids)
 
     subnets = []
     for r in page:
@@ -1158,7 +1165,6 @@ async def list_subnets(
                 meta,
                 preview=preview,
                 previous_rank=previous_rank_by_netuid.get(r["netuid"]),
-                preview_metric_deltas=preview_metric_deltas_by_netuid.get(r["netuid"]),
             )
         )
 

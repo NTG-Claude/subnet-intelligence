@@ -403,6 +403,45 @@ def get_latest_scores_preview() -> list[dict]:
 
     return [_preview_row_to_dict(row) for row in rows]
 
+
+def get_previous_run_ranks() -> dict[int, int]:
+    """Return ranks for the previous completed run without loading full row payloads."""
+    with SessionLocal() as session:
+        timestamps = session.execute(
+            select(SubnetScoreRow.computed_at)
+            .distinct()
+            .order_by(desc(SubnetScoreRow.computed_at))
+            .limit(2)
+        ).scalars().all()
+
+        if len(timestamps) < 2:
+            return {}
+
+        previous_run_at = timestamps[1]
+        rows = session.execute(
+            select(
+                SubnetScoreRow.netuid.label("netuid"),
+                SubnetScoreRow.score.label("score"),
+                SubnetScoreRow.raw_data["investable"].label("investable"),
+                SubnetScoreRow.raw_data["special_case"].label("special_case"),
+            )
+            .where(SubnetScoreRow.computed_at == previous_run_at)
+        ).mappings().all()
+
+    filtered_rows = []
+    for row in rows:
+        netuid = row.get("netuid")
+        if netuid == 0:
+            continue
+        if _decode_json_value(row.get("special_case")) == "root_subnet":
+            continue
+        if not _to_bool(row.get("investable"), default=True):
+            continue
+        filtered_rows.append({"netuid": netuid, "score": float(row.get("score") or 0.0)})
+
+    ranked_rows = sorted(filtered_rows, key=lambda item: (-item["score"], item["netuid"]))
+    return {row["netuid"]: index + 1 for index, row in enumerate(ranked_rows)}
+
 def get_score_history(netuid: int, days: int = 30) -> list[dict]:
     """Return all score rows for a subnet over the past `days` days."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
