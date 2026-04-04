@@ -36,12 +36,17 @@ type RankDelta = { change: number; previousRank: number } | null
 const TIMESERIES_CACHE_KEY = 'discover-compare-timeseries-v1'
 const TIMESERIES_CACHE_TTL_MS = 5 * 60 * 1000
 const PREVIEW_HISTORY_CACHE_PREFIX = 'discover-preview-history-v1'
+const DETAIL_WARMUP_LIMIT = 3
 
 let cachedTimeseries: CompareSeriesData | null = null
 let cachedTimeseriesFetchedAt = 0
 let cachedTimeseriesPromise: Promise<CompareSeriesData> | null = null
 const cachedPreviewHistory = new Map<number, { fetchedAt: number; points: SubnetSignalHistoryPoint[] }>()
 const cachedPreviewHistoryPromises = new Map<number, Promise<SubnetSignalHistoryPoint[]>>()
+const warmedDetailPayloads = new Set<number>()
+const warmedSignalHistoryPayloads = new Set<number>()
+const detailWarmupPromises = new Map<number, Promise<void>>()
+const signalHistoryWarmupPromises = new Map<number, Promise<void>>()
 
 const MARKET_TIMEFRAME_ITEMS = [
   { id: '7d', label: '7D' },
@@ -351,6 +356,52 @@ async function loadPreviewHistory(netuid: number): Promise<SubnetSignalHistoryPo
   return request
 }
 
+async function warmDetailPayload(netuid: number): Promise<void> {
+  if (warmedDetailPayloads.has(netuid)) return
+
+  const existing = detailWarmupPromises.get(netuid)
+  if (existing) return existing
+
+  const request = fetch(`/api/v1/subnets/${netuid}?view=page`, {
+    method: 'GET',
+  })
+    .then(() => {
+      warmedDetailPayloads.add(netuid)
+    })
+    .catch(() => {
+      // Ignore warmup failures; the real navigation still handles errors normally.
+    })
+    .finally(() => {
+      detailWarmupPromises.delete(netuid)
+    })
+
+  detailWarmupPromises.set(netuid, request)
+  return request
+}
+
+async function warmSignalHistoryPayload(netuid: number): Promise<void> {
+  if (warmedSignalHistoryPayloads.has(netuid)) return
+
+  const existing = signalHistoryWarmupPromises.get(netuid)
+  if (existing) return existing
+
+  const request = fetch(`/api/v1/subnets/${netuid}/history/signals?days=120`, {
+    method: 'GET',
+  })
+    .then(() => {
+      warmedSignalHistoryPayloads.add(netuid)
+    })
+    .catch(() => {
+      // Ignore warmup failures; the detail page will fall back gracefully.
+    })
+    .finally(() => {
+      signalHistoryWarmupPromises.delete(netuid)
+    })
+
+  signalHistoryWarmupPromises.set(netuid, request)
+  return request
+}
+
 function normalizePreviewMetricDeltas(deltas: ApiPreviewMetricDeltas | null | undefined): PreviewMetricDeltas | null {
   if (!deltas) return null
 
@@ -534,6 +585,8 @@ export default function DiscoverWorkspace({
     if (!row) return
 
     router.prefetch(`/subnets/${row.netuid}`)
+    void warmDetailPayload(row.netuid)
+    void warmSignalHistoryPayload(row.netuid)
   }, [focusedId, pinnedId, router, subnets])
 
   const rows = useMemo(() => {
@@ -541,6 +594,44 @@ export default function DiscoverWorkspace({
     const sorted = sortUniverseRows(searched.map(toUniverseRow), sort)
     return direction === 'asc' ? sorted : reverseRows(sorted)
   }, [direction, search, sort, subnets])
+
+  useEffect(() => {
+    if (!rows.length) return
+
+    let cancelled = false
+    let idleId: number | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const warmRows = rows.slice(0, DETAIL_WARMUP_LIMIT)
+
+    const runWarmup = () => {
+      if (cancelled) return
+      warmRows.forEach((row) => {
+        router.prefetch(row.href)
+        void warmDetailPayload(row.id)
+      })
+    }
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(() => {
+        runWarmup()
+      })
+    } else {
+      timeoutId = setTimeout(() => {
+        runWarmup()
+      }, 350)
+    }
+
+    return () => {
+      cancelled = true
+      if (idleId != null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId)
+      }
+      if (timeoutId != null) {
+        clearTimeout(timeoutId)
+      }
+    }
+  }, [router, rows])
 
   useEffect(() => {
     if (!rows.length) {
