@@ -79,7 +79,11 @@ export default function DiscoverMarketHero({
   timeframeControl?: ReactNode
 }) {
   const latestValue = market.current_market_cap_tao
-  const latestValueUsd = market.current_market_cap_usd
+  const latestPoint = market.points[market.points.length - 1]
+  const latestValueUsd =
+    market.current_market_cap_usd ??
+    latestPoint?.total_market_cap_usd ??
+    (market.tao_price_usd != null ? latestValue * market.tao_price_usd : null)
   const change = market.change_pct_vs_previous_run
   const positive = (change ?? 0) >= 0
   const hasHistory = market.points.length > 1
