@@ -3,9 +3,7 @@ import Link from 'next/link'
 import CollapsibleSection from '@/components/ui/CollapsibleSection'
 import SignalBar from '@/components/ui/SignalBar'
 import StatusChip from '@/components/ui/StatusChip'
-import { toneClass } from '@/components/ui/StatusChip'
 import { DetailMemoViewModel, MemoInsightItem, MemoSectionItem, ScoreExplanationItem } from '@/lib/view-models/research'
-import { cn } from '@/lib/formatting'
 
 function InsightGrid({
   title,
@@ -70,10 +68,7 @@ function DiagnosticGrid({
     <div className="grid gap-2.5 lg:grid-cols-2">
       {items.map((item, index) => (
         <div key={`${item.title}-${index}`} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="eyebrow">{item.title}</div>
-            {item.score != null ? <StatusChip tone={item.tone ?? 'neutral'}>{item.score.toFixed(1)}</StatusChip> : null}
-          </div>
+          <div className="eyebrow">{item.title}</div>
           <p className="mt-1.5 text-sm leading-5 text-[color:var(--text-secondary)]">{item.body}</p>
           {item.meta ? <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">{item.meta}</p> : null}
         </div>
@@ -94,8 +89,6 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone="neutral">{memo.netuidLabel}</StatusChip>
-              <StatusChip tone={memo.primaryTag.tone}>{memo.primaryTag.label}</StatusChip>
-              {memo.secondaryTag ? <StatusChip tone={memo.secondaryTag.tone}>{memo.secondaryTag.label}</StatusChip> : null}
             </div>
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
@@ -114,7 +107,7 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
                 {memo.anchorInsights.map((item) => (
                   <div key={item.label} className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
                     <div className="eyebrow">{item.label}</div>
-                    <p className={cn('mt-1.5 text-sm leading-6', toneClass(item.tone))}>{item.value}</p>
+                    <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{item.value}</p>
                   </div>
                 ))}
               </div>
@@ -129,14 +122,6 @@ export default function ResearchWorkspace({ memo }: { memo: DetailMemoViewModel 
             <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
               <div className="eyebrow">Rank</div>
               <div className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.rankLabel}</div>
-            </div>
-            <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
-              <div className="eyebrow">Read Trust</div>
-              <div className="mt-2 text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.researchSummary.evidenceStrength.label}</div>
-            </div>
-            <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
-              <div className="eyebrow">Profile</div>
-              <div className="mt-2 text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{memo.modelLabel}</div>
             </div>
           </div>
         </div>
