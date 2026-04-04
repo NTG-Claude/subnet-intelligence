@@ -6,6 +6,8 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { MarketOverviewData } from '@/lib/api'
 import { cn, formatCompactNumber } from '@/lib/formatting'
 
+const BITTENSOR_LOGO_URL = 'https://docs.learnbittensor.org/img/logo.svg'
+
 function formatMarketCap(value: number): string {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B TAO`
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M TAO`
@@ -49,29 +51,19 @@ function MarketTooltip({
   label,
 }: {
   active?: boolean
-  payload?: Array<{ value?: number }>
+  payload?: Array<{ value?: number; payload?: { total_market_cap_usd?: number | null } }>
   label?: string
 }) {
   if (!active || !payload?.length || typeof payload[0]?.value !== 'number' || !label) return null
+  const usdValue = payload[0]?.payload?.total_market_cap_usd
 
   return (
     <div className="rounded-[var(--radius-md)] border border-[color:var(--border-subtle)] bg-[color:rgba(7,14,20,0.96)] p-3 shadow-2xl">
       <div className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">{formatTooltipDate(label)}</div>
       <div className="mt-2 text-sm text-[color:var(--text-secondary)]">Combined subnet market cap</div>
       <div className="mt-1 text-lg font-semibold text-[color:var(--text-primary)]">{formatMarketCap(payload[0].value)}</div>
+      {usdValue != null ? <div className="mt-1 text-sm text-[color:var(--text-secondary)]">{formatUsdMarketCap(usdValue)}</div> : null}
     </div>
-  )
-}
-
-function BittensorMonogram() {
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden="true" className="h-7 w-7">
-      <circle cx="24" cy="24" r="24" fill="#F5F7FA" />
-      <path
-        d="M16 12h10.5c5.25 0 8.5 2.76 8.5 7.1 0 2.81-1.52 4.92-4.14 5.86 3.14.75 4.89 3.01 4.89 6.24 0 4.71-3.56 7.8-9.15 7.8H16V12Zm9.72 10.14c2.49 0 4.02-1.19 4.02-3.15 0-1.93-1.53-3.08-4.02-3.08h-4.44v6.23h4.44Zm.53 12.01c2.85 0 4.53-1.28 4.53-3.49 0-2.21-1.68-3.45-4.53-3.45h-4.97v6.94h4.97Z"
-        fill="#101820"
-      />
-    </svg>
   )
 }
 
@@ -99,8 +91,8 @@ export default function DiscoverMarketHero({
           <div>
             <p className="eyebrow">Subnet Intelligence</p>
             <div className="mt-5 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[color:rgba(245,247,250,0.96)]">
-                <BittensorMonogram />
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[color:rgba(245,247,250,0.96)] p-2">
+                <img src={BITTENSOR_LOGO_URL} alt="Bittensor" className="h-full w-full object-contain" />
               </div>
               <div>
                 <div className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)]">Subnet Market</div>
@@ -108,9 +100,16 @@ export default function DiscoverMarketHero({
               </div>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-end gap-4">
-              <div className="text-5xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-6xl">
-                {latestValueUsd != null ? formatUsdMarketCap(latestValueUsd) : formatMarketCap(latestValue)}
+            <div className="mt-8 flex flex-wrap items-start gap-4">
+              <div>
+                <div className="text-5xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-6xl">
+                  {formatMarketCap(latestValue)}
+                </div>
+                {latestValueUsd != null ? (
+                  <div className="mt-3 text-2xl font-semibold tracking-tight text-[color:var(--text-secondary)] sm:text-3xl">
+                    {formatUsdMarketCap(latestValueUsd)}
+                  </div>
+                ) : null}
               </div>
               {change != null ? (
                 <div
@@ -127,7 +126,6 @@ export default function DiscoverMarketHero({
               ) : null}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[color:var(--text-secondary)]">
-              <span>{formatMarketCap(latestValue)}</span>
               {market.tao_price_usd != null ? <span>{formatUsdPrice(market.tao_price_usd)} / TAO</span> : null}
             </div>
           </div>

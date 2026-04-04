@@ -200,6 +200,28 @@ def _is_investable_row(row: dict) -> bool:
     return raw_data.get("investable", True)
 
 
+def _extract_market_cap_usd(row: dict) -> Optional[float]:
+    raw_data = row.get("raw_data") or {}
+    value = raw_data.get("market_cap_usd")
+    if value is None:
+        value = ((raw_data.get("raw_metrics") or {}).get("market_cap_usd"))
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_price_usd(row: dict) -> Optional[float]:
+    raw_data = row.get("raw_data") or {}
+    value = raw_data.get("price_usd")
+    if value is None:
+        value = ((raw_data.get("raw_metrics") or {}).get("price_usd"))
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize_analysis_payload(analysis: Optional[dict]) -> Optional[dict]:
     if not analysis:
         return None
@@ -1032,7 +1054,7 @@ async def market_overview(
         return cached
 
     history_rows = [row for row in get_scores_since(days=days) if _is_investable_row(row)]
-    grouped: dict[str, dict[str, float]] = defaultdict(lambda: {"market_cap": 0.0, "count": 0})
+    grouped: dict[str, dict[str, float]] = defaultdict(lambda: {"market_cap": 0.0, "market_cap_usd": 0.0, "count": 0, "usd_points": 0})
 
     for row in history_rows:
         market_cap = row.get("market_cap_tao")
@@ -1041,21 +1063,39 @@ async def market_overview(
         bucket = grouped[row["computed_at"]]
         bucket["market_cap"] += float(market_cap)
         bucket["count"] += 1
+        market_cap_usd = _extract_market_cap_usd(row)
+        if market_cap_usd is not None:
+            bucket["market_cap_usd"] += market_cap_usd
+            bucket["usd_points"] += 1
 
     points = [
         MarketOverviewPoint(
             computed_at=computed_at,
             total_market_cap_tao=values["market_cap"],
+            total_market_cap_usd=values["market_cap_usd"] if values["usd_points"] > 0 else None,
             subnet_count=int(values["count"]),
         )
         for computed_at, values in sorted(grouped.items())
     ]
 
     current_market_cap = points[-1].total_market_cap_tao if points else 0.0
+    current_market_cap_usd = points[-1].total_market_cap_usd if points else None
     current_count = points[-1].subnet_count if points else 0
     previous_market_cap = points[-2].total_market_cap_tao if len(points) > 1 else None
-    tao_price_usd = await get_tao_price_usd()
-    current_market_cap_usd = current_market_cap * tao_price_usd if tao_price_usd is not None else None
+    tao_price_usd = (
+        (current_market_cap_usd / current_market_cap)
+        if current_market_cap_usd is not None and current_market_cap > 0
+        else None
+    )
+    if tao_price_usd is None:
+        latest_rows = [row for row in all_rows if _is_investable_row(row)]
+        prices = [price for price in (_extract_price_usd(row) for row in latest_rows) if price is not None]
+        if prices:
+            tao_price_usd = sum(prices) / len(prices)
+            current_market_cap_usd = current_market_cap * tao_price_usd if current_market_cap > 0 else None
+        else:
+            tao_price_usd = await get_tao_price_usd()
+            current_market_cap_usd = current_market_cap * tao_price_usd if tao_price_usd is not None else current_market_cap_usd
     change_pct = (
         round(((current_market_cap - previous_market_cap) / previous_market_cap) * 100, 2)
         if previous_market_cap and previous_market_cap > 0

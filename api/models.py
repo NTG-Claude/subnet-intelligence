@@ -118,6 +118,7 @@ class CompareSeriesResponse(BaseModel):
 class MarketOverviewPoint(BaseModel):
     computed_at: str
     total_market_cap_tao: float
+    total_market_cap_usd: Optional[float] = None
     subnet_count: int
 
 

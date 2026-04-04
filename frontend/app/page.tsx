@@ -59,6 +59,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 {
                   computed_at: latest.last_score_run,
                   total_market_cap_tao: currentMarketCap,
+                  total_market_cap_usd:
+                    market.tao_price_usd != null ? currentMarketCap * market.tao_price_usd : null,
                   subnet_count: latest.subnet_count || subnets.length,
                 },
               ]
