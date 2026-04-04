@@ -82,63 +82,6 @@ function ExplanationList({
   )
 }
 
-function CaseComparison({
-  supports,
-  supportEmpty,
-  risks,
-  riskEmpty,
-}: {
-  supports: ScoreExplanationItem[]
-  supportEmpty: string
-  risks: MemoSectionItem[]
-  riskEmpty: string
-}) {
-  return (
-    <section className="surface-panel p-5 sm:p-6">
-      <div className="section-title">Why it ranks here</div>
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <div className="rounded-[var(--radius-xl)] border border-[color:rgba(74,222,128,0.16)] bg-[color:rgba(18,32,24,0.42)] p-4 sm:p-5">
-          <div className="eyebrow text-[color:rgba(134,239,172,0.9)]">What is working</div>
-          <div className="mt-4 space-y-3">
-            {supports.length ? (
-              supports.map((item) => (
-                <div
-                  key={`support-${item.title}`}
-                  className="rounded-[var(--radius-lg)] border border-[color:rgba(74,222,128,0.14)] bg-[color:rgba(12,24,18,0.58)] px-4 py-3.5"
-                >
-                  <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
-                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{supportEmpty}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-[var(--radius-xl)] border border-[color:rgba(244,114,182,0.16)] bg-[color:rgba(38,20,28,0.42)] p-4 sm:p-5">
-          <div className="eyebrow text-[color:rgba(251,182,206,0.9)]">What is holding it back</div>
-          <div className="mt-4 space-y-3">
-            {risks.length ? (
-              risks.map((item, index) => (
-                <div
-                  key={`risk-${item.title}-${index}`}
-                  className="rounded-[var(--radius-lg)] border border-[color:rgba(244,114,182,0.14)] bg-[color:rgba(28,15,22,0.58)] px-4 py-3.5"
-                >
-                  <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
-                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm leading-6 text-[color:var(--text-secondary)]">{riskEmpty}</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 function DiagnosticGrid({
   items,
   empty,
@@ -455,22 +398,50 @@ export default function ResearchWorkspace({
               <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
               <div className="mt-2 text-sm text-[color:var(--text-tertiary)]">Updated {memo.updatedLabel}</div>
               <p className="mt-2 max-w-3xl text-base leading-7 text-[color:var(--text-primary)]">{verdict}</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
-                  <div className="eyebrow">Biggest positive driver</div>
-                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{strongestSupport}</p>
-                </div>
-                <div className="rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3.5 py-3">
-                  <div className="eyebrow">Biggest limiting factor</div>
-                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-primary)]">{mainLimiter}</p>
-                </div>
-              </div>
             </div>
           </div>
 
           <div className="grid min-w-full gap-3 sm:grid-cols-2 xl:min-w-[420px] xl:max-w-[460px]">
             <CompactStat label="Score" value={memo.scoreLabel} />
             <CompactStat label="Rank" value={memo.rankLabel} />
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="rounded-[var(--radius-xl)] border border-[color:rgba(74,222,128,0.12)] bg-[color:rgba(18,32,24,0.34)] p-4 sm:p-5">
+            <div className="eyebrow text-[color:rgba(134,239,172,0.9)]">Why it still ranks well</div>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{strongestSupport}</p>
+            {primarySupports.length ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {primarySupports.map((item) => (
+                  <div
+                    key={`hero-support-${item.title}`}
+                    className="rounded-[var(--radius-lg)] border border-[color:rgba(74,222,128,0.12)] bg-[color:rgba(12,24,18,0.46)] px-4 py-3.5"
+                  >
+                    <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
+                    <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-[var(--radius-xl)] border border-[color:rgba(244,114,182,0.12)] bg-[color:rgba(38,20,28,0.34)] p-4 sm:p-5">
+            <div className="eyebrow text-[color:rgba(251,182,206,0.9)]">Why it is not higher</div>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{mainLimiter}</p>
+            {primaryRisks.length ? (
+              <div className="mt-4 space-y-3">
+                {primaryRisks.map((item, index) => (
+                  <div
+                    key={`hero-risk-${item.title}-${index}`}
+                    className="rounded-[var(--radius-lg)] border border-[color:rgba(244,114,182,0.12)] bg-[color:rgba(28,15,22,0.46)] px-4 py-3.5"
+                  >
+                    <div className="text-sm font-medium text-[color:var(--text-primary)]">{item.title}</div>
+                    <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -487,13 +458,6 @@ export default function ResearchWorkspace({
         </div>
         <PrimarySignalsTrend netuid={netuid} initialPoints={initialSignalHistory} />
       </section>
-
-      <CaseComparison
-        supports={primarySupports}
-        supportEmpty="No clear support stands out yet."
-        risks={primaryRisks}
-        riskEmpty="No single risk dominates yet."
-      />
 
       <CollapsibleSection
         title="Deep Diagnostics"
