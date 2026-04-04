@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import StatusChip from '@/components/ui/StatusChip'
+import TrustBadge from '@/components/ui/TrustBadge'
 import { UniverseRowViewModel } from '@/lib/view-models/research'
 
 type MetricDeltaWindow = '1d' | '7d' | '30d'
@@ -21,23 +22,32 @@ export default function SidePreviewPanel({
   row,
   metricDeltas,
   metricHistoryStatus,
+  mobile = false,
 }: {
   row: UniverseRowViewModel | null
   metricDeltas: MetricDeltaMap | null
   metricHistoryStatus: 'loading' | 'ready' | 'unavailable'
+  mobile?: boolean
 }) {
   return (
-    <aside className="surface-panel sticky top-24 hidden h-fit p-4 xl:block">
+    <aside
+      className={[
+        'surface-panel p-4',
+        mobile ? 'xl:hidden' : 'sticky top-24 hidden h-fit xl:block',
+      ].join(' ')}
+    >
       {row ? (
         <div className="space-y-4">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone="neutral">{row.rankLabel}</StatusChip>
               <StatusChip tone="neutral">{row.netuidLabel}</StatusChip>
+              <StatusChip tone={row.investability.tone}>{row.investability.label}</StatusChip>
             </div>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-[28px] font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</h2>
+                <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</p>
               </div>
 
               <div className="min-w-[96px] shrink-0 rounded-[var(--radius-md)] border border-[color:var(--mispricing-border)] bg-[color:var(--mispricing-surface)] px-3 py-2 text-right">
@@ -45,6 +55,22 @@ export default function SidePreviewPanel({
                 <div className="mt-1 font-mono text-[28px] font-semibold leading-none text-[color:var(--text-primary)]">{row.scoreLabel}</div>
               </div>
             </div>
+          </div>
+
+          <div className="surface-subtle p-3">
+            <div className="eyebrow">Status</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <TrustBadge flags={row.statusFlags} awaitingRun={row.awaitingRun} />
+            </div>
+            {row.warningFlags.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {row.warningFlags.slice(0, 3).map((flag) => (
+                  <StatusChip key={flag.label} tone={flag.tone}>
+                    {flag.label}
+                  </StatusChip>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           {metricDeltas ? (
@@ -79,7 +105,7 @@ export default function SidePreviewPanel({
         </div>
       ) : (
         <div className="flex min-h-[320px] items-center justify-center text-center text-sm leading-6 text-[color:var(--text-secondary)]">
-          Hover a subnet row to inspect its current read.
+          {mobile ? 'Tap a subnet card to inspect its current read.' : 'Hover a subnet row to inspect its current read.'}
         </div>
       )}
     </aside>

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import type { MouseEvent } from 'react'
 
 import StatusChip from '@/components/ui/StatusChip'
 import TrustBadge from '@/components/ui/TrustBadge'
@@ -46,13 +47,22 @@ export default function DecisionRow({
   focused: boolean
   pinned: boolean
   onFocus: () => void
-  onSelect: () => void
+  onSelect?: () => void
 }) {
+  function handleRowClick() {
+    onSelect?.()
+  }
+
+  function handleNameClick(event: MouseEvent<HTMLAnchorElement>) {
+    event.stopPropagation()
+  }
+
   return (
     <article
       className={cn(
-        'grid cursor-default items-center gap-x-5 border-t border-[color:var(--border-subtle)] px-5 py-4 transition-colors',
+        'grid items-center gap-x-5 border-t border-[color:var(--border-subtle)] px-5 py-4 transition-colors',
         DISCOVER_TABLE_GRID,
+        onSelect && 'cursor-default',
         focused && 'bg-[color:rgba(19,32,44,0.42)]',
         selected && 'border-l-2 border-l-[color:var(--mispricing-strong)] pl-4',
         pinned && 'bg-[color:rgba(19,32,44,0.56)]',
@@ -60,7 +70,7 @@ export default function DecisionRow({
       tabIndex={0}
       onMouseEnter={onFocus}
       onFocus={onFocus}
-      onClick={onSelect}
+      onClick={handleRowClick}
     >
       <div className="min-w-0 font-mono">
         <div className="flex items-center gap-2">
@@ -71,7 +81,13 @@ export default function DecisionRow({
 
       <div className="min-w-0">
         <div className="flex min-w-0 items-baseline gap-3">
-          <div className="truncate text-[15px] font-semibold text-[color:var(--text-primary)]">{row.name}</div>
+          <Link
+            href={row.href}
+            onClick={handleNameClick}
+            className="truncate text-[15px] font-semibold text-[color:var(--text-primary)] transition-colors hover:text-[color:var(--mispricing-strong)]"
+          >
+            {row.name}
+          </Link>
           <div className="shrink-0 font-mono text-[11px] tracking-[0.08em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
         </div>
       </div>
@@ -122,9 +138,13 @@ export function MobileDecisionCard({
 }) {
   return (
     <article
-      className={cn('surface-panel space-y-4 p-4', focused && 'ring-1 ring-[color:var(--mispricing-border)]')}
+      className={cn(
+        'surface-panel space-y-4 p-4 transition-colors',
+        focused && 'border-[color:var(--mispricing-border)] bg-[color:rgba(19,32,44,0.56)] ring-1 ring-[color:var(--mispricing-border)]',
+      )}
       tabIndex={0}
       onFocus={onFocus}
+      onClick={onFocus}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -134,13 +154,18 @@ export function MobileDecisionCard({
             <StatusChip tone={row.investability.tone}>{row.investability.label}</StatusChip>
             {rankDelta ? <RankDeltaBadge rankDelta={rankDelta} /> : null}
           </div>
-          <div className="mt-3 text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</div>
+          <div className="mt-3 flex items-baseline gap-3">
+            <div className="truncate text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">{row.name}</div>
+            <div className="shrink-0 font-mono text-[11px] tracking-[0.08em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
+          </div>
         </div>
         <div className="surface-subtle min-w-[96px] p-3 text-right">
           <div className="eyebrow">Score</div>
           <div className="mt-2 font-mono text-lg font-semibold text-[color:var(--text-primary)]">{row.scoreLabel}</div>
         </div>
       </div>
+
+      <div className="text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <MobileMetric label="Quality" value={signalValue(row, 'fundamental_quality')} />
@@ -170,7 +195,9 @@ export function MobileDecisionCard({
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-        <div className="text-sm leading-6 text-[color:var(--text-secondary)]">{row.decisionLine}</div>
+        <div className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">
+          {focused ? 'Selected for preview' : 'Tap to preview'}
+        </div>
         <Link href={row.href} className="button-primary sm:min-w-[148px]">
           Open research
         </Link>
