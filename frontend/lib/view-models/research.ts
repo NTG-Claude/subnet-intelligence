@@ -358,6 +358,18 @@ function contributorDisplayTitle(name: string | undefined | null, mode: 'positiv
       return 'Validator-side coverage is thinner than ideal'
     case 'history_data_reliability':
       return 'There is not much clean history yet'
+    case 'evidence_penalty':
+      return 'The evidence behind this score is still thin'
+    case 'confidence_drag':
+      return 'The read is not reliable enough yet'
+    case 'valuation_gap':
+      return mode === 'negative' ? 'There may not be much upside left' : 'Price may still be below the fundamentals'
+    case 'controlled_downside':
+      return mode === 'negative' ? 'The downside still matters' : 'The downside looks contained for now'
+    case 'thesis_coherence':
+      return mode === 'negative' ? 'The bull case still has gaps' : 'The bull case mostly holds together'
+    case 'input_quality':
+      return mode === 'negative' ? 'The data is not clean enough yet' : 'The data is clean enough for now'
     default:
       return sentenceCase((name || 'Contributor').replace(/_/g, ' '))
   }
