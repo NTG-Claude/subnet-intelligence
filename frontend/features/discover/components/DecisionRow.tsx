@@ -81,7 +81,7 @@ export default function DecisionRow({
       <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'mispricing_signal')}</div>
       <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'fragility_risk')}</div>
       <div className="text-right font-mono text-[13px] font-medium tabular-nums text-[color:var(--text-primary)]">{signalValue(row, 'signal_confidence')}</div>
-      <div className={cn('min-w-0 truncate text-left text-[13px] font-medium', toneClass(row.investability.tone))}>{row.investability.label}</div>
+      <div className={cn('min-w-0 truncate pl-4 text-left text-[13px] font-medium', toneClass(row.investability.tone))}>{row.investability.label}</div>
     </article>
   )
 }
