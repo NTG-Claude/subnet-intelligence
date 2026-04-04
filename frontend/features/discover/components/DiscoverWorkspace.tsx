@@ -357,6 +357,34 @@ function SortHeader({
   )
 }
 
+function DiscoverTableHeader({
+  sort,
+  direction,
+  onToggleSort,
+}: {
+  sort: UniverseSortId
+  direction: SortDirection
+  onToggleSort: (sort: UniverseSortId) => void
+}) {
+  return (
+    <div
+      className={[
+        'grid items-center gap-x-5 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-5 py-3 text-[12px] text-[color:var(--text-secondary)]',
+        DISCOVER_TABLE_GRID,
+      ].join(' ')}
+    >
+      <SortHeader label="Rank" active={sort === 'rank'} direction={direction} onClick={() => onToggleSort('rank')} />
+      <div className="font-medium">Subnet</div>
+      <SortHeader label="Score" active={sort === 'score'} direction={direction} align="right" onClick={() => onToggleSort('score')} />
+      <SortHeader label="Quality" active={sort === 'quality'} direction={direction} align="right" onClick={() => onToggleSort('quality')} />
+      <SortHeader label="Opportunity" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => onToggleSort('mispricing')} />
+      <SortHeader label="Risk" active={sort === 'fragility'} direction={direction} align="right" onClick={() => onToggleSort('fragility')} />
+      <SortHeader label="Confidence" active={sort === 'confidence'} direction={direction} align="right" onClick={() => onToggleSort('confidence')} />
+      <div className="pl-4 font-medium">Status</div>
+    </div>
+  )
+}
+
 export default function DiscoverWorkspace({
   subnets,
   lastRun,
@@ -672,38 +700,45 @@ export default function DiscoverWorkspace({
 
           {rows.length ? (
             <>
-              <div className="overflow-x-auto">
+              <div className="hidden overflow-x-auto md:block">
                 <div className="min-w-[940px]">
-                <div
-                  className={[
-                    'grid items-center gap-x-5 border-b border-[color:var(--border-subtle)] bg-[color:rgba(8,16,23,0.48)] px-5 py-3 text-[12px] text-[color:var(--text-secondary)]',
-                    DISCOVER_TABLE_GRID,
-                  ].join(' ')}
-                >
-                  <SortHeader label="Rank" active={sort === 'rank'} direction={direction} onClick={() => toggleSort('rank')} />
-                  <div className="font-medium">Subnet</div>
-                  <SortHeader label="Score" active={sort === 'score'} direction={direction} align="right" onClick={() => toggleSort('score')} />
-                  <SortHeader label="Quality" active={sort === 'quality'} direction={direction} align="right" onClick={() => toggleSort('quality')} />
-                  <SortHeader label="Opportunity" active={sort === 'mispricing'} direction={direction} align="right" onClick={() => toggleSort('mispricing')} />
-                  <SortHeader label="Risk" active={sort === 'fragility'} direction={direction} align="right" onClick={() => toggleSort('fragility')} />
-                  <SortHeader label="Confidence" active={sort === 'confidence'} direction={direction} align="right" onClick={() => toggleSort('confidence')} />
-                  <div className="pl-4 font-medium">Status</div>
-                </div>
+                  <DiscoverTableHeader sort={sort} direction={direction} onToggleSort={toggleSort} />
 
-                <div>
-                  {rows.map((row) => (
-                    <DecisionRow
-                      key={row.id}
-                      row={row}
-                      rankDelta={rankDeltaMap.get(row.id) ?? null}
-                      selected={compareIds.includes(row.id)}
-                      focused={previewId === row.id}
-                      pinned={pinnedId === row.id}
-                      onFocus={() => handlePreviewFocus(row.id)}
-                      onSelect={() => handlePinToggle(row.id)}
-                    />
-                  ))}
+                  <div>
+                    {rows.map((row) => (
+                      <DecisionRow
+                        key={row.id}
+                        row={row}
+                        rankDelta={rankDeltaMap.get(row.id) ?? null}
+                        selected={compareIds.includes(row.id)}
+                        focused={previewId === row.id}
+                        pinned={pinnedId === row.id}
+                        onFocus={() => handlePreviewFocus(row.id)}
+                        onSelect={() => handlePinToggle(row.id)}
+                      />
+                    ))}
+                  </div>
                 </div>
+              </div>
+
+              <div className="overflow-x-auto md:hidden">
+                <div className="min-w-[940px]">
+                  <DiscoverTableHeader sort={sort} direction={direction} onToggleSort={toggleSort} />
+
+                  <div>
+                    {rows.map((row) => (
+                      <DecisionRow
+                        key={row.id}
+                        row={row}
+                        rankDelta={rankDeltaMap.get(row.id) ?? null}
+                        selected={false}
+                        focused={false}
+                        pinned={false}
+                        onFocus={() => {}}
+                        linkName
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </>

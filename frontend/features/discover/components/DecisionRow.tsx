@@ -40,6 +40,7 @@ export default function DecisionRow({
   pinned,
   onFocus,
   onSelect,
+  linkName = false,
 }: {
   row: UniverseRowViewModel
   rankDelta: { change: number; previousRank: number } | null
@@ -48,6 +49,7 @@ export default function DecisionRow({
   pinned: boolean
   onFocus: () => void
   onSelect?: () => void
+  linkName?: boolean
 }) {
   function handleRowClick() {
     onSelect?.()
@@ -81,13 +83,17 @@ export default function DecisionRow({
 
       <div className="min-w-0">
         <div className="flex min-w-0 items-baseline gap-3">
-          <Link
-            href={row.href}
-            onClick={handleNameClick}
-            className="truncate text-[15px] font-semibold text-[color:var(--text-primary)] transition-colors hover:text-[color:var(--mispricing-strong)]"
-          >
-            {row.name}
-          </Link>
+          {linkName ? (
+            <Link
+              href={row.href}
+              onClick={handleNameClick}
+              className="truncate text-[15px] font-semibold text-[color:var(--text-primary)] transition-colors hover:text-[color:var(--mispricing-strong)]"
+            >
+              {row.name}
+            </Link>
+          ) : (
+            <div className="truncate text-[15px] font-semibold text-[color:var(--text-primary)]">{row.name}</div>
+          )}
           <div className="shrink-0 font-mono text-[11px] tracking-[0.08em] text-[color:var(--text-tertiary)]">{row.netuidLabel}</div>
         </div>
       </div>
