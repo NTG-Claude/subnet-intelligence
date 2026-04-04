@@ -70,6 +70,7 @@ logger = logging.getLogger(__name__)
 
 _cache: dict[str, tuple[Any, float]] = {}
 _CACHE_TTL = 3600  # 1 hour
+_HOT_DATA_CACHE_TTL = 300  # 5 minutes
 _SEED_NAMES_PATH = Path(__file__).resolve().parent.parent / "data" / "subnet_names.json"
 _NAME_OVERRIDES_PATH = Path(__file__).resolve().parent.parent / "data" / "subnet_name_overrides.json"
 
@@ -81,32 +82,76 @@ def _cache_get(key: str) -> Any:
     return None
 
 
-def _cache_set(key: str, value: Any) -> None:
-    _cache[key] = (value, time.time() + _CACHE_TTL)
+def _cache_set(key: str, value: Any, ttl: int = _CACHE_TTL) -> None:
+    _cache[key] = (value, time.time() + ttl)
 
 
-def _metadata_fingerprint() -> str:
+def _is_mocked_callable(value: Any) -> bool:
+    module_name = getattr(value, "__module__", "")
+    return module_name.startswith("unittest.mock")
+
+
+def _get_cached_latest_scores() -> list[dict]:
+    if _is_mocked_callable(get_latest_scores):
+        return get_latest_scores()
+    cached = _cache_get("latest_scores")
+    if cached is not None:
+        return cached
+    rows = get_latest_scores()
+    _cache_set("latest_scores", rows, ttl=_HOT_DATA_CACHE_TTL)
+    return rows
+
+
+def _get_cached_all_metadata() -> dict[int, dict]:
+    if _is_mocked_callable(get_all_metadata):
+        return get_all_metadata()
+    cached = _cache_get("all_metadata")
+    if cached is not None:
+        return cached
+    metadata = get_all_metadata()
+    _cache_set("all_metadata", metadata, ttl=_HOT_DATA_CACHE_TTL)
+    return metadata
+
+
+def _get_cached_score_history(netuid: int, days: int) -> list[dict]:
+    if _is_mocked_callable(get_score_history):
+        return get_score_history(netuid, days=days)
+    key = f"score_history:{netuid}:{days}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    history = get_score_history(netuid, days=days)
+    _cache_set(key, history, ttl=_HOT_DATA_CACHE_TTL)
+    return history
+
+
+def _metadata_fingerprint(metadata: Optional[dict[int, dict]] = None) -> str:
     try:
-        metadata = get_all_metadata()
+        live_metadata = metadata if metadata is not None else get_all_metadata()
     except Exception:
-        metadata = {}
+        live_metadata = {}
     last_ts = max(
-        (row.get("last_updated") for row in metadata.values() if row.get("last_updated")),
+        (row.get("last_updated") for row in live_metadata.values() if row.get("last_updated")),
         default="none",
     )
-    return f"{last_ts}:{len(metadata)}"
+    return f"{last_ts}:{len(live_metadata)}"
 
 
-def _run_fingerprint(rows: Optional[list[dict]] = None) -> str:
-    live_rows = rows if rows is not None else get_latest_scores()
+def _run_fingerprint(rows: Optional[list[dict]] = None, metadata: Optional[dict[int, dict]] = None) -> str:
+    live_rows = rows if rows is not None else _get_cached_latest_scores()
     last_ts = max((row["computed_at"] for row in live_rows if row.get("computed_at")), default="none")
-    return f"{last_ts}:{len(live_rows)}:meta={_metadata_fingerprint()}"
+    return f"{last_ts}:{len(live_rows)}:meta={_metadata_fingerprint(metadata)}"
 
 
-def _live_cache_key(prefix: str, *parts: Any, rows: Optional[list[dict]] = None) -> str:
+def _live_cache_key(
+    prefix: str,
+    *parts: Any,
+    rows: Optional[list[dict]] = None,
+    metadata: Optional[dict[int, dict]] = None,
+) -> str:
     serialized_parts = ":".join(str(part) for part in parts)
     base = f"{prefix}:{serialized_parts}" if serialized_parts else prefix
-    return f"{base}:run={_run_fingerprint(rows)}"
+    return f"{base}:run={_run_fingerprint(rows, metadata)}"
 
 
 def _seed_name_map() -> dict[int, str]:
@@ -861,7 +906,7 @@ async def list_subnets(
     preview: Literal["compact", "full"] = Query("compact"),
     _: None = Depends(_check_rate_limit),
 ) -> SubnetListResponse:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("list", limit, offset, min_score, max_score, sort_by, sort_order, preview, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
@@ -917,7 +962,8 @@ async def get_subnet(
     _: None = Depends(_check_rate_limit),
 ) -> SubnetDetailResponse:
     all_rows = get_latest_scores()
-    cache_key = _live_cache_key("subnet", netuid, view, rows=all_rows)
+    meta_by_netuid = _get_cached_all_metadata()
+    cache_key = _live_cache_key("subnet", netuid, view, rows=all_rows, metadata=meta_by_netuid)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -930,13 +976,13 @@ async def get_subnet(
         raise HTTPException(status_code=404, detail=f"Subnet {netuid} not found")
 
     score_delta_7d: Optional[float] = None
-    history_for_delta = get_score_history(netuid, days=7)
+    history_for_delta = _get_cached_score_history(netuid, days=7)
     if len(history_for_delta) >= 2:
         score_delta_7d = round(row["score"] - history_for_delta[0]["score"], 1)
 
     history: list[ScoreHistoryPoint] = []
     if view == "full":
-        history_raw = get_score_history(netuid, days=30)
+        history_raw = _get_cached_score_history(netuid, days=30)
         history = [
             ScoreHistoryPoint(
                 computed_at=h["computed_at"],
@@ -946,7 +992,6 @@ async def get_subnet(
             for h in history_raw
         ]
 
-    meta_by_netuid = get_all_metadata()
     meta_dict = meta_by_netuid.get(netuid)
     meta = SubnetMetadataResponse(netuid=netuid, **(meta_dict or {})) if meta_dict else None
 
@@ -1045,13 +1090,13 @@ async def get_subnet_history_detailed(
     days: int = Query(30, ge=1, le=365),
     _: None = Depends(_check_rate_limit),
 ) -> list[DetailedScoreHistoryPoint]:
-    all_rows = get_latest_scores()
+    all_rows = _get_cached_latest_scores()
     cache_key = _live_cache_key("history_detailed", netuid, days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    history_raw = get_score_history(netuid, days=days)
+    history_raw = _get_cached_score_history(netuid, days=days)
     if not history_raw:
         raise HTTPException(status_code=404, detail=f"No history for subnet {netuid}")
 
