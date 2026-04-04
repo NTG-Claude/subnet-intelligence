@@ -14,6 +14,8 @@ export interface SubnetSummary {
   score: number
   primary_outputs: PrimaryOutputs | null
   rank: number | null
+  previous_rank?: number | null
+  preview_metric_deltas?: PreviewMetricDeltas | null
   percentile: number | null
   computed_at: string | null
   score_version: string
@@ -242,6 +244,18 @@ export interface SubnetSignalHistoryPoint {
   opportunity: number | null
   risk: number | null
   confidence: number | null
+}
+
+export interface MetricDeltaValue {
+  value: number | null
+  has_history: boolean
+}
+
+export interface PreviewMetricDeltas {
+  strength: Record<string, MetricDeltaValue>
+  upside: Record<string, MetricDeltaValue>
+  risk: Record<string, MetricDeltaValue>
+  evidence: Record<string, MetricDeltaValue>
 }
 
 export interface MarketOverviewPoint {

@@ -11,6 +11,7 @@ import json
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any, Optional, Literal
@@ -35,7 +36,9 @@ from api.models import (
     LatestRunResponse,
     MarketOverviewPoint,
     MarketOverviewResponse,
+    MetricDeltaValueResponse,
     PrimaryOutputsResponse,
+    PreviewMetricDeltasResponse,
     ResearchSummaryResponse,
     ScoreBreakdownResponse,
     ScoreHistoryPoint,
@@ -595,6 +598,7 @@ def _row_to_summary(
     meta: Optional[SubnetMetadataResponse] = None,
     preview: Literal["compact", "full"] = "full",
     previous_rank: Optional[int] = None,
+    preview_metric_deltas: Optional[PreviewMetricDeltasResponse] = None,
 ) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
     analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
@@ -610,6 +614,7 @@ def _row_to_summary(
         primary_outputs=PrimaryOutputsResponse(**primary_outputs) if primary_outputs else None,
         rank=row["rank"],
         previous_rank=previous_rank,
+        preview_metric_deltas=preview_metric_deltas,
         percentile=_compute_percentile(row.get("rank"), total),
         computed_at=row.get("computed_at"),
         score_version=row.get("score_version", "v1"),
@@ -660,6 +665,79 @@ def _row_to_signal_history_point(row: dict) -> SubnetSignalHistoryPoint:
     )
 
 
+def _empty_metric_delta() -> MetricDeltaValueResponse:
+    return MetricDeltaValueResponse(value=None, has_history=False)
+
+
+def _nearest_point_at_or_before(points: list[SubnetSignalHistoryPoint], target_time: int) -> Optional[SubnetSignalHistoryPoint]:
+    match: Optional[SubnetSignalHistoryPoint] = None
+    for point in points:
+        try:
+            point_time = int(datetime.fromisoformat(point.computed_at.replace("Z", "+00:00")).timestamp())
+        except Exception:
+            continue
+        if point_time > target_time:
+            continue
+        match = point
+    return match
+
+
+def _metric_delta_from_points(
+    points: list[SubnetSignalHistoryPoint],
+    metric: Literal["quality", "opportunity", "risk", "confidence"],
+    days: int,
+) -> MetricDeltaValueResponse:
+    latest_point = points[-1] if points else None
+    if latest_point is None:
+        return _empty_metric_delta()
+
+    latest_value = getattr(latest_point, metric)
+    if latest_value is None:
+        return _empty_metric_delta()
+
+    latest_time = int(datetime.fromisoformat(latest_point.computed_at.replace("Z", "+00:00")).timestamp())
+    reference_point = _nearest_point_at_or_before(points, latest_time - days * 24 * 60 * 60)
+    if reference_point is None:
+        return _empty_metric_delta()
+
+    reference_value = getattr(reference_point, metric)
+    if reference_value is None:
+        return _empty_metric_delta()
+
+    return MetricDeltaValueResponse(
+        value=round(float(latest_value) - float(reference_value), 1),
+        has_history=True,
+    )
+
+
+def _preview_metric_deltas_from_points(points: list[SubnetSignalHistoryPoint]) -> Optional[PreviewMetricDeltasResponse]:
+    if not points:
+        return None
+
+    return PreviewMetricDeltasResponse(
+        strength={
+            "1d": _metric_delta_from_points(points, "quality", 1),
+            "7d": _metric_delta_from_points(points, "quality", 7),
+            "30d": _metric_delta_from_points(points, "quality", 30),
+        },
+        upside={
+            "1d": _metric_delta_from_points(points, "opportunity", 1),
+            "7d": _metric_delta_from_points(points, "opportunity", 7),
+            "30d": _metric_delta_from_points(points, "opportunity", 30),
+        },
+        risk={
+            "1d": _metric_delta_from_points(points, "risk", 1),
+            "7d": _metric_delta_from_points(points, "risk", 7),
+            "30d": _metric_delta_from_points(points, "risk", 30),
+        },
+        evidence={
+            "1d": _metric_delta_from_points(points, "confidence", 1),
+            "7d": _metric_delta_from_points(points, "confidence", 7),
+            "30d": _metric_delta_from_points(points, "confidence", 30),
+        },
+    )
+
+
 def _sort_value(row: dict, sort_by: str, meta_by_netuid: dict[int, dict]) -> Any:
     raw_data = row.get("raw_data") or {}
     primary_outputs = raw_data.get("analysis", {}).get("primary_outputs") or raw_data.get("primary_outputs") or {}
@@ -685,19 +763,42 @@ def _sort_value(row: dict, sort_by: str, meta_by_netuid: dict[int, dict]) -> Any
     return row.get("score") or 0.0
 
 
-def _previous_rank_by_netuid(days: int = 14) -> dict[int, int]:
-    history_rows = [row for row in get_scores_since(days=days) if _is_investable_row(row)]
+def _previous_rank_by_netuid(
+    history_rows: Optional[list[dict]] = None,
+    days: int = 14,
+) -> dict[int, int]:
+    rows = history_rows if history_rows is not None else [row for row in get_scores_since(days=days) if _is_investable_row(row)]
     run_timestamps = sorted(
-        {row.get("computed_at") for row in history_rows if row.get("computed_at")},
+        {row.get("computed_at") for row in rows if row.get("computed_at")},
         reverse=True,
     )
     if len(run_timestamps) < 2:
         return {}
 
     previous_run_at = run_timestamps[1]
-    previous_run_rows = [row for row in history_rows if row.get("computed_at") == previous_run_at]
+    previous_run_rows = [row for row in rows if row.get("computed_at") == previous_run_at]
     ranked_rows = sorted(previous_run_rows, key=lambda item: (-item["score"], item["netuid"]))
     return {row["netuid"]: index + 1 for index, row in enumerate(ranked_rows)}
+
+
+def _preview_metric_deltas_by_netuid(
+    history_rows: list[dict],
+    netuids: set[int],
+) -> dict[int, PreviewMetricDeltasResponse]:
+    points_by_netuid: dict[int, list[SubnetSignalHistoryPoint]] = defaultdict(list)
+
+    for row in history_rows:
+        netuid = row.get("netuid")
+        if netuid not in netuids:
+            continue
+        points_by_netuid[netuid].append(_row_to_signal_history_point(row))
+
+    preview_deltas: dict[int, PreviewMetricDeltasResponse] = {}
+    for netuid, points in points_by_netuid.items():
+        deltas = _preview_metric_deltas_from_points(points)
+        if deltas is not None:
+            preview_deltas[netuid] = deltas
+    return preview_deltas
 
 
 def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
@@ -768,7 +869,8 @@ async def list_subnets(
 
     all_rows = [r for r in all_rows if _is_investable_row(r)]
     meta_by_netuid = get_all_metadata()
-    previous_rank_by_netuid = _previous_rank_by_netuid()
+    preview_history_rows = [row for row in get_scores_since(days=120) if _is_investable_row(row)]
+    previous_rank_by_netuid = _previous_rank_by_netuid(preview_history_rows)
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     reverse = sort_order == "desc"
     filtered = sorted(
@@ -778,6 +880,8 @@ async def list_subnets(
     )
     total = len(filtered)
     page = filtered[offset: offset + limit]
+    page_netuids = {row["netuid"] for row in page}
+    preview_metric_deltas_by_netuid = _preview_metric_deltas_by_netuid(preview_history_rows, page_netuids)
 
     subnets = []
     for r in page:
@@ -790,6 +894,7 @@ async def list_subnets(
                 meta,
                 preview=preview,
                 previous_rank=previous_rank_by_netuid.get(r["netuid"]),
+                preview_metric_deltas=preview_metric_deltas_by_netuid.get(r["netuid"]),
             )
         )
 

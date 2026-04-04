@@ -318,7 +318,6 @@ def get_latest_scores() -> list[dict]:
 
     return [_row_to_dict(r) for r in rows]
 
-
 def get_score_history(netuid: int, days: int = 30) -> list[dict]:
     """Return all score rows for a subnet over the past `days` days."""
     since = datetime.now(timezone.utc) - timedelta(days=days)

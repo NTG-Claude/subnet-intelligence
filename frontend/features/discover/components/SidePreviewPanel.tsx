@@ -47,14 +47,7 @@ export default function SidePreviewPanel({
             </div>
           </div>
 
-          {metricHistoryStatus === 'loading' ? (
-            <div className="space-y-2">
-              <div className="eyebrow">Metric Change</div>
-              <div className="surface-subtle p-3">
-                <div className="text-sm text-[color:var(--text-secondary)]">Loading metric history...</div>
-              </div>
-            </div>
-          ) : metricDeltas ? (
+          {metricDeltas ? (
             <div className="space-y-2">
               <div className="eyebrow">Metric Change</div>
               <div className="grid gap-2">
@@ -62,6 +55,13 @@ export default function SidePreviewPanel({
                 <MetricDeltaSection title="Opportunity" deltas={metricDeltas.upside} />
                 <MetricDeltaSection title="Risk" deltas={metricDeltas.risk} invert />
                 <MetricDeltaSection title="Confidence" deltas={metricDeltas.evidence} />
+              </div>
+            </div>
+          ) : metricHistoryStatus === 'loading' ? (
+            <div className="space-y-2">
+              <div className="eyebrow">Metric Change</div>
+              <div className="surface-subtle p-3">
+                <div className="text-sm text-[color:var(--text-secondary)]">Loading metric history...</div>
               </div>
             </div>
           ) : metricHistoryStatus === 'unavailable' ? (
