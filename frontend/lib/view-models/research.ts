@@ -138,6 +138,32 @@ export interface MemoAnchorItem {
   tone: SignalTone
 }
 
+export type IndicatorSentiment =
+  | 'Very Bearish'
+  | 'Bearish'
+  | 'Slightly Bearish'
+  | 'Neutral'
+  | 'Slightly Bullish'
+  | 'Bullish'
+  | 'Very Bullish'
+
+export interface IndicatorRowViewModel {
+  key: string
+  label: string
+  desirabilityScore: number | null
+  sentiment: IndicatorSentiment
+  helperText?: string
+}
+
+export interface IndicatorCategoryViewModel {
+  key: 'quality' | 'opportunity' | 'risk' | 'confidence'
+  title: 'Quality' | 'Opportunity' | 'Risk' | 'Confidence'
+  desirabilityScore: number | null
+  sentiment: IndicatorSentiment
+  helperText?: string
+  indicators: IndicatorRowViewModel[]
+}
+
 export interface DetailMemoViewModel {
   name: string
   netuidLabel: string
@@ -153,6 +179,7 @@ export interface DetailMemoViewModel {
   signals: SignalStat[]
   primaryTag: InvestabilityBadge
   secondaryTag?: InvestabilityBadge | null
+  indicatorStack: IndicatorCategoryViewModel[]
   anchorInsights: MemoAnchorItem[]
   executiveSummary: MemoSummaryItem[]
   contextRow: MemoContextItem[]
@@ -1819,6 +1846,432 @@ function buildAnchorInsights(
   ]
 }
 
+function normalizeCompositeScore(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null
+  if (value >= 0 && value <= 10) return Math.max(0, Math.min(100, value * 10))
+  return Math.max(0, Math.min(100, value))
+}
+
+function averageDefined(values: Array<number | null | undefined>): number | null {
+  const resolved = values.filter((value): value is number => value != null && Number.isFinite(value))
+  if (!resolved.length) return null
+  return resolved.reduce((sum, value) => sum + value, 0) / resolved.length
+}
+
+function scaledDeltaScore(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null
+  return Math.max(0, Math.min(100, 50 + value * 8))
+}
+
+function marketCapacityScore(value: ResearchSummary['market_capacity'] | null | undefined): number | null {
+  switch (value) {
+    case 'high':
+      return 80
+    case 'medium':
+      return 62
+    case 'low':
+      return 40
+    case 'very_low':
+      return 24
+    default:
+      return null
+  }
+}
+
+function evidenceStrengthScore(value: ResearchSummary['evidence_strength'] | null | undefined): number | null {
+  switch (value) {
+    case 'high':
+      return 82
+    case 'medium':
+      return 60
+    case 'low':
+      return 34
+    default:
+      return null
+  }
+}
+
+function warningPenalty(subnet: SubnetDetail, names: string[]): number {
+  return subnet.warning_flags.reduce((penalty, flag) => (names.includes(flag) ? penalty + 16 : penalty), 0)
+}
+
+function contributorMagnitude(item: ExplanationContributor | undefined): number {
+  if (!item) return 0
+  const candidate =
+    typeof item.signed_contribution === 'number'
+      ? Math.abs(item.signed_contribution) * 100
+      : typeof item.contribution === 'number'
+        ? Math.abs(item.contribution) * 100
+        : typeof item.normalized === 'number'
+          ? Math.abs(item.normalized) * 100
+          : 0
+  return Math.max(10, Math.min(24, candidate || 12))
+}
+
+function findContributorByNames(
+  items: ExplanationContributor[] | undefined,
+  names: string[],
+): ExplanationContributor | undefined {
+  return (items ?? []).find((item) => names.includes(contributorName(item)))
+}
+
+function contributorAdjustment(
+  analysis: SubnetDetail['analysis'],
+  names: string[],
+): number {
+  const positive = findContributorByNames(analysis?.top_positive_drivers, names)
+  const negative = findContributorByNames(analysis?.top_negative_drags ?? analysis?.top_negative_drivers, names)
+  return contributorMagnitude(positive) - contributorMagnitude(negative)
+}
+
+function contributorSummary(
+  analysis: SubnetDetail['analysis'],
+  names: string[],
+  fallback: string,
+): string {
+  const positive = findContributorByNames(analysis?.top_positive_drivers, names)
+  if (positive) {
+    return sentenceCase(plainEnglishReason(contributorName(positive), 'positive') || contributorLabel(positive) || fallback)
+  }
+
+  const negative = findContributorByNames(analysis?.top_negative_drags ?? analysis?.top_negative_drivers, names)
+  if (negative) {
+    return sentenceCase(plainEnglishReason(contributorName(negative), 'negative') || contributorLabel(negative) || fallback)
+  }
+
+  return fallback
+}
+
+function clampAdjusted(base: number | null, ...adjustments: Array<number | null | undefined>): number | null {
+  if (base == null) return null
+  const total = adjustments.reduce<number>((sum, value) => sum + (value ?? 0), base)
+  return Math.max(0, Math.min(100, total))
+}
+
+function sentimentFromDesirability(score: number | null | undefined): IndicatorSentiment {
+  if (score == null || !Number.isFinite(score)) return 'Neutral'
+  if (score <= 15) return 'Very Bearish'
+  if (score <= 30) return 'Bearish'
+  if (score <= 45) return 'Slightly Bearish'
+  if (score <= 55) return 'Neutral'
+  if (score <= 70) return 'Slightly Bullish'
+  if (score <= 85) return 'Bullish'
+  return 'Very Bullish'
+}
+
+function minDefined(values: Array<number | null | undefined>): number | null {
+  const resolved = values.filter((value): value is number => value != null && Number.isFinite(value))
+  if (!resolved.length) return null
+  return Math.min(...resolved)
+}
+
+function buildIndicatorStack(
+  subnet: SubnetDetail,
+  researchSummary: ResearchSummaryViewModel,
+  reliabilityEntries: MemoSectionItem[],
+): IndicatorCategoryViewModel[] {
+  const analysis = subnet.analysis
+  const outputs = subnet.primary_outputs ?? analysis?.primary_outputs ?? null
+  const confidence = analysis?.confidence_rationale
+  const activityScore = normalizeCompositeScore(subnet.breakdown?.activity_score)
+  const healthScore = normalizeCompositeScore(subnet.breakdown?.health_score)
+  const capitalScore = normalizeCompositeScore(subnet.breakdown?.capital_score)
+  const efficiencyScore = normalizeCompositeScore(subnet.breakdown?.efficiency_score)
+  const devScore = normalizeCompositeScore(subnet.breakdown?.dev_score)
+  const intrinsicQuality = normalizeCompositeScore(analysis?.block_scores?.intrinsic_quality)
+  const economicSustainability = normalizeCompositeScore(analysis?.block_scores?.economic_sustainability)
+  const reflexivity = normalizeCompositeScore(analysis?.block_scores?.reflexivity)
+  const stressRobustness = normalizeCompositeScore(analysis?.block_scores?.stress_robustness)
+  const opportunityGap = normalizeCompositeScore(analysis?.block_scores?.opportunity_gap)
+  const qualitySignal = normalizeCompositeScore(outputs?.fundamental_quality)
+  const opportunitySignal = normalizeCompositeScore(outputs?.mispricing_signal)
+  const confidenceSignal = normalizeCompositeScore(outputs?.signal_confidence)
+  const safetySignal = outputs?.fragility_risk != null ? 100 - normalizeCompositeScore(outputs.fragility_risk)! : null
+  const drawdownSafety =
+    analysis?.stress_drawdown != null ? Math.max(0, Math.min(100, 100 - analysis.stress_drawdown * 2.2)) : null
+  const scoreMomentum = scaledDeltaScore(subnet.score_delta_7d)
+  const marketCapacity = marketCapacityScore(researchSummary.marketCapacity.value)
+  const evidenceStrength = evidenceStrengthScore(researchSummary.evidenceStrength.value)
+  const marketReliability = reliabilityEntries.find((item) => item.title === 'Market inputs')?.score ?? null
+  const validatorReliability = reliabilityEntries.find((item) => item.title === 'Validator coverage')?.score ?? null
+  const historyReliability = reliabilityEntries.find((item) => item.title === 'History coverage')?.score ?? null
+  const externalReliability = reliabilityEntries.find((item) => item.title === 'Outside confirmation')?.score ?? null
+  const dataConfidence = normalizeCompositeScore(confidence?.data_confidence)
+  const marketConfidence = normalizeCompositeScore(confidence?.market_confidence)
+  const thesisConfidence = normalizeCompositeScore(confidence?.thesis_confidence)
+  const evidenceConfidence = normalizeCompositeScore(confidence?.evidence_confidence)
+  const rebuiltInputs = visibilityCount(analysis?.conditioning, 'reconstructed')
+  const droppedInputs = visibilityCount(analysis?.conditioning, 'discarded')
+  const boundedInputs = visibilityCount(analysis?.conditioning, 'bounded')
+  const visibilityPenalty = rebuiltInputs * 6 + droppedInputs * 9 + boundedInputs * 3
+
+  const participationHealth = clampAdjusted(
+    averageDefined([activityScore, healthScore, qualitySignal, validatorReliability]),
+    contributorAdjustment(analysis, ['fundamental_health']),
+  )
+  const validatorHealth = clampAdjusted(
+    averageDefined([healthScore, validatorReliability, confidenceSignal]),
+    contributorAdjustment(analysis, ['validator_data_reliability']),
+  )
+  const liquidityHealth = clampAdjusted(
+    averageDefined([capitalScore, marketCapacity, marketReliability, safetySignal]),
+    contributorAdjustment(analysis, ['structural_validity']) - warningPenalty(subnet, ['thin_liquidity']),
+  )
+  const marketRelevance = clampAdjusted(
+    averageDefined([capitalScore, marketCapacity, reflexivity, opportunitySignal]),
+    contributorAdjustment(analysis, ['market_legitimacy']),
+  )
+  const marketLegitimacy = clampAdjusted(
+    averageDefined([reflexivity, marketConfidence, externalReliability]),
+    contributorAdjustment(analysis, ['market_legitimacy']),
+  )
+
+  const qualityMomentum = clampAdjusted(
+    averageDefined([qualitySignal, intrinsicQuality, scoreMomentum, devScore]),
+    contributorAdjustment(analysis, ['quality_acceleration']),
+  )
+  const reserveMomentum = clampAdjusted(
+    averageDefined([capitalScore, marketCapacity, scoreMomentum, reflexivity]),
+    contributorAdjustment(analysis, ['reserve_change', 'liquidity_improvement_rate']),
+  )
+  const priceLag = clampAdjusted(
+    averageDefined([opportunitySignal, opportunityGap, qualitySignal]),
+    contributorAdjustment(analysis, ['opportunity_underreaction', 'base_opportunity', 'reserve_growth_without_price']),
+  )
+  const fairValueGapLight = clampAdjusted(
+    averageDefined([opportunitySignal, opportunityGap, marketConfidence != null ? 100 - marketConfidence / 2 : null]),
+    contributorAdjustment(analysis, ['expected_price_response_gap', 'valuation_gap']),
+  )
+  const uncrowdedParticipation = clampAdjusted(
+    averageDefined([participationHealth, marketCapacity, safetySignal, confidenceSignal]),
+    -warningPenalty(subnet, ['concentration', 'weak_market_structure']),
+  )
+
+  const crowdingLevel = clampAdjusted(
+    averageDefined([marketCapacity, safetySignal, confidenceSignal]),
+    -warningPenalty(subnet, ['concentration', 'weak_market_structure']) + contributorAdjustment(analysis, ['cohort_quality_edge']),
+  )
+  const concentrationRisk = clampAdjusted(
+    averageDefined([marketCapacity, safetySignal, thesisConfidence]),
+    -warningPenalty(subnet, ['concentration']) - contributorMagnitude(findContributorByNames(analysis?.top_negative_drags ?? analysis?.top_negative_drivers, ['concentration'])),
+  )
+  const thinLiquidityRisk = clampAdjusted(
+    averageDefined([marketCapacity, capitalScore, marketReliability, safetySignal]),
+    -warningPenalty(subnet, ['thin_liquidity']) + contributorAdjustment(analysis, ['liquidity_improvement_rate', 'structural_validity']),
+  )
+  const reversalRisk = clampAdjusted(
+    averageDefined([stressRobustness, drawdownSafety, safetySignal, confidenceSignal]),
+    contributorAdjustment(analysis, ['fragility', 'controlled_downside']),
+  )
+  const weakMarketStructure = clampAdjusted(
+    averageDefined([reflexivity, marketReliability, marketConfidence, safetySignal]),
+    -warningPenalty(subnet, ['weak_market_structure']) + contributorAdjustment(analysis, ['structural_validity', 'market_legitimacy']),
+  )
+
+  const dataConfidenceScore = clampAdjusted(
+    averageDefined([dataConfidence, marketReliability, validatorReliability, confidenceSignal]),
+    -visibilityPenalty,
+  )
+  const marketConfidenceScore = clampAdjusted(
+    averageDefined([marketConfidence, marketReliability, externalReliability, reflexivity]),
+    -warningPenalty(subnet, ['weak_market_structure']),
+  )
+  const thesisConfidenceScore = clampAdjusted(
+    averageDefined([thesisConfidence, confidenceSignal, qualitySignal, safetySignal]),
+    -droppedInputs * 7,
+  )
+  const evidenceDepth = clampAdjusted(
+    averageDefined([historyReliability, externalReliability, evidenceStrength, evidenceConfidence]),
+    -rebuiltInputs * 4,
+  )
+  const evidenceFloor = clampAdjusted(
+    minDefined([dataConfidenceScore, thesisConfidenceScore, evidenceDepth, confidenceSignal]),
+    -droppedInputs * 4,
+  )
+
+  const quality: IndicatorCategoryViewModel = {
+    key: 'quality',
+    title: 'Quality',
+    desirabilityScore: averageDefined([participationHealth, validatorHealth, liquidityHealth, marketRelevance, marketLegitimacy]),
+    sentiment: sentimentFromDesirability(averageDefined([participationHealth, validatorHealth, liquidityHealth, marketRelevance, marketLegitimacy])),
+    helperText: 'Core operating quality and market legitimacy.',
+    indicators: [
+      {
+        key: 'participation_health',
+        label: 'Participation health',
+        desirabilityScore: participationHealth,
+        sentiment: sentimentFromDesirability(participationHealth),
+        helperText: contributorSummary(analysis, ['fundamental_health'], 'Participation quality is being inferred from activity, health, and validator coverage.'),
+      },
+      {
+        key: 'validator_health',
+        label: 'Validator health',
+        desirabilityScore: validatorHealth,
+        sentiment: sentimentFromDesirability(validatorHealth),
+        helperText: contributorSummary(analysis, ['validator_data_reliability'], 'Validator-side coverage is being used as the closest read on validator quality.'),
+      },
+      {
+        key: 'liquidity_health',
+        label: 'Liquidity health',
+        desirabilityScore: liquidityHealth,
+        sentiment: sentimentFromDesirability(liquidityHealth),
+        helperText: contributorSummary(analysis, ['structural_validity', 'liquidity_improvement_rate'], 'Liquidity health blends capital support, market capacity, and market input reliability.'),
+      },
+      {
+        key: 'market_relevance',
+        label: 'Market relevance',
+        desirabilityScore: marketRelevance,
+        sentiment: sentimentFromDesirability(marketRelevance),
+        helperText: 'Market relevance leans on capital support, market capacity, and reflexivity.',
+      },
+      {
+        key: 'market_legitimacy',
+        label: 'Market legitimacy',
+        desirabilityScore: marketLegitimacy,
+        sentiment: sentimentFromDesirability(marketLegitimacy),
+        helperText: contributorSummary(analysis, ['market_legitimacy'], 'Legitimacy measures how much the market is confirming the thesis rather than fighting it.'),
+      },
+    ],
+  }
+
+  const opportunity: IndicatorCategoryViewModel = {
+    key: 'opportunity',
+    title: 'Opportunity',
+    desirabilityScore: averageDefined([qualityMomentum, reserveMomentum, priceLag, fairValueGapLight, uncrowdedParticipation]),
+    sentiment: sentimentFromDesirability(averageDefined([qualityMomentum, reserveMomentum, priceLag, fairValueGapLight, uncrowdedParticipation])),
+    helperText: 'Where upside remains after quality, participation, and current pricing are considered.',
+    indicators: [
+      {
+        key: 'quality_momentum',
+        label: 'Quality momentum',
+        desirabilityScore: qualityMomentum,
+        sentiment: sentimentFromDesirability(qualityMomentum),
+        helperText: contributorSummary(analysis, ['quality_acceleration'], 'Quality momentum combines current quality, development support, and recent score direction.'),
+      },
+      {
+        key: 'reserve_momentum',
+        label: 'Capital inflow momentum',
+        desirabilityScore: reserveMomentum,
+        sentiment: sentimentFromDesirability(reserveMomentum),
+        helperText: contributorSummary(analysis, ['reserve_change', 'liquidity_improvement_rate'], 'Capital inflow momentum uses capital support and market capacity, then adjusts for reserve-follow-through drags.'),
+      },
+      {
+        key: 'price_lag',
+        label: 'Price lag vs fundamentals',
+        desirabilityScore: priceLag,
+        sentiment: sentimentFromDesirability(priceLag),
+        helperText: contributorSummary(analysis, ['opportunity_underreaction', 'base_opportunity', 'reserve_growth_without_price'], 'This compares current opportunity to the underlying quality base.'),
+      },
+      {
+        key: 'fair_value_gap_light',
+        label: 'Residual valuation gap',
+        desirabilityScore: fairValueGapLight,
+        sentiment: sentimentFromDesirability(fairValueGapLight),
+        helperText: contributorSummary(analysis, ['expected_price_response_gap', 'valuation_gap'], 'Residual valuation gap is the lighter-weight read on remaining rerating room.'),
+      },
+      {
+        key: 'uncrowded_participation',
+        label: 'Participation without crowding',
+        desirabilityScore: uncrowdedParticipation,
+        sentiment: sentimentFromDesirability(uncrowdedParticipation),
+        helperText: 'This favors active participation that is not yet overcrowded or structurally cramped.',
+      },
+    ],
+  }
+
+  const risk: IndicatorCategoryViewModel = {
+    key: 'risk',
+    title: 'Risk',
+    desirabilityScore: averageDefined([crowdingLevel, concentrationRisk, thinLiquidityRisk, reversalRisk, weakMarketStructure]),
+    sentiment: sentimentFromDesirability(averageDefined([crowdingLevel, concentrationRisk, thinLiquidityRisk, reversalRisk, weakMarketStructure])),
+    helperText: 'All risk rows are inverted into desirability, so higher still means better for the investment thesis.',
+    indicators: [
+      {
+        key: 'crowding_level',
+        label: 'Crowding level',
+        desirabilityScore: crowdingLevel,
+        sentiment: sentimentFromDesirability(crowdingLevel),
+        helperText: 'Higher desirability means the setup looks less crowded and easier to enter without reflexive stress.',
+      },
+      {
+        key: 'concentration_risk',
+        label: 'Concentration risk',
+        desirabilityScore: concentrationRisk,
+        sentiment: sentimentFromDesirability(concentrationRisk),
+        helperText: 'This is inverted so concentrated ownership or control reads bearish, not bullish.',
+      },
+      {
+        key: 'thin_liquidity_risk',
+        label: 'Thin liquidity risk',
+        desirabilityScore: thinLiquidityRisk,
+        sentiment: sentimentFromDesirability(thinLiquidityRisk),
+        helperText: 'Thin-liquidity risk is inverted using market-capacity, capital support, and structure warnings.',
+      },
+      {
+        key: 'reversal_risk',
+        label: 'Reversal risk',
+        desirabilityScore: reversalRisk,
+        sentiment: sentimentFromDesirability(reversalRisk),
+        helperText: contributorSummary(analysis, ['fragility', 'controlled_downside'], 'Reversal risk leans on stress robustness, drawdown safety, and the core fragility read.'),
+      },
+      {
+        key: 'weak_market_structure',
+        label: 'Market structure weakness',
+        desirabilityScore: weakMarketStructure,
+        sentiment: sentimentFromDesirability(weakMarketStructure),
+        helperText: 'This is inverted so weak structure, noisy market data, or poor confirmation show up as bearish.',
+      },
+    ],
+  }
+
+  const confidenceBucket: IndicatorCategoryViewModel = {
+    key: 'confidence',
+    title: 'Confidence',
+    desirabilityScore: averageDefined([dataConfidenceScore, marketConfidenceScore, thesisConfidenceScore, evidenceDepth, evidenceFloor]),
+    sentiment: sentimentFromDesirability(averageDefined([dataConfidenceScore, marketConfidenceScore, thesisConfidenceScore, evidenceDepth, evidenceFloor])),
+    helperText: 'Confidence measures how much of the thesis can actually be trusted today.',
+    indicators: [
+      {
+        key: 'data_confidence',
+        label: 'Data confidence',
+        desirabilityScore: dataConfidenceScore,
+        sentiment: sentimentFromDesirability(dataConfidenceScore),
+        helperText: 'Rebuilt, dropped, and bounded inputs reduce the display-facing desirability score directly.',
+      },
+      {
+        key: 'market_confidence',
+        label: 'Market confidence',
+        desirabilityScore: marketConfidenceScore,
+        sentiment: sentimentFromDesirability(marketConfidenceScore),
+        helperText: 'Market confidence blends price confirmation with market-input and outside-data reliability.',
+      },
+      {
+        key: 'thesis_confidence',
+        label: 'Thesis confidence',
+        desirabilityScore: thesisConfidenceScore,
+        sentiment: sentimentFromDesirability(thesisConfidenceScore),
+        helperText: 'This is the confidence layer for the thesis itself, not just the current print of the metrics.',
+      },
+      {
+        key: 'evidence_depth',
+        label: 'Evidence depth',
+        desirabilityScore: evidenceDepth,
+        sentiment: sentimentFromDesirability(evidenceDepth),
+        helperText: 'Evidence depth comes from history coverage, outside confirmation, and stated evidence strength.',
+      },
+      {
+        key: 'evidence_floor',
+        label: 'Evidence floor',
+        desirabilityScore: evidenceFloor,
+        sentiment: sentimentFromDesirability(evidenceFloor),
+        helperText: 'Evidence floor is intentionally conservative and follows the weakest trustworthy layer.',
+      },
+    ],
+  }
+
+  return [quality, opportunity, risk, confidenceBucket]
+}
+
 export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
   const analysis = subnet.analysis
   const outputs = subnet.primary_outputs ?? analysis?.primary_outputs ?? null
@@ -1910,6 +2363,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
     'No single limitation dominates yet.',
     'negative',
   )
+  const indicatorStack = buildIndicatorStack(subnet, researchSummary, reliabilityEntries)
   const anchorInsights = buildAnchorInsights(subnet, topSupports, topDrags)
   const setupTag = investabilityBadge(subnet.investability_status)
   const secondaryTag: InvestabilityBadge | null =
@@ -1937,6 +2391,7 @@ export function buildDetailMemo(subnet: SubnetDetail): DetailMemoViewModel {
       tone: researchSummary.setupStatus.tone,
     },
     secondaryTag,
+    indicatorStack,
     anchorInsights,
     executiveSummary,
     contextRow,
