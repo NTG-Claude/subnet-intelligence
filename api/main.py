@@ -196,7 +196,11 @@ def _compute_percentile(rank: Optional[int], total: int) -> Optional[float]:
 
 
 def _is_investable_row(row: dict) -> bool:
+    if row.get("netuid") == 0:
+        return False
     raw_data = row.get("raw_data") or {}
+    if raw_data.get("special_case") == "root_subnet":
+        return False
     return raw_data.get("investable", True)
 
 
@@ -590,6 +594,7 @@ def _row_to_summary(
     total: int,
     meta: Optional[SubnetMetadataResponse] = None,
     preview: Literal["compact", "full"] = "full",
+    previous_rank: Optional[int] = None,
 ) -> SubnetSummaryResponse:
     raw_data = row.get("raw_data") or {}
     analysis = _normalize_analysis_payload(raw_data.get("analysis")) or {}
@@ -604,6 +609,7 @@ def _row_to_summary(
         score=row["score"],
         primary_outputs=PrimaryOutputsResponse(**primary_outputs) if primary_outputs else None,
         rank=row["rank"],
+        previous_rank=previous_rank,
         percentile=_compute_percentile(row.get("rank"), total),
         computed_at=row.get("computed_at"),
         score_version=row.get("score_version", "v1"),
@@ -679,6 +685,21 @@ def _sort_value(row: dict, sort_by: str, meta_by_netuid: dict[int, dict]) -> Any
     return row.get("score") or 0.0
 
 
+def _previous_rank_by_netuid(days: int = 14) -> dict[int, int]:
+    history_rows = [row for row in get_scores_since(days=days) if _is_investable_row(row)]
+    run_timestamps = sorted(
+        {row.get("computed_at") for row in history_rows if row.get("computed_at")},
+        reverse=True,
+    )
+    if len(run_timestamps) < 2:
+        return {}
+
+    previous_run_at = run_timestamps[1]
+    previous_run_rows = [row for row in history_rows if row.get("computed_at") == previous_run_at]
+    ranked_rows = sorted(previous_run_rows, key=lambda item: (-item["score"], item["netuid"]))
+    return {row["netuid"]: index + 1 for index, row in enumerate(ranked_rows)}
+
+
 def _get_metadata(netuid: int) -> Optional[SubnetMetadataResponse]:
     with SessionLocal() as session:
         row = session.get(SubnetMetadataRow, netuid)
@@ -747,6 +768,7 @@ async def list_subnets(
 
     all_rows = [r for r in all_rows if _is_investable_row(r)]
     meta_by_netuid = get_all_metadata()
+    previous_rank_by_netuid = _previous_rank_by_netuid()
     filtered = [r for r in all_rows if min_score <= r["score"] <= max_score]
     reverse = sort_order == "desc"
     filtered = sorted(
@@ -761,7 +783,15 @@ async def list_subnets(
     for r in page:
         meta_dict = meta_by_netuid.get(r["netuid"])
         meta = SubnetMetadataResponse(netuid=r["netuid"], **(meta_dict or {})) if meta_dict else None
-        subnets.append(_row_to_summary(r, total, meta, preview=preview))
+        subnets.append(
+            _row_to_summary(
+                r,
+                total,
+                meta,
+                preview=preview,
+                previous_rank=previous_rank_by_netuid.get(r["netuid"]),
+            )
+        )
 
     result = SubnetListResponse(total=total, subnets=subnets)
     _cache_set(cache_key, result)
@@ -1071,7 +1101,7 @@ async def market_overview(
     _: None = Depends(_check_rate_limit),
 ) -> MarketOverviewResponse:
     all_rows = get_latest_scores()
-    cache_key = _live_cache_key("market_overview_v2", days, rows=all_rows)
+    cache_key = _live_cache_key("market_overview_v3", days, rows=all_rows)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
