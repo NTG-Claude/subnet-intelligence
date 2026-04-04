@@ -214,6 +214,60 @@ function formatWhole(value: number | null | undefined): string {
   return value == null ? 'n/a' : value.toFixed(0)
 }
 
+function thesisBarometer(memo: DetailMemoViewModel): {
+  label: string
+  value: number
+  toneClass: string
+  trackClass: string
+} {
+  const quality = signalValue(memo.signals, 'Quality') ?? 50
+  const opportunity = signalValue(memo.signals, 'Opportunity') ?? 50
+  const confidence = signalValue(memo.signals, 'Confidence') ?? 50
+  const risk = signalValue(memo.signals, 'Risk')
+  const safety = risk == null ? 50 : 100 - risk
+
+  const composite = quality * 0.32 + opportunity * 0.24 + confidence * 0.2 + safety * 0.24
+
+  if (composite >= 72) {
+    return {
+      label: 'Strongly bullish',
+      value: composite,
+      toneClass: 'bg-[color:rgba(74,222,128,0.95)]',
+      trackClass: 'bg-[linear-gradient(90deg,rgba(74,222,128,0.22),rgba(74,222,128,0.05))]',
+    }
+  }
+  if (composite >= 60) {
+    return {
+      label: 'Bullish',
+      value: composite,
+      toneClass: 'bg-[color:rgba(134,239,172,0.9)]',
+      trackClass: 'bg-[linear-gradient(90deg,rgba(134,239,172,0.2),rgba(134,239,172,0.05))]',
+    }
+  }
+  if (composite >= 48) {
+    return {
+      label: 'Balanced',
+      value: composite,
+      toneClass: 'bg-[color:rgba(250,204,21,0.9)]',
+      trackClass: 'bg-[linear-gradient(90deg,rgba(250,204,21,0.2),rgba(250,204,21,0.05))]',
+    }
+  }
+  if (composite >= 36) {
+    return {
+      label: 'Bearish',
+      value: composite,
+      toneClass: 'bg-[color:rgba(251,146,60,0.9)]',
+      trackClass: 'bg-[linear-gradient(90deg,rgba(251,146,60,0.2),rgba(251,146,60,0.05))]',
+    }
+  }
+  return {
+    label: 'Strongly bearish',
+    value: composite,
+    toneClass: 'bg-[color:rgba(244,114,182,0.95)]',
+    trackClass: 'bg-[linear-gradient(90deg,rgba(244,114,182,0.2),rgba(244,114,182,0.05))]',
+  }
+}
+
 function countFromItem(items: MemoSectionItem[], title: string): number {
   const raw = items.find((item) => item.title === title)?.body
   const parsed = raw ? Number(raw) : NaN
@@ -350,6 +404,7 @@ export default function ResearchWorkspace({
   const strongestSupport = buildPositiveDriverText(memo)
   const mainLimiter = buildLimitingFactorText(memo)
   const trustSummary = memo.evidenceItems[0]?.body ?? 'Trust details are not available yet.'
+  const barometer = thesisBarometer(memo)
 
   const riskItems = uniqueSectionItems([
     ...memo.topDrags.map((item) => ({ title: item.title, body: item.body, tone: item.tone })),
@@ -397,6 +452,18 @@ export default function ResearchWorkspace({
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-4xl">{memo.name}</h1>
               <div className="mt-2 text-sm text-[color:var(--text-tertiary)]">Updated {memo.updatedLabel}</div>
+              <div className="mt-4 max-w-[420px] rounded-[var(--radius-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="eyebrow">Overall setup</div>
+                  <div className="text-sm font-medium text-[color:var(--text-primary)]">{barometer.label}</div>
+                </div>
+                <div className={`mt-3 h-2 rounded-full ${barometer.trackClass}`}>
+                  <div
+                    className={`h-2 rounded-full ${barometer.toneClass}`}
+                    style={{ width: `${Math.max(8, Math.min(100, barometer.value))}%` }}
+                  />
+                </div>
+              </div>
               <p className="mt-2 max-w-3xl text-base leading-7 text-[color:var(--text-primary)]">{verdict}</p>
             </div>
           </div>
@@ -409,7 +476,7 @@ export default function ResearchWorkspace({
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="rounded-[var(--radius-xl)] border border-[color:rgba(74,222,128,0.12)] bg-[color:rgba(18,32,24,0.34)] p-4 sm:p-5">
-            <div className="eyebrow text-[color:rgba(134,239,172,0.9)]">Why it still ranks well</div>
+            <div className="eyebrow text-[color:rgba(134,239,172,0.9)]">Bullish case</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{strongestSupport}</p>
             {primarySupports.length ? (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -427,7 +494,7 @@ export default function ResearchWorkspace({
           </div>
 
           <div className="rounded-[var(--radius-xl)] border border-[color:rgba(244,114,182,0.12)] bg-[color:rgba(38,20,28,0.34)] p-4 sm:p-5">
-            <div className="eyebrow text-[color:rgba(251,182,206,0.9)]">Why it is not higher</div>
+            <div className="eyebrow text-[color:rgba(251,182,206,0.9)]">Bearish case</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--text-primary)]">{mainLimiter}</p>
             {primaryRisks.length ? (
               <div className="mt-4 space-y-3">
