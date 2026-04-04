@@ -2,12 +2,21 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { CompareSeriesData, MarketOverviewData, SubnetSummary } from '@/lib/api'
+import {
+  CompareSeriesData,
+  fetchLatestRun,
+  fetchMarketOverview,
+  fetchSubnets,
+  MarketOverviewData,
+  SubnetSummary,
+} from '@/lib/api'
 
 import DiscoverWorkspace from './DiscoverWorkspace'
 
 const BOOTSTRAP_CACHE_KEY = 'discover-bootstrap-v1'
 const BOOTSTRAP_CACHE_TTL_MS = 5 * 60 * 1000
+const MARKET_OVERVIEW_DAYS = 365
+const RETRY_DELAY_MS = 350
 
 type DiscoverBootstrapData = {
   subnets: SubnetSummary[]
@@ -22,6 +31,10 @@ type BootstrapState = {
 }
 
 let inMemoryBootstrapCache: { fetchedAt: number; data: DiscoverBootstrapData } | null = null
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 function hasFreshCache(fetchedAt: number, now = Date.now()) {
   return now - fetchedAt < BOOTSTRAP_CACHE_TTL_MS
@@ -68,20 +81,89 @@ function readBootstrapCache(): DiscoverBootstrapData | null {
   }
 }
 
-async function fetchBootstrap(): Promise<DiscoverBootstrapData> {
-  const res = await fetch('/api/discover/bootstrap', {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-    cache: 'no-store',
-  })
+async function retryOnce<T>(load: () => Promise<T>): Promise<T> {
+  try {
+    return await load()
+  } catch {
+    await delay(RETRY_DELAY_MS)
+    return load()
+  }
+}
 
-  if (!res.ok) {
-    throw new Error(`Discover bootstrap request failed with ${res.status}`)
+function buildMarketFallback({
+  subnets,
+  lastRun,
+  subnetCount,
+  market,
+}: {
+  subnets: SubnetSummary[]
+  lastRun: string | null
+  subnetCount: number
+  market: MarketOverviewData
+}): MarketOverviewData {
+  const currentMarketCap = subnets.reduce((sum, subnet) => sum + (subnet.market_cap_tao ?? 0), 0)
+
+  if (market.current_market_cap_tao > 0 || market.points.length) {
+    return market
   }
 
-  return res.json()
+  return {
+    current_market_cap_tao: currentMarketCap,
+    current_market_cap_usd: market.tao_price_usd != null ? currentMarketCap * market.tao_price_usd : null,
+    tao_price_usd: market.tao_price_usd ?? null,
+    change_pct_vs_previous_run: null,
+    current_subnet_count: subnetCount || subnets.length,
+    points: lastRun
+      ? [
+          {
+            computed_at: lastRun,
+            total_market_cap_tao: currentMarketCap,
+            total_market_cap_usd: market.tao_price_usd != null ? currentMarketCap * market.tao_price_usd : null,
+            subnet_count: subnetCount || subnets.length,
+          },
+        ]
+      : [],
+  }
+}
+
+async function fetchBootstrap(): Promise<DiscoverBootstrapData> {
+  const [subnetsResult, latestResult, marketResult] = await Promise.allSettled([
+    retryOnce(() => fetchSubnets(200)),
+    retryOnce(() => fetchLatestRun()),
+    retryOnce(() => fetchMarketOverview(MARKET_OVERVIEW_DAYS)),
+  ])
+
+  if (subnetsResult.status !== 'fulfilled') {
+    throw new Error('Discover bootstrap request failed to load ranked subnets')
+  }
+
+  const { subnets } = subnetsResult.value
+  const latest =
+    latestResult.status === 'fulfilled'
+      ? latestResult.value
+      : { last_score_run: null, subnet_count: subnets.length }
+  const market =
+    marketResult.status === 'fulfilled'
+      ? marketResult.value
+      : {
+          current_market_cap_tao: 0,
+          current_market_cap_usd: null,
+          tao_price_usd: null,
+          change_pct_vs_previous_run: null,
+          current_subnet_count: subnets.length,
+          points: [],
+        }
+
+  return {
+    subnets,
+    lastRun: latest.last_score_run,
+    market: buildMarketFallback({
+      subnets,
+      lastRun: latest.last_score_run,
+      subnetCount: latest.subnet_count,
+      market,
+    }),
+  }
 }
 
 function LoadingShell() {
@@ -113,8 +195,8 @@ function ErrorShell({ message, onRetry }: { message: string; onRetry: () => void
           </h1>
           <p className="mt-4 text-base leading-7 text-[color:var(--text-secondary)]">{message}</p>
           <p className="mt-3 text-sm leading-6 text-[color:var(--text-tertiary)]">
-            The homepage keeps its static shell fast, then retries the live bootstrap request at runtime instead of baking
-            outage data into the deploy.
+            The homepage keeps its static shell fast, then loads the live discover data at runtime without depending on a
+            deploy-time bootstrap route.
           </p>
           <button
             type="button"
