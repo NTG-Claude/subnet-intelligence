@@ -715,6 +715,7 @@ export default function DiscoverWorkspace({
                         pinned={pinnedId === row.id}
                         onFocus={() => handlePreviewFocus(row.id)}
                         onSelect={() => handlePinToggle(row.id)}
+                        linkName
                       />
                     ))}
                   </div>
