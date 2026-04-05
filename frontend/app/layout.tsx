@@ -4,8 +4,8 @@ import AppShell from '@/components/layout/AppShell'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Subnet Intelligence',
-  description: 'Subnet screening, compare workflows, and research memos for Bittensor subnets.',
+  title: 'SubIntel',
+  description: 'See what the market misses.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

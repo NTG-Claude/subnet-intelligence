@@ -29,10 +29,10 @@ export default function AppShell({
           <div className="mx-auto flex min-h-[72px] max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
             <div className="min-w-0">
               <Link href="/" className="text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">
-                Subnet Intelligence
+                SubIntel
               </Link>
-              <p className="text-[11px] uppercase tracking-[0.28em] text-[color:var(--text-tertiary)]">
-                Discover / Compare
+              <p className="text-[11px] tracking-[0.08em] text-[color:var(--text-tertiary)]">
+                See what the market misses
               </p>
             </div>
 
