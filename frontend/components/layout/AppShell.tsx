@@ -9,7 +9,6 @@ import { cn } from '@/lib/formatting'
 const NAV_ITEMS = [
   { href: '/', label: 'Discover', match: (pathname: string) => pathname === '/' },
   { href: '/compare', label: 'Compare', match: (pathname: string) => pathname.startsWith('/compare') },
-  { href: '/subnets/1', label: 'Research', match: (pathname: string) => pathname.startsWith('/subnets/') },
 ]
 
 export default function AppShell({
@@ -33,7 +32,7 @@ export default function AppShell({
                 Subnet Intelligence
               </Link>
               <p className="text-[11px] uppercase tracking-[0.28em] text-[color:var(--text-tertiary)]">
-                Discover / Compare / Research
+                Discover / Compare
               </p>
             </div>
 
@@ -41,11 +40,10 @@ export default function AppShell({
               <nav className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] p-1">
                 {NAV_ITEMS.map((item) => {
                   const active = item.match(pathname)
-                  const href = item.label === 'Research' ? (pathname.startsWith('/subnets/') ? pathname : '/') : item.href
                   return (
                     <Link
                       key={item.href}
-                      href={href}
+                      href={item.href}
                       className={cn(
                         'shrink-0 rounded-full px-4 py-2 text-sm transition-colors',
                         active
